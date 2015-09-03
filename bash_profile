@@ -3,13 +3,6 @@
 # If not running interactively, don't do anything
 [ -z "$PS1" ] && return
 
-# Load in bash custom aliases, prompt, functions, and private.  The
-# bash_private file is for storing user specific environmental variables.
-
-if [ -f $HOME/.dotfiles/private ]; then
-  [ -r "$file" ] && source "$file"
-fi
-
 # tab completions for sudo
 complete -cf sudo
 
@@ -350,3 +343,7 @@ function emptycache() {
 }
 
 export PS1="\[\e[0m\]λ\[\e[0m\]\[\e[00;37m\]: \[\e[0m\]\[\e[01;32m\]\w\[\e[0m\]\[\e[00;37m\] > \[\e[0m\]"
+
+if [ -f $HOME/.dotfiles/private ]; then
+    . $HOME/.dotfiles/private
+fi
