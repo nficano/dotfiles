@@ -273,8 +273,7 @@ function killapp() {
     sudo kill $(ps-app $1)
 }
 
-function addtopath
-{
+function addtopath {
     directory=`echo $1 | sed 's#/$##'`  # remove trailing slash
     where=$2
 
@@ -298,7 +297,7 @@ function addtopath
     return 0
 }
 
-function path_append  {
+function path_append {
     addtopath $1 end; return $?;
 }
 
