@@ -48,10 +48,6 @@ if [ -z "$debian_chroot" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-if [ `uname` == "Darwin" ] && [ -f $HOME/.dotfiles/osx ]; then
-    . $HOME/.dotfiles/osx
-fi
-
 # =======
 # colour
 # =======
@@ -102,16 +98,14 @@ LS_COLORS=$LS_COLORS:'*INSTALL=4;1;33'
 
 export LS_COLORS
 
-export CLICOLOR=1
-export TERM=xterm-256color
-# don't generate csv files.
-export PYTHONDONTWRITEBYTECODE=1
-export WORKON_HOME=$HOME/.virtualenvs
+export CLICOLOR=true
 export PIP_RESPECT_VIRTUALENV=true
 export PIP_VIRTUALENV_BASE=$WORKON_HOME
-export VIRTUALENVWRAPPER_PYTHON=`which python`
-export VIRTUALENV_DISTRIBUTE=1
 export PYTHONDONTWRITEBYTECODE=True
+export TERM=xterm-256color
+export VIRTUALENVWRAPPER_PYTHON=`which python`
+export VIRTUALENV_DISTRIBUTE=true
+export WORKON_HOME=$HOME/.virtualenvs
 
 # no duplicate entries
 export HISTCONTROL=ignoredups:erasedups
@@ -128,8 +122,6 @@ export PATH="/opt/local/bin:/opt/local/sbin:/Users/nficano/Repositories/rewind:/
 # ========
 # aliases
 # ========
-
-alias pcat='pygmentize -O style=native -g'
 
 # navigation
 alias ..="cd .."
@@ -150,11 +142,8 @@ alias d="cd ~/Desktop"
 alias dl="cd ~/Downloads"
 alias p="cd ~/Projects"
 alias r="cd ~/Repositories"
-alias log="cd /var/log"
 
-# misc
 alias c="clear"
-alias dnsflush="dscacheutil -flushcache"
 alias e="exit"
 alias g="git"
 alias h="history"
@@ -166,8 +155,9 @@ alias lm='ls -al |more'
 alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
 alias ls="ls --color=auto --group-directories-first -X --classify -G"
 alias lx="ls -lXB"
-alias manpdf="man -t *command* | open -f -a Preview"
+
 alias o="open ./"
+alias dnsflush="dscacheutil -flushcache"
 alias portupdate="sudo port -v upgrade outdated"
 alias reload="source ~/.bashrc"
 alias sl="ls"
@@ -189,43 +179,35 @@ TIDY_FORMAT="-type f -ls -delete"
 alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
 alias tidywin="find . \( -name Thumbs.db -o -name ehthumbs.db -o -name Desktop.ini \) $TIDY_FORMAT"
 alias tidypy="find . \( -name \*.pyc -o -name \*.pyo \) $TIDY_FORMAT"
-alias tidyplaylist="find . \( -name \*.m3u -o -name \*.pla -o -name \*.plc -o -name \.*pls \) $TIDY_FORMAT"
 
 # networking
-alias sshcp='ssh-copy-id -i ~/id_rsa.pub $1'
+alias arpscan="sudo arp -an"
+alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
 alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
-alias arpscan="sudo arp -an"
 
-alias nudp="sudo nmap -sS -sU -T4 -A -v -PE -PS22,25,80 -PA21,23,80,3389 "
-alias ntcp="sudo nmap -p 1-65535 -T4 -A -v -PE -PS22,25,80 -PA21,23,80,3389 "
-alias nping="nmap -sP -PE -PA21,23,80,3389 "
-alias nquick="sudo nmap -sV -T4 -O -F --version-light "
-alias ntracert="sudo nmap -sP -PE -PS22,25,80 -PA21,23,80,3389 -PU -PO --traceroute "
-
-alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
+# nmap
+if [ -x "$(command -v nmap)" ]; then
+    alias nudp="sudo nmap -sS -sU -T4 -A -v -PE -PS22,25,80 -PA21,23,80,3389 "
+    alias ntcp="sudo nmap -p 1-65535 -T4 -A -v -PE -PS22,25,80 -PA21,23,80,3389 "
+    alias nping="nmap -sP -PE -PA21,23,80,3389 "
+    alias nquick="sudo nmap -sV -T4 -O -F --version-light "
+    alias ntracert="sudo nmap -sP -PE -PS22,25,80 -PA21,23,80,3389 -PU -PO --traceroute "
+fi
 
 # mercurial
-alias hM="hg commit -m 'Merged'"
-alias hpu="hg pull -u"
-alias hadd="hg add ."
-alias hdiff="hg diff"
-alias hl="hg log --no-merges -r: --stat"
-alias hm="hg merge"
-alias ho="hg out"
-alias hs="hg status"
-alias hundo="hg revert -C --all"
-alias hdiscard="hg update -C -r ."
-
-# vagrant
-alias v='vagrant'
-alias vs='vagrant suspend'
-alias vp='vagrant provision'
-alias vu='vagrant up'
-alias vunp='vagrant up --no-provision'
-alias vh='vagrant halt'
-alias vr='vagrant reload'
-alias vss='vagrant ssh'
+if [ -x "$(command -v hg)" ]; then
+    alias hM="hg commit -m 'Merged'"
+    alias hadd="hg add ."
+    alias hdiff="hg diff"
+    alias hdiscard="hg update -C -r ."
+    alias hl="hg log --no-merges -r: --stat"
+    alias hm="hg merge"
+    alias ho="hg out"
+    alias hpu="hg pull -u"
+    alias hs="hg status"
+    alias hundo="hg revert -C --all"
+fi
 
 # git
 GIT_FORMAT="'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'"
@@ -246,7 +228,6 @@ alias grr='git remote rm'
 alias gs='git status'
 alias gt="git log --graph --pretty=format:$GIT_FORMAT --abbrev-commit --date=relative --branches"
 alias glast="git reset --soft HEAD^"
-alias codereview='git diff $(git rev-list -n1 --before="1 day ago" master) --color'
 
 # ==========
 # functions
@@ -319,20 +300,16 @@ function up {
   cd $d
 }
 
-function vpause () {
+function vpause() {
     VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
 }
 
-function vresume () {
+function vresume() {
     VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
 }
 
-function vrunning () {
+function vrunning() {
     VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
-}
-
-topten() {
-    history | awk '{print $2}' | awk 'BEGIN {FS="|"} {print $1}' | sort | uniq -c | sort -rn | head -10
 }
 
 function emptycache() {
