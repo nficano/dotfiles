@@ -278,7 +278,7 @@ function addtopath {
     return 0
 }
 
-function path_append  {
+function path_append {
     addtopath $1 end; return $?;
 }
 
