@@ -147,19 +147,20 @@ alias c="clear"
 alias e="exit"
 alias g="git"
 alias h="history"
-alias l="ls"
-alias la="ls -a"
-alias lk='ls -lSr'
-alias ll="ls --human-readable --almost-all -l"
-alias lm='ls -al |more'
-alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
-alias ls="ls --color=auto --group-directories-first -X --classify -G"
-alias lx="ls -lXB"
 
-alias o="open ./"
-alias dnsflush="dscacheutil -flushcache"
-alias portupdate="sudo port -v upgrade outdated"
-alias reload="source ~/.bashrc"
+# make sure coreutils is installed before overriding ls.
+if ls --version | grep "coreutils"; then
+    alias l="ls"
+    alias la="ls -a"
+    alias lk='ls -lSr'
+    alias ll="ls --human-readable --almost-all -l"
+    alias lm='ls -al |more'
+    alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
+    alias ls="ls --color=auto --group-directories-first -X --classify -G"
+    alias lx="ls -lXB"
+fi
+
+
 alias sl="ls"
 alias sudo="sudo "
 alias tl='sudo tail -f $1'
@@ -176,7 +177,6 @@ alias egrep='egrep --color=auto'
 
 # house cleaning
 TIDY_FORMAT="-type f -ls -delete"
-alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
 alias tidywin="find . \( -name Thumbs.db -o -name ehthumbs.db -o -name Desktop.ini \) $TIDY_FORMAT"
 alias tidypy="find . \( -name \*.pyc -o -name \*.pyo \) $TIDY_FORMAT"
 
@@ -185,6 +185,14 @@ alias arpscan="sudo arp -an"
 alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
 alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
+
+# os-x specific
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    alias o="open ./"
+    alias dnsflush="dscacheutil -flushcache"
+    alias portupdate="sudo port -v upgrade outdated"
+    alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
+fi
 
 # nmap
 if [ -x "$(command -v nmap)" ]; then
@@ -239,21 +247,8 @@ function psgrep () {
   ps aux | grep "$1" | grep -v "grep"
 }
 
-# Create a new directory and enter it.
-function md() {
-    mkdir -p "$@" && cd "$@"
-}
-
 function httpdump() {
     sudo tcpdump -nl -w - -i "$@" -c 500 port 80|strings
-}
-
-function psapp() {
-    ps -ax | grep -i $1 | grep -i -v  "grep.-i.$1" | awk '{print $1}'
-}
-
-function killapp() {
-    sudo kill $(ps-app $1)
 }
 
 function addtopath {
