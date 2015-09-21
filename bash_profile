@@ -177,7 +177,6 @@ alias egrep='egrep --color=auto'
 
 # house cleaning
 TIDY_FORMAT="-type f -ls -delete"
-alias tidywin="find . \( -name Thumbs.db -o -name ehthumbs.db -o -name Desktop.ini \) $TIDY_FORMAT"
 alias tidypy="find . \( -name \*.pyc -o -name \*.pyo \) $TIDY_FORMAT"
 
 # networking
