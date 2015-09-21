@@ -210,24 +210,26 @@ if [ -x "$(command -v hg)" ]; then
 fi
 
 # git
-GIT_FORMAT="'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'"
-alias ga='git add'
-alias gb='git branch'
-alias gc='git checkout'
-alias gcl='git clone'
-alias gd='git diff'
-alias gdc='git diff --cached'
-alias gl="git log --stat --abbrev-commit --pretty=format:$GIT_FORMAT"
-alias gm='git commit -m'
-alias gma='git commit -am'
-alias gp='git push'
-alias gpu='git pull'
-alias gra='git remote add'
-alias greset="git reset --hard origin/master"
-alias grr='git remote rm'
-alias gs='git status'
-alias gt="git log --graph --pretty=format:$GIT_FORMAT --abbrev-commit --date=relative --branches"
-alias glast="git reset --soft HEAD^"
+if [ -x "$(command -v git)" ]; then
+    GIT_FORMAT="'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'"
+    alias ga='git add'
+    alias gb='git branch'
+    alias gc='git checkout'
+    alias gcl='git clone'
+    alias gd='git diff'
+    alias gdc='git diff --cached'
+    alias gl="git log --stat --abbrev-commit --pretty=format:$GIT_FORMAT"
+    alias gm='git commit -m'
+    alias gma='git commit -am'
+    alias gp='git push'
+    alias gpu='git pull'
+    alias gra='git remote add'
+    alias greset="git reset --hard origin/master"
+    alias grr='git remote rm'
+    alias gs='git status'
+    alias gt="git log --graph --pretty=format:$GIT_FORMAT --abbrev-commit --date=relative --branches"
+    alias glast="git reset --soft HEAD^"
+fi
 
 # ==========
 # functions
