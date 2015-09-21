@@ -3,7 +3,7 @@
 # If not running interactively, don't do anything
 [ -z "$PS1" ] && return
 
-# tab completions for sudo
+# Tab completions for sudo
 complete -cf sudo
 
 # Bash tab completions
@@ -26,8 +26,8 @@ fi
 # Case-insensitive globbing (used in pathname expansion)
 shopt -s nocaseglob
 
-# check the window size after each command and, if necessary,
-# update the values of LINES and COLUMNS.
+# Check the window size after each command and, if necessary, update the values
+# of LINES and COLUMNS.
 shopt -s checkwinsize
 
 # Append to the Bash history file, rather than overwriting it. Keep your
@@ -48,9 +48,9 @@ if [ -z "$debian_chroot" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-# =======
+# ======
 # colour
-# =======
+# ======
 
 LS_COLORS='';
 
@@ -119,9 +119,9 @@ export MANPAGER="less -X"
 export GREP_COLOR='1;32' # Color value set to green
 export PATH="/opt/local/bin:/opt/local/sbin:/Users/nficano/Repositories/rewind:/opt/local/libexec/gnubin/:$PATH"
 
-# ========
+# =======
 # aliases
-# ========
+# =======
 
 # navigation
 alias ..="cd .."
@@ -239,9 +239,9 @@ if [ -x "$(command -v git)" ]; then
     alias glast="git reset --soft HEAD^"
 fi
 
-# ==========
+# =========
 # functions
-# ==========
+# =========
 
 function psgrep () {
   ps aux | grep "$1" | grep -v "grep"
