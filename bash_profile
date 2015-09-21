@@ -3,7 +3,7 @@
 # If not running interactively, don't do anything
 [ -z "$PS1" ] && return
 
-# tab completions for sudo
+# Tab completions for sudo
 complete -cf sudo
 
 # Bash tab completions
@@ -26,8 +26,8 @@ fi
 # Case-insensitive globbing (used in pathname expansion)
 shopt -s nocaseglob
 
-# check the window size after each command and, if necessary,
-# update the values of LINES and COLUMNS.
+# Check the window size after each command and, if necessary, update the values
+# of LINES and COLUMNS.
 shopt -s checkwinsize
 
 # Append to the Bash history file, rather than overwriting it. Keep your
@@ -48,9 +48,9 @@ if [ -z "$debian_chroot" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-# =======
+# ======
 # colour
-# =======
+# ======
 
 LS_COLORS='';
 
@@ -119,9 +119,9 @@ export MANPAGER="less -X"
 export GREP_COLOR='1;32' # Color value set to green
 export PATH="/opt/local/bin:/opt/local/sbin:/Users/nficano/Repositories/rewind:/opt/local/libexec/gnubin/:$PATH"
 
-# ========
+# =======
 # aliases
-# ========
+# =======
 
 # navigation
 alias ..="cd .."
@@ -147,19 +147,20 @@ alias c="clear"
 alias e="exit"
 alias g="git"
 alias h="history"
-alias l="ls"
-alias la="ls -a"
-alias lk='ls -lSr'
-alias ll="ls --human-readable --almost-all -l"
-alias lm='ls -al |more'
-alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
-alias ls="ls --color=auto --group-directories-first -X --classify -G"
-alias lx="ls -lXB"
 
-alias o="open ./"
-alias dnsflush="dscacheutil -flushcache"
-alias portupdate="sudo port -v upgrade outdated"
-alias reload="source ~/.bashrc"
+# make sure coreutils is installed before overriding ls.
+if ls --version | grep "coreutils"; then
+    alias l="ls"
+    alias la="ls -a"
+    alias lk='ls -lSr'
+    alias ll="ls --human-readable --almost-all -l"
+    alias lm='ls -al |more'
+    alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
+    alias ls="ls --color=auto --group-directories-first -X --classify -G"
+    alias lx="ls -lXB"
+fi
+
+
 alias sl="ls"
 alias sudo="sudo "
 alias tl='sudo tail -f $1'
@@ -176,8 +177,6 @@ alias egrep='egrep --color=auto'
 
 # house cleaning
 TIDY_FORMAT="-type f -ls -delete"
-alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
-alias tidywin="find . \( -name Thumbs.db -o -name ehthumbs.db -o -name Desktop.ini \) $TIDY_FORMAT"
 alias tidypy="find . \( -name \*.pyc -o -name \*.pyo \) $TIDY_FORMAT"
 
 # networking
@@ -185,6 +184,14 @@ alias arpscan="sudo arp -an"
 alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
 alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
+
+# os-x specific
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    alias o="open ./"
+    alias dnsflush="dscacheutil -flushcache"
+    alias portupdate="sudo port -v upgrade outdated"
+    alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
+fi
 
 # nmap
 if [ -x "$(command -v nmap)" ]; then
@@ -210,48 +217,37 @@ if [ -x "$(command -v hg)" ]; then
 fi
 
 # git
-GIT_FORMAT="'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'"
-alias ga='git add'
-alias gb='git branch'
-alias gc='git checkout'
-alias gcl='git clone'
-alias gd='git diff'
-alias gdc='git diff --cached'
-alias gl="git log --stat --abbrev-commit --pretty=format:$GIT_FORMAT"
-alias gm='git commit -m'
-alias gma='git commit -am'
-alias gp='git push'
-alias gpu='git pull'
-alias gra='git remote add'
-alias greset="git reset --hard origin/master"
-alias grr='git remote rm'
-alias gs='git status'
-alias gt="git log --graph --pretty=format:$GIT_FORMAT --abbrev-commit --date=relative --branches"
-alias glast="git reset --soft HEAD^"
+if [ -x "$(command -v git)" ]; then
+    GIT_FORMAT="'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'"
+    alias ga='git add'
+    alias gb='git branch'
+    alias gc='git checkout'
+    alias gcl='git clone'
+    alias gd='git diff'
+    alias gdc='git diff --cached'
+    alias gl="git log --stat --abbrev-commit --pretty=format:$GIT_FORMAT"
+    alias gm='git commit -m'
+    alias gma='git commit -am'
+    alias gp='git push'
+    alias gpu='git pull'
+    alias gra='git remote add'
+    alias greset="git reset --hard origin/master"
+    alias grr='git remote rm'
+    alias gs='git status'
+    alias gt="git log --graph --pretty=format:$GIT_FORMAT --abbrev-commit --date=relative --branches"
+    alias glast="git reset --soft HEAD^"
+fi
 
-# ==========
+# =========
 # functions
-# ==========
+# =========
 
 function psgrep () {
   ps aux | grep "$1" | grep -v "grep"
 }
 
-# Create a new directory and enter it.
-function md() {
-    mkdir -p "$@" && cd "$@"
-}
-
 function httpdump() {
     sudo tcpdump -nl -w - -i "$@" -c 500 port 80|strings
-}
-
-function psapp() {
-    ps -ax | grep -i $1 | grep -i -v  "grep.-i.$1" | awk '{print $1}'
-}
-
-function killapp() {
-    sudo kill $(ps-app $1)
 }
 
 function addtopath {
