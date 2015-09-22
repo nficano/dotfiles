@@ -148,8 +148,9 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
-# make sure coreutils is installed before overriding ls.
-if ls --version | grep "coreutils"; then
+# make sure the ls is the GNU version as some switches used aren't available in
+# the BSD version.
+if ls --version | grep "coreutils" > /dev/null; then
     alias l="ls"
     alias la="ls -a"
     alias lk='ls -lSr'
@@ -160,24 +161,20 @@ if ls --version | grep "coreutils"; then
     alias lx="ls -lXB"
 fi
 
-
 alias sl="ls"
 alias sudo="sudo "
-alias tl='sudo tail -f $1'
 alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
 
-# python
-alias vmk='mkvirtualenv'
-alias vrm='rmvirtualenv'
+# virtualenv
+if [ -x "$(command -v virtualenv)" ]; then
+    alias vmk='mkvirtualenv'
+    alias vrm='rmvirtualenv'
+fi
 
-# grep
+# make grep colorful by default.
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
-
-# house cleaning
-TIDY_FORMAT="-type f -ls -delete"
-alias tidypy="find . \( -name \*.pyc -o -name \*.pyo \) $TIDY_FORMAT"
 
 # networking
 alias arpscan="sudo arp -an"
@@ -242,7 +239,7 @@ fi
 # functions
 # =========
 
-function psgrep () {
+function psgrep() {
   ps aux | grep "$1" | grep -v "grep"
 }
 
@@ -314,7 +311,15 @@ function emptycache() {
     sudo rm -r /System/Library/Caches/*
 }
 
-export PS1="\[\e[0m\]λ\[\e[0m\]\[\e[00;37m\]: \[\e[0m\]\[\e[01;32m\]\w\[\e[0m\]\[\e[00;37m\] > \[\e[0m\]"
+if [ -n "$SSH_CLIENT" ]; then
+    # make hostname red if connected via ssh.
+    hostname="\[\e[1;31m\]\h\[\e[0m\]"
+else
+    hostname="\h"
+fi
+
+export PS1="\u at ${hostname} \[\e[1;32m\]\w\[\e[0m\] "
+unset hostname
 
 if [ -f $HOME/.dotfiles/private ]; then
     . $HOME/.dotfiles/private
