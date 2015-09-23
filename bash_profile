@@ -57,26 +57,29 @@ function silence() {
 
 function setup_ssh() {
     SSH_DIR="$HOME/.ssh"
-    # Start SSH agent if not already started
+    # start ssh agent if not already started
     if ! silence pgrep 'ssh-agent'; then
         silence ssh-agent
     fi
 
-    # Add keys if SSH directory exists
+    # add keys if ssh directory exists
     if [ -d "$SSH_DIR" ]; then
         find "$SSH_DIR" -name '*\.pem' | silence xargs ssh-add
     fi
 }
 
 function vpause() {
+    # pause all running virtual boxes.
     VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
 }
 
 function vresume() {
+    # resume all running virtual boxes.
     VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
 }
 
 function vrunning() {
+    # get how many virtual boxes are running.
     VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
 }
 
@@ -86,16 +89,16 @@ function vrunning() {
 
 LS_COLORS='';
 
-# directory colors
+# directory colours
 LS_COLORS=$LS_COLORS:'di=01;34'
 
-# writable file colors
+# writable file colours
 LS_COLORS=$LS_COLORS:'ow=01;34'
 
-# symlink colors
+# symlink colours
 LS_COLORS=$LS_COLORS:'ln=01;32'
 
-# archive colors
+# archive colours
 LS_COLORS=$LS_COLORS:'*.tar=1;31'
 LS_COLORS=$LS_COLORS:'*.tgz=1;31'
 LS_COLORS=$LS_COLORS:'*.gz=1;31'
@@ -109,50 +112,64 @@ LS_COLORS=$LS_COLORS:'*.7z=1;31'
 LS_COLORS=$LS_COLORS:'*.Z=1;31'
 LS_COLORS=$LS_COLORS:'*.rar=1;31'
 
-# backup colors
+# backup colours
 LS_COLORS=$LS_COLORS:'*.swp=1;30'
 LS_COLORS=$LS_COLORS:'*.bak=1;30'
 LS_COLORS=$LS_COLORS:'*~=1;30'
 
-# python colors
+# python colours
 LS_COLORS=$LS_COLORS:'*.py=01;33'
 LS_COLORS=$LS_COLORS:'*.pyc=1;37'
 LS_COLORS=$LS_COLORS:'*__init__.py=1;36'
 
-# makefile color
+# makefile colour
 LS_COLORS=$LS_COLORS:'*Makefile=4;1;33'
 
-# readme color
+# readme colour
 LS_COLORS=$LS_COLORS:'*README=4;1;33'
 
-# install color
+# install colour
 LS_COLORS=$LS_COLORS:'*INSTALL=4;1;33'
 
 export LS_COLORS
 
+# enable support for colour coding your files/directories/symlinks.
 export CLICOLOR=true
+
+# tell pip to automatically use the currently active virtualenv.
 export PIP_RESPECT_VIRTUALENV=true
+
+# when using virtualenvwrapper, tell pip to automatically create its
+# virtualenvs in ``$WORKON_HOME``.
 export PIP_VIRTUALENV_BASE=$WORKON_HOME
-export PYTHONDONTWRITEBYTECODE=True
-export TERM=xterm-256color
-export VIRTUALENVWRAPPER_PYTHON=`which python`
-export VIRTUALENV_DISTRIBUTE=true
 export WORKON_HOME=$HOME/.virtualenvs
 
-# no duplicate entries
+# don't create .pyc files.
+export PYTHONDONTWRITEBYTECODE=True
+
+# tell virtualenvwrapper which python to use.
+export VIRTUALENVWRAPPER_PYTHON=`which python`
+
+# tell virtualenv to use Distribute instead of setuptools.
+export VIRTUALENV_DISTRIBUTE=true
+
+# enable 256-bit colours.
+export TERM=xterm-256color
+
+# no duplicate entries.
 export HISTCONTROL=ignoredups:erasedups
 
 # save a lot of history.
 export HISTSIZE=100000
 export HISTFILESIZE=100000
 
-# After each command, save and reload history
+# after each command, save and reload history.
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
-# Don’t clear the screen after quitting a manual page
+# don’t clear the screen after quitting a manual page.
 export MANPAGER="less -X"
 
-# Color value set to green
+# colour value set to green.
 export GREP_COLOR='1;32'
 export PATH="/opt/local/bin:/opt/local/sbin:/opt/local/libexec/gnubin/:$PATH"
 
