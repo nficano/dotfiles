@@ -14,3 +14,4 @@ setup-directories:
 	mkdir -p ~/.virtualenvs
 	mkdir -p ~/Projects
 	mkdir -p ~/Downloads
+	mkdir -p ~/Repos

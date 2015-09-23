@@ -48,6 +48,38 @@ if [ -z "$debian_chroot" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
+# =========
+# functions
+# =========
+function silence() {
+    "$@" 2> /dev/null > /dev/null;
+}
+
+function setup_ssh() {
+    SSH_DIR="$HOME/.ssh"
+    # Start SSH agent if not already started
+    if ! silence pgrep 'ssh-agent'; then
+        silence ssh-agent
+    fi
+
+    # Add keys if SSH directory exists
+    if [ -d "$SSH_DIR" ]; then
+        find "$SSH_DIR" -name '*\.pem' | silence xargs ssh-add
+    fi
+}
+
+function vpause() {
+    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
+}
+
+function vresume() {
+    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
+}
+
+function vrunning() {
+    VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
+}
+
 # ======
 # colour
 # ======
@@ -141,7 +173,7 @@ alias 775='chmod 775'  # -rwx   rwx    r-x
 alias d="cd ~/Desktop"
 alias dl="cd ~/Downloads"
 alias p="cd ~/Projects"
-alias r="cd ~/Repositories"
+alias r="cd ~/Repos"
 
 alias c="clear"
 alias e="exit"
@@ -150,13 +182,12 @@ alias h="history"
 
 # make sure the ls is the GNU version as some switches used aren't available in
 # the BSD version.
-if ls --version | grep "coreutils" > /dev/null; then
+if ls --version | silence grep "coreutils"; then
     alias l="ls"
     alias la="ls -a"
     alias lk='ls -lSr'
     alias ll="ls --human-readable --almost-all -l"
     alias lm='ls -al |more'
-    alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
     alias ls="ls --color=auto --group-directories-first -X --classify -G"
     alias lx="ls -lXB"
 fi
@@ -183,11 +214,10 @@ alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
 
 # os-x specific
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if [[ $OSTYPE =~ "darwin" ]]; then
     alias o="open ./"
     alias dnsflush="dscacheutil -flushcache"
     alias portupdate="sudo port -v upgrade outdated"
-    alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
 fi
 
 # nmap
@@ -235,82 +265,6 @@ if [ -x "$(command -v git)" ]; then
     alias glast="git reset --soft HEAD^"
 fi
 
-# =========
-# functions
-# =========
-
-function psgrep() {
-  ps aux | grep "$1" | grep -v "grep"
-}
-
-function httpdump() {
-    sudo tcpdump -nl -w - -i "$@" -c 500 port 80|strings
-}
-
-function addtopath {
-    directory=`echo $1 | sed 's#/$##'`  # remove trailing slash
-    where=$2
-
-    if [ ! -d $directory ]; then
-        return 1
-    fi
-
-    newpath=`echo $PATH | tr ':' '\n' | \
-             grep -v "^$directory\$" | \
-             xargs | tr ' ' ':'`
-
-
-    if [ $where = "beg" ]; then    # Prefix to $PATH
-        export PATH=$directory:$newpath
-    elif [ $where = "end" ]; then  # Append to $PATH
-        export PATH=$newpath:$directory
-    else
-        return 1
-    fi
-
-    return 0
-}
-
-function path_append {
-    addtopath $1 end; return $?;
-}
-
-function path_prepend {
-    addtopath $1 beg; return $?;
-}
-
-function up {
-  local d=""
-  limit=$1
-  for ((i=1 ; i <= limit ; i++))
-    do
-      d=$d/..
-    done
-  d=$(echo $d | sed 's/^\///')
-  if [ -z "$d" ]; then
-    d=..
-  fi
-  cd $d
-}
-
-function vpause() {
-    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
-}
-
-function vresume() {
-    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
-}
-
-function vrunning() {
-    VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
-}
-
-function emptycache() {
-    sudo rm -r $HOME/Library/Caches/*
-    sudo rm -r /Library/Caches/*
-    sudo rm -r /System/Library/Caches/*
-}
-
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
     hostname="\[\e[1;31m\]\h\[\e[0m\]"
@@ -324,3 +278,5 @@ unset hostname
 if [ -f $HOME/.dotfiles/private ]; then
     . $HOME/.dotfiles/private
 fi
+
+setup_ssh
