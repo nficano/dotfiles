@@ -15,3 +15,4 @@ setup-directories:
 	mkdir -p ~/Projects
 	mkdir -p ~/Downloads
 	mkdir -p ~/Repos
+	mkdir -p ~/.dotfiles
