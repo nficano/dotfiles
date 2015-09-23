@@ -141,15 +141,20 @@ export WORKON_HOME=$HOME/.virtualenvs
 
 # no duplicate entries
 export HISTCONTROL=ignoredups:erasedups
+
 # save a lot of history.
 export HISTSIZE=100000
 export HISTFILESIZE=100000
+
 # After each command, save and reload history
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
+
 # Don’t clear the screen after quitting a manual page
 export MANPAGER="less -X"
-export GREP_COLOR='1;32' # Color value set to green
-export PATH="/opt/local/bin:/opt/local/sbin:/Users/nficano/Repositories/rewind:/opt/local/libexec/gnubin/:$PATH"
+
+# Color value set to green
+export GREP_COLOR='1;32'
+export PATH="/opt/local/bin:/opt/local/sbin:/opt/local/libexec/gnubin/:$PATH"
 
 # =======
 # aliases
