@@ -8,18 +8,22 @@ complete -cf sudo
 
 # Bash tab completions
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
+    # shellcheck disable=SC1091
     . /etc/bash_completion
 fi
 
 if [ -f /etc/git-completion ]; then
+    # shellcheck disable=SC1091
     . /etc/git-completion
 fi
 
 if [ -f /opt/local/etc/profile.d/bash_completion.sh ]; then
+    # shellcheck disable=SC1091
     . /opt/local/etc/profile.d/bash_completion.sh
 fi
 
 if [ -f /opt/local/etc/bash_completion ]; then
+    # shellcheck disable=SC1091
     . /opt/local/etc/bash_completion
 fi
 
@@ -236,7 +240,7 @@ alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
 
 # os-x specific
-if [[ $OSTYPE =~ "darwin" ]]; then
+if [[ $OSTYPE =~ darwin ]]; then
     alias o="open ./"
     alias dnsflush="dscacheutil -flushcache"
     alias portupdate="sudo port -v upgrade outdated"
@@ -297,8 +301,8 @@ fi
 export PS1="\u at ${hostname} \[\e[1;32m\]\w\[\e[0m\] "
 unset hostname
 
-if [ -f $HOME/.dotfiles/private ]; then
-    . $HOME/.dotfiles/private
+if [ -f "$HOME/.dotfiles/private" ]; then
+    . "$HOME/.dotfiles/private"
 fi
 
 setup_ssh
