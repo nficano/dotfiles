@@ -149,7 +149,7 @@ export PIP_VIRTUALENV_BASE=$WORKON_HOME
 export WORKON_HOME=$HOME/.virtualenvs
 
 # don't create .pyc files.
-export PYTHONDONTWRITEBYTECODE=True
+export PYTHONDONTWRITEBYTECODE=true
 
 # tell virtualenvwrapper which python to use.
 export VIRTUALENVWRAPPER_PYTHON=`which python`
