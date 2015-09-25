@@ -8,18 +8,22 @@ complete -cf sudo
 
 # Bash tab completions
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
+    # shellcheck disable=SC1091
     . /etc/bash_completion
 fi
 
 if [ -f /etc/git-completion ]; then
+    # shellcheck disable=SC1091
     . /etc/git-completion
 fi
 
 if [ -f /opt/local/etc/profile.d/bash_completion.sh ]; then
+    # shellcheck disable=SC1091
     . /opt/local/etc/profile.d/bash_completion.sh
 fi
 
 if [ -f /opt/local/etc/bash_completion ]; then
+    # shellcheck disable=SC1091
     . /opt/local/etc/bash_completion
 fi
 
@@ -48,22 +52,57 @@ if [ -z "$debian_chroot" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
+# =========
+# functions
+# =========
+function silence() {
+    "$@" 2> /dev/null > /dev/null;
+}
+
+function setup_ssh() {
+    SSH_DIR="$HOME/.ssh"
+    # start ssh agent if not already started
+    if ! silence pgrep 'ssh-agent'; then
+        silence ssh-agent
+    fi
+
+    # add keys if ssh directory exists
+    if [ -d "$SSH_DIR" ]; then
+        find "$SSH_DIR" -name '*\.pem' | silence xargs ssh-add
+    fi
+}
+
+function vpause() {
+    # pause all running virtual boxes.
+    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
+}
+
+function vresume() {
+    # resume all running virtual boxes.
+    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
+}
+
+function vrunning() {
+    # get how many virtual boxes are running.
+    VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
+}
+
 # ======
 # colour
 # ======
 
 LS_COLORS='';
 
-# directory colors
+# directory colours
 LS_COLORS=$LS_COLORS:'di=01;34'
 
-# writable file colors
+# writable file colours
 LS_COLORS=$LS_COLORS:'ow=01;34'
 
-# symlink colors
+# symlink colours
 LS_COLORS=$LS_COLORS:'ln=01;32'
 
-# archive colors
+# archive colours
 LS_COLORS=$LS_COLORS:'*.tar=1;31'
 LS_COLORS=$LS_COLORS:'*.tgz=1;31'
 LS_COLORS=$LS_COLORS:'*.gz=1;31'
@@ -77,47 +116,66 @@ LS_COLORS=$LS_COLORS:'*.7z=1;31'
 LS_COLORS=$LS_COLORS:'*.Z=1;31'
 LS_COLORS=$LS_COLORS:'*.rar=1;31'
 
-# backup colors
+# backup colours
 LS_COLORS=$LS_COLORS:'*.swp=1;30'
 LS_COLORS=$LS_COLORS:'*.bak=1;30'
 LS_COLORS=$LS_COLORS:'*~=1;30'
 
-# python colors
+# python colours
 LS_COLORS=$LS_COLORS:'*.py=01;33'
 LS_COLORS=$LS_COLORS:'*.pyc=1;37'
 LS_COLORS=$LS_COLORS:'*__init__.py=1;36'
 
-# makefile color
+# makefile colour
 LS_COLORS=$LS_COLORS:'*Makefile=4;1;33'
 
-# readme color
+# readme colour
 LS_COLORS=$LS_COLORS:'*README=4;1;33'
 
-# install color
+# install colour
 LS_COLORS=$LS_COLORS:'*INSTALL=4;1;33'
 
 export LS_COLORS
 
+# enable support for colour coding your files/directories/symlinks.
 export CLICOLOR=true
+
+# tell pip to automatically use the currently active virtualenv.
 export PIP_RESPECT_VIRTUALENV=true
+
+# when using virtualenvwrapper, tell pip to automatically create its
+# virtualenvs in ``$WORKON_HOME``.
 export PIP_VIRTUALENV_BASE=$WORKON_HOME
-export PYTHONDONTWRITEBYTECODE=True
-export TERM=xterm-256color
-export VIRTUALENVWRAPPER_PYTHON=`which python`
-export VIRTUALENV_DISTRIBUTE=true
 export WORKON_HOME=$HOME/.virtualenvs
 
-# no duplicate entries
+# don't create .pyc files.
+export PYTHONDONTWRITEBYTECODE=true
+
+# tell virtualenvwrapper which python to use.
+export VIRTUALENVWRAPPER_PYTHON=`which python`
+
+# tell virtualenv to use Distribute instead of setuptools.
+export VIRTUALENV_DISTRIBUTE=true
+
+# enable 256-bit colours.
+export TERM=xterm-256color
+
+# no duplicate entries.
 export HISTCONTROL=ignoredups:erasedups
+
 # save a lot of history.
 export HISTSIZE=100000
 export HISTFILESIZE=100000
-# After each command, save and reload history
+
+# after each command, save and reload history.
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
-# Don’t clear the screen after quitting a manual page
+
+# don’t clear the screen after quitting a manual page.
 export MANPAGER="less -X"
-export GREP_COLOR='1;32' # Color value set to green
-export PATH="/opt/local/bin:/opt/local/sbin:/Users/nficano/Repositories/rewind:/opt/local/libexec/gnubin/:$PATH"
+
+# colour value set to green.
+export GREP_COLOR='1;32'
+export PATH="/opt/local/bin:/opt/local/sbin:/opt/local/libexec/gnubin/:$PATH"
 
 # =======
 # aliases
@@ -141,7 +199,7 @@ alias 775='chmod 775'  # -rwx   rwx    r-x
 alias d="cd ~/Desktop"
 alias dl="cd ~/Downloads"
 alias p="cd ~/Projects"
-alias r="cd ~/Repositories"
+alias r="cd ~/Repos"
 
 alias c="clear"
 alias e="exit"
@@ -150,13 +208,12 @@ alias h="history"
 
 # make sure the ls is the GNU version as some switches used aren't available in
 # the BSD version.
-if ls --version | grep "coreutils" > /dev/null; then
+if ls --version | silence grep "coreutils"; then
     alias l="ls"
     alias la="ls -a"
     alias lk='ls -lSr'
     alias ll="ls --human-readable --almost-all -l"
     alias lm='ls -al |more'
-    alias lo='ls -l | sed -e 's/--x/1/g' -e 's/-w-/2/g' -e 's/-wx/3/g' -e 's/r--/4/g' -e 's/r-x/5/g' -e 's/rw-/6/g' -e 's/rwx/7/g' -e 's/---/0/g''
     alias ls="ls --color=auto --group-directories-first -X --classify -G"
     alias lx="ls -lXB"
 fi
@@ -183,11 +240,10 @@ alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
 
 # os-x specific
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if [[ $OSTYPE =~ darwin ]]; then
     alias o="open ./"
     alias dnsflush="dscacheutil -flushcache"
     alias portupdate="sudo port -v upgrade outdated"
-    alias tidyosx="find . \( -name  \*.DS_Store -o -name \*.AppleDouble -o -name \*.LSOverride \) $TIDY_FORMAT"
 fi
 
 # nmap
@@ -215,101 +271,17 @@ fi
 
 # git
 if [ -x "$(command -v git)" ]; then
-    GIT_FORMAT="'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'"
     alias ga='git add'
     alias gb='git branch'
     alias gc='git checkout'
-    alias gcl='git clone'
     alias gd='git diff'
-    alias gdc='git diff --cached'
-    alias gl="git log --stat --abbrev-commit --pretty=format:$GIT_FORMAT"
     alias gm='git commit -m'
     alias gma='git commit -am'
     alias gp='git push'
     alias gpu='git pull'
-    alias gra='git remote add'
-    alias greset="git reset --hard origin/master"
     alias grr='git remote rm'
     alias gs='git status'
-    alias gt="git log --graph --pretty=format:$GIT_FORMAT --abbrev-commit --date=relative --branches"
-    alias glast="git reset --soft HEAD^"
 fi
-
-# =========
-# functions
-# =========
-
-function psgrep() {
-  ps aux | grep "$1" | grep -v "grep"
-}
-
-function httpdump() {
-    sudo tcpdump -nl -w - -i "$@" -c 500 port 80|strings
-}
-
-function addtopath {
-    directory=`echo $1 | sed 's#/$##'`  # remove trailing slash
-    where=$2
-
-    if [ ! -d $directory ]; then
-        return 1
-    fi
-
-    newpath=`echo $PATH | tr ':' '\n' | \
-             grep -v "^$directory\$" | \
-             xargs | tr ' ' ':'`
-
-
-    if [ $where = "beg" ]; then    # Prefix to $PATH
-        export PATH=$directory:$newpath
-    elif [ $where = "end" ]; then  # Append to $PATH
-        export PATH=$newpath:$directory
-    else
-        return 1
-    fi
-
-    return 0
-}
-
-function path_append {
-    addtopath $1 end; return $?;
-}
-
-function path_prepend {
-    addtopath $1 beg; return $?;
-}
-
-function up {
-  local d=""
-  limit=$1
-  for ((i=1 ; i <= limit ; i++))
-    do
-      d=$d/..
-    done
-  d=$(echo $d | sed 's/^\///')
-  if [ -z "$d" ]; then
-    d=..
-  fi
-  cd $d
-}
-
-function vpause() {
-    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
-}
-
-function vresume() {
-    VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
-}
-
-function vrunning() {
-    VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
-}
-
-function emptycache() {
-    sudo rm -r $HOME/Library/Caches/*
-    sudo rm -r /Library/Caches/*
-    sudo rm -r /System/Library/Caches/*
-}
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
@@ -321,6 +293,8 @@ fi
 export PS1="\u at ${hostname} \[\e[1;32m\]\w\[\e[0m\] "
 unset hostname
 
-if [ -f $HOME/.dotfiles/private ]; then
-    . $HOME/.dotfiles/private
+if [ -f "$HOME/.dotfiles/private" ]; then
+    . "$HOME/.dotfiles/private"
 fi
+
+setup_ssh
