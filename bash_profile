@@ -222,6 +222,12 @@ alias la="ls -a"
 alias sudo="sudo "
 alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
 
+# emacs :)
+if [ -x "$(command -v emacs)" ]; then
+    alias e='emacs'
+    alias ec='emacsclient'
+fi
+
 # virtualenv
 if [ -x "$(command -v virtualenv)" ]; then
     alias vmk='mkvirtualenv'
