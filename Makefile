@@ -8,7 +8,6 @@ install:
 
 bootstrap:
 	bash $(DOTFILES)/bootstrap_osx.sh
-	install
 
 install-bash:
 	rm -f ~/.bash_profile
