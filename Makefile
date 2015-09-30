@@ -1,6 +1,6 @@
 DOTFILES := $(PWD)
 
-install: install-bash setup-directories install-inputrc
+install: install-bash setup-directories install-inputrc setup-git
 
 install-bash:
 	rm -f ~/.bash_profile
