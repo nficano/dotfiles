@@ -223,7 +223,7 @@ alias sudo="sudo "
 alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
 
 # virtualenv
-if [ -x "$(command -v virtualenv)" ]; then
+if [ -x "$(command -v mkvirtualenv)" ]; then
     alias vmk='mkvirtualenv'
     alias vrm='rmvirtualenv'
 fi
@@ -293,8 +293,8 @@ fi
 export PS1="\u at ${hostname} \[\e[1;32m\]\w\[\e[0m\] "
 unset hostname
 
-if [ -f "$HOME/.dotfiles/private" ]; then
-    . "$HOME/.dotfiles/private"
+if [ -f "$HOME/.bash_profile.local" ]; then
+    . "$HOME/.bash_profile.local"
 fi
 
 setup_ssh
