@@ -17,14 +17,9 @@ if [ -f /etc/git-completion ]; then
     . /etc/git-completion
 fi
 
-if [ -f /opt/local/etc/profile.d/bash_completion.sh ]; then
+if [ -f /usr/local/etc/bash_completion.d ]; then
     # shellcheck disable=SC1091
-    . /opt/local/etc/profile.d/bash_completion.sh
-fi
-
-if [ -f /opt/local/etc/bash_completion ]; then
-    # shellcheck disable=SC1091
-    . /opt/local/etc/bash_completion
+    . /usr/local/etc/bash_completion.d
 fi
 
 # Case-insensitive globbing (used in pathname expansion)
@@ -192,9 +187,8 @@ export GREP_COLOR='1;32'
 # ====
 # path
 # ====
-conditionally_prefix_path /opt/local/bin
-conditionally_prefix_path /opt/local/sbin
-conditionally_prefix_path /opt/local/libexec/gnubin/
+conditionally_prefix_path /usr/local/opt/coreutils/libexec/gnubin
+
 export PATH=.:./bin:${PATH}
 
 # =======
@@ -226,15 +220,11 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
-# make sure ls is the GNU version as some switches used aren't available in the
-# BSD version.
-if ls --version | silence grep "coreutils"; then
-    alias lk='ls -lSr'
-    alias ll="ls --human-readable --almost-all -l"
-    alias lm='ls -al | more'
-    alias ls="ls --color=auto --group-directories-first -X --classify -G"
-    alias lx="ls -lXB"
-fi
+alias lk='ls -lSr'
+alias ll="ls --human-readable --almost-all -l"
+alias lm='ls -al | more'
+alias ls="ls --color=auto --group-directories-first -X --classify -G"
+alias lx="ls -lXB"
 
 alias l="ls"
 alias sl="ls"
