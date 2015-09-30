@@ -84,6 +84,7 @@ brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'python'
 brew_install_or_upgrade 'openssl'
+brew_install_or_upgrade 'tmux'
 
 brew unlink openssl && brew link openssl --force
 
