@@ -95,6 +95,11 @@ function conditionally_prefix_path() {
     fi
 }
 
+function path() {
+    # pretty-print system path.
+    echo "$PATH" | tr -s ':' '\n'
+}
+
 # ======
 # colour
 # ======
@@ -183,7 +188,6 @@ export MANPAGER="less -X"
 
 # colour value set to green.
 export GREP_COLOR='1;32'
-export PATH="/opt/local/bin:/opt/local/sbin:/opt/local/libexec/gnubin/:$PATH"
 
 # ====
 # path
