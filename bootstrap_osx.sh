@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Based off of thoughtbot's labtop script; see:
+# https://github.com/thoughtbot/laptop/blob/master/mac
+
 fancy_echo() {
   local fmt="$1"; shift
 
