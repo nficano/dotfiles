@@ -1,7 +1,7 @@
 DOTFILES := $(PWD)
 
 install:
-	install-bash
+	setup-shell
 	setup-directories
 	install-inputrc
 	setup-git
@@ -9,9 +9,10 @@ install:
 bootstrap:
 	bash $(DOTFILES)/bootstrap_osx.sh
 
-install-bash:
+setup-shell:
 	rm -f ~/.bash_profile
 	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
+	ln -fs $(DOTFILES)/hushlogin ${HOME}/.hushlogin
 
 install-inputrc:
 	rm -f ~/.inputrc
