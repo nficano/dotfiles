@@ -1,5 +1,5 @@
 [include]
-  path = ~/.gitconfig_local
+  path = ~/.gitconfig.local
 [apply]
   whitespace = nowarn
 [color]
