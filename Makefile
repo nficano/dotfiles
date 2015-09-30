@@ -1,6 +1,14 @@
 DOTFILES := $(PWD)
 
-install: install-bash setup-directories install-inputrc setup-git
+install:
+	install-bash
+	setup-directories
+	install-inputrc
+	setup-git
+
+bootstrap:
+	bash $(DOTFILES)/bootstrap_osx.sh
+	install
 
 install-bash:
 	rm -f ~/.bash_profile

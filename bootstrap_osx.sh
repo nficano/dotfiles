@@ -10,7 +10,7 @@ fancy_echo() {
   printf "\n$fmt\n" "$@"
 }
 
-trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
+trap 'ret=$?; test $ret -ne 0 && printf "failed\n" >&2; exit $ret' EXIT
 
 set -e
 
@@ -75,7 +75,6 @@ fi
 
 fancy_echo "Updating Homebrew formulas ..."
 brew update
-
 
 brew_install_or_upgrade 'autoconf'
 brew_install_or_upgrade 'automake'
