@@ -50,12 +50,12 @@ fi
 # =========
 # functions
 # =========
-function silence() {
+silence() {
     "$@" 2> /dev/null > /dev/null;
 }
 
-function setup_ssh() {
-    SSH_DIR="$HOME/.ssh"
+setup_ssh() {
+    local SSH_DIR="$HOME/.ssh"
     # if not started, start ssh-agent.
     if ! silence pgrep 'ssh-agent'; then
         silence ssh-agent
@@ -67,22 +67,22 @@ function setup_ssh() {
     fi
 }
 
-function vpause() {
+vpause() {
     # pause all running virtual boxes.
     VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX pause
 }
 
-function vresume() {
+vresume() {
     # resume all running virtual boxes.
     VBoxManage list vms | grep "$1" | cut -d' ' -f1 | tr -d '"\n ' | xargs -0 -I BOX VBoxManage controlvm BOX resume
 }
 
-function vrunning() {
+vrunning() {
     # get how many virtual boxes are running.
     VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
 }
 
-function conditionally_prefix_path() {
+conditionally_prefix_path() {
     # make sure directory exists and prepend it to system path.
     local dir=$1
     if [ -d "$dir" ]; then
@@ -90,7 +90,7 @@ function conditionally_prefix_path() {
     fi
 }
 
-function path() {
+path() {
     # pretty-print system path.
     echo "$PATH" | tr -s ':' '\n'
 }
