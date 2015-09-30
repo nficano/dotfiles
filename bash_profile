@@ -256,11 +256,6 @@ if [[ $OSTYPE =~ darwin ]]; then
 fi
 
 # mercurial
-if [ -x "$(command -v nmap)" ]; then
-    alias nmap="sudo nmap"
-fi
-
-# mercurial
 if [ -x "$(command -v hg)" ]; then
     alias hM="hg commit -m 'Merged'"
     alias hadd="hg add ."
