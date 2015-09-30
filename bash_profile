@@ -258,11 +258,6 @@ alias rsync="rsync -v -P"
 if [[ $OSTYPE =~ darwin ]]; then
     alias o="open ./"
     alias dnsflush="dscacheutil -flushcache"
-
-    # macports
-    if [ -x "$(command -v port)" ]; then
-        alias portupdate="sudo port -v upgrade outdated"
-    fi
 fi
 
 # mercurial
