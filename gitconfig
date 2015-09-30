@@ -1,0 +1,26 @@
+[include]
+  path = ~/.gitconfig_local
+[apply]
+  whitespace = nowarn
+[color]
+  diff = auto
+  status = auto
+  branch = auto
+  interactive = auto
+  ui = true
+  pager = true
+[merge]
+  summary = true
+  ff = false
+[push]
+  default = upstream
+[remote "origin"]
+  push = HEAD
+[diff]
+  ignoresubmodules = untracked
+[core]
+  excludesfile = ~/.gitignore
+[pull]
+  rebase = true
+[fetch]
+  prune = true

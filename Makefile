@@ -16,3 +16,7 @@ setup-directories:
 	mkdir -p ~/Downloads
 	mkdir -p ~/Repos
 	mkdir -p ~/.dotfiles
+
+setup-git:
+	ln -fs $(DOTFILES)/gitconfig ${HOME}/.gitconfig
+	ln -fs $(DOTFILES)/gitignore ${HOME}/.gitignore
