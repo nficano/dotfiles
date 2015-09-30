@@ -87,6 +87,14 @@ function vrunning() {
     VBoxManage list runningvms | grep "$1" | cut -d' ' -f1  | tr -d '"\n ' | wc -w | tr -d ' '
 }
 
+function conditionally_prefix_path() {
+    # make sure directory exists and prepend it to system path.
+    local dir=$1
+    if [ -d "$dir" ]; then
+        PATH="$dir:${PATH}"
+    fi
+}
+
 # ======
 # colour
 # ======
@@ -176,6 +184,14 @@ export MANPAGER="less -X"
 # colour value set to green.
 export GREP_COLOR='1;32'
 export PATH="/opt/local/bin:/opt/local/sbin:/opt/local/libexec/gnubin/:$PATH"
+
+# ====
+# path
+# ====
+conditionally_prefix_path /opt/local/bin
+conditionally_prefix_path /opt/local/sbin
+conditionally_prefix_path /opt/local/libexec/gnubin/
+export PATH=.:./bin:${PATH}
 
 # =======
 # aliases
