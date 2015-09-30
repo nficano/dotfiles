@@ -61,12 +61,12 @@ function silence() {
 
 function setup_ssh() {
     SSH_DIR="$HOME/.ssh"
-    # start ssh agent if not already started
+    # if not started, start ssh-agent.
     if ! silence pgrep 'ssh-agent'; then
         silence ssh-agent
     fi
 
-    # add keys if ssh directory exists
+    # add keys if ssh directory exists.
     if [ -d "$SSH_DIR" ]; then
         find "$SSH_DIR" -name '*\.pem' | silence xargs ssh-add
     fi
@@ -206,21 +206,27 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
-# make sure the ls is the GNU version as some switches used aren't available in
-# the BSD version.
+# make sure ls is the GNU version as some switches used aren't available in the
+# BSD version.
 if ls --version | silence grep "coreutils"; then
-    alias l="ls"
-    alias la="ls -a"
     alias lk='ls -lSr'
     alias ll="ls --human-readable --almost-all -l"
-    alias lm='ls -al |more'
+    alias lm='ls -al | more'
     alias ls="ls --color=auto --group-directories-first -X --classify -G"
     alias lx="ls -lXB"
 fi
 
+alias l="ls"
 alias sl="ls"
+alias la="ls -a"
 alias sudo="sudo "
 alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
+
+# emacs :)
+if [ -x "$(command -v emacs)" ]; then
+    alias e='emacs'
+    alias ec='emacsclient'
+fi
 
 # virtualenv
 if [ -x "$(command -v mkvirtualenv)" ]; then
@@ -234,7 +240,6 @@ alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
 # networking
-alias arpscan="sudo arp -an"
 alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
 alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 alias rsync="rsync -v -P"
@@ -243,16 +248,16 @@ alias rsync="rsync -v -P"
 if [[ $OSTYPE =~ darwin ]]; then
     alias o="open ./"
     alias dnsflush="dscacheutil -flushcache"
-    alias portupdate="sudo port -v upgrade outdated"
+
+    # macports
+    if [ -x "$(command -v port)" ]; then
+        alias portupdate="sudo port -v upgrade outdated"
+    fi
 fi
 
-# nmap
+# mercurial
 if [ -x "$(command -v nmap)" ]; then
-    alias nudp="sudo nmap -sS -sU -T4 -A -v -PE -PS22,25,80 -PA21,23,80,3389 "
-    alias ntcp="sudo nmap -p 1-65535 -T4 -A -v -PE -PS22,25,80 -PA21,23,80,3389 "
-    alias nping="nmap -sP -PE -PA21,23,80,3389 "
-    alias nquick="sudo nmap -sV -T4 -O -F --version-light "
-    alias ntracert="sudo nmap -sP -PE -PS22,25,80 -PA21,23,80,3389 -PU -PO --traceroute "
+    alias nmap="sudo nmap"
 fi
 
 # mercurial
@@ -279,7 +284,6 @@ if [ -x "$(command -v git)" ]; then
     alias gma='git commit -am'
     alias gp='git push'
     alias gpu='git pull'
-    alias grr='git remote rm'
     alias gs='git status'
 fi
 
