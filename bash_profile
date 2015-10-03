@@ -206,6 +206,23 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
+alias l="ls"
+alias sl="ls"
+alias la="ls -a"
+
+# check if coreutils is installed (os-x) or if os contains gnu, if so we can
+# use these aliases.
+if [ -d "/usr/local/opt/coreutils/libexec/gnubin" ] || [[ $OSTYPE =~ gnu ]]; then
+    alias lk='ls -lSr'
+    alias ll="ls --human-readable --almost-all -l"
+    alias lm='ls -al | more'
+    alias ls="ls --color=auto --group-directories-first -X --classify -G"
+    alias lx="ls -lXB"
+fi
+
+alias sudo="sudo "
+alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
+
 # virtualenvwrapper
 if [ -x "$(command -v virtualenvwrapper.sh)" ]; then
     alias vmk='mkvirtualenv'
