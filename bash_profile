@@ -77,6 +77,7 @@ conditionally_prefix_path() {
 conditionally_source() {
     local src=$1
     if [ -f "$src" ]; then
+        # shellcheck source=/dev/null
         source "$src"
     fi
 }
@@ -150,9 +151,6 @@ export WORKON_HOME=$HOME/.virtualenvs
 # don't create .pyc files.
 export PYTHONDONTWRITEBYTECODE=true
 
-# tell virtualenvwrapper which python to use.
-export VIRTUALENVWRAPPER_PYTHON=`which python`
-
 # tell virtualenv to use Distribute instead of setuptools.
 export VIRTUALENV_DISTRIBUTE=true
 
@@ -176,7 +174,7 @@ export MANPAGER="less -X"
 export GREP_COLOR='1;32'
 
 # path
-conditionally_prefix_path /usr/local/opt/coreutils/libexec/gnubin
+conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
 export PATH=.:./bin:${PATH}
 
 # =======
@@ -208,32 +206,11 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
-# check if coreutils is installed (os-x) or if os contains gnu, if so we can
-# use these aliases.
-if [ -d "/usr/local/opt/coreutils/libexec/gnubin" ] || [[ $OSTYPE =~ gnu ]]; then
-    alias lk='ls -lSr'
-    alias ll="ls --human-readable --almost-all -l"
-    alias lm='ls -al | more'
-    alias ls="ls --color=auto --group-directories-first -X --classify -G"
-    alias lx="ls -lXB"
-fi
-
-alias l="ls"
-alias sl="ls"
-alias la="ls -a"
-alias sudo="sudo "
-alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
-
-# emacs :)
-if [ -x "$(command -v emacs)" ]; then
-    alias e='emacs'
-    alias ec='emacsclient'
-fi
-
-# virtualenv
-if [ -x "$(command -v mkvirtualenv)" ]; then
+# virtualenvwrapper
+if [ -x "$(command -v virtualenvwrapper.sh)" ]; then
     alias vmk='mkvirtualenv'
     alias vrm='rmvirtualenv'
+    alias vcd='cdvirtualenv'
 fi
 
 # make grep colorful by default.
@@ -291,10 +268,10 @@ unset hostname
 
 setup_ssh
 
-# Source some stuff
-conditionally_source /usr/local/etc/bash_completion.d
-conditionally_source /etc/bash_completion
+conditionally_source "/usr/local/etc/bash_completion.d"
+conditionally_source "$HOME/.bash_profile.local"
+conditionally_source "/usr/local/bin/virtualenvwrapper_lazy.sh"
 
-conditionally_source $HOME/.bash_profile.local
-
-conditionally_source /usr/local/bin/virtualenvwrapper_lazy.sh
+if [ -x "$(command -v brew)" ]; then
+    conditionally_source "$(brew --prefix)/etc/bash_completion"
+fi
