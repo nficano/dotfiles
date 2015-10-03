@@ -13,6 +13,20 @@ trap 'ret=$?; test $ret -ne 0 && printf "failed\n" >&2; exit $ret' EXIT
 
 set -e
 
+pip_is_installed() {
+    pip freeze | grep -v '^\-e' | cut -d = -f 1 | grep -Fqx "$1";
+}
+
+pip_install_or_upgrade() {
+    if pip_is_installed "$1"; then
+        info "Upgrading $1 ..."
+        pip install setuptools -qU "$1"
+    else
+        info "Installing $1 ..."
+        pip install -q "$1"
+    fi
+}
+
 brew_install_or_upgrade() {
     if brew_is_installed "$1"; then
         if brew_is_upgradable "$1"; then
@@ -28,14 +42,14 @@ brew_install_or_upgrade() {
 }
 
 brew_is_installed() {
-    local name="$(brew_expand_alias "$1")"
-
+    local name
+    name="$(brew_expand_alias "$1")"
     brew list -1 | grep -Fqx "$name"
 }
 
 brew_is_upgradable() {
-    local name="$(brew_expand_alias "$1")"
-
+    local name
+    name="$(brew_expand_alias "$1")"
     ! brew outdated --quiet "$name" >/dev/null
 }
 
@@ -44,9 +58,10 @@ brew_expand_alias() {
 }
 
 brew_launchctl_restart() {
-    local name="$(brew_expand_alias "$1")"
-    local domain="homebrew.mxcl.$name"
-    local plist="$domain.plist"
+    local name domain plist
+    name="$(brew_expand_alias "$1")"
+    domain="homebrew.mxcl.$name"
+    plist="$domain.plist"
 
     info "Restarting %s ..." "$1"
     mkdir -p "$HOME/Library/LaunchAgents"
@@ -75,18 +90,25 @@ brew_install_or_upgrade 'autoconf'
 brew_install_or_upgrade 'automake'
 brew_install_or_upgrade 'coreutils'
 brew_install_or_upgrade 'git'
+brew_install_or_upgrade 'bash-completion'
 brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'tmux'
 brew_install_or_upgrade 'aspell'
-
+brew_install_or_upgrade 'shellcheck'
 brew_install_or_upgrade 'python'
-brew unlink python && brew link python --force
-pip install virtualenv
-pip install virtualenvwrapper
+
+brew unlink python
+brew link python --force
+
+pip_install_or_upgrade "virtualenv"
+pip_install_or_upgrade "virtualenvwrapper"
+pip_install_or_upgrade "ipython"
+
 brew_install_or_upgrade 'openssl'
 
-brew unlink openssl && brew link openssl --force
+brew unlink openssl
+brew link openssl --force
 
 brew_install_or_upgrade 'libyaml'
 brew_install_or_upgrade 'node'
