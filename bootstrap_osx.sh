@@ -77,9 +77,14 @@ brew_install_or_upgrade 'coreutils'
 brew_install_or_upgrade 'git'
 brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'the_silver_searcher'
-brew_install_or_upgrade 'python'
-brew_install_or_upgrade 'openssl'
 brew_install_or_upgrade 'tmux'
+brew_install_or_upgrade 'aspell'
+
+brew_install_or_upgrade 'python'
+brew unlink python && brew link python --force
+pip install virtualenv
+pip install virtualenvwrapper
+brew_install_or_upgrade 'openssl'
 
 brew unlink openssl && brew link openssl --force
 
