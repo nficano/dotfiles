@@ -53,6 +53,10 @@ brew_is_upgradable() {
     ! brew outdated --quiet "$name" >/dev/null
 }
 
+brew_tap() {
+  brew tap "$1" 2>/dev/null
+}
+
 brew_expand_alias() {
     brew info "$1" 2>/dev/null | head -1 | awk '{gsub(/:/, ""); print $1}'
 }
@@ -112,3 +116,8 @@ brew link openssl --force
 
 brew_install_or_upgrade 'libyaml'
 brew_install_or_upgrade 'node'
+
+# brew_tap 'railwaycat/emacsmacport'
+# brew_install_or_upgrade 'emacs-mac'
+# brew unlink emacs-mac
+# brew link emacs-mac --force
