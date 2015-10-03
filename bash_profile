@@ -6,22 +6,6 @@
 # Tab completions for sudo
 complete -cf sudo
 
-# Bash tab completions
-if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
-    # shellcheck disable=SC1091
-    . /etc/bash_completion
-fi
-
-if [ -f /etc/git-completion ]; then
-    # shellcheck disable=SC1091
-    . /etc/git-completion
-fi
-
-if [ -f /usr/local/etc/bash_completion.d ]; then
-    # shellcheck disable=SC1091
-    . /usr/local/etc/bash_completion.d
-fi
-
 # Case-insensitive globbing (used in pathname expansion)
 shopt -s nocaseglob
 
@@ -87,6 +71,13 @@ conditionally_prefix_path() {
     local dir=$1
     if [ -d "$dir" ]; then
         PATH="$dir:${PATH}"
+    fi
+}
+
+conditionally_source() {
+    local src=$1
+    if [ -f "$src" ]; then
+        source "$src"
     fi
 }
 
@@ -184,11 +175,8 @@ export MANPAGER="less -X"
 # colour value set to green.
 export GREP_COLOR='1;32'
 
-# ====
 # path
-# ====
 conditionally_prefix_path /usr/local/opt/coreutils/libexec/gnubin
-
 export PATH=.:./bin:${PATH}
 
 # =======
@@ -220,11 +208,15 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
-alias lk='ls -lSr'
-alias ll="ls --human-readable --almost-all -l"
-alias lm='ls -al | more'
-alias ls="ls --color=auto --group-directories-first -X --classify -G"
-alias lx="ls -lXB"
+# check if coreutils is installed (os-x) or if os contains gnu, if so we can
+# use these aliases.
+if [ -d "/usr/local/opt/coreutils/libexec/gnubin" ] || [[ $OSTYPE =~ gnu ]]; then
+    alias lk='ls -lSr'
+    alias ll="ls --human-readable --almost-all -l"
+    alias lm='ls -al | more'
+    alias ls="ls --color=auto --group-directories-first -X --classify -G"
+    alias lx="ls -lXB"
+fi
 
 alias l="ls"
 alias sl="ls"
@@ -297,8 +289,12 @@ fi
 export PS1="\u at ${hostname} \[\e[1;32m\]\w\[\e[0m\] "
 unset hostname
 
-if [ -f "$HOME/.bash_profile.local" ]; then
-    . "$HOME/.bash_profile.local"
-fi
-
 setup_ssh
+
+# Source some stuff
+conditionally_source /usr/local/etc/bash_completion.d
+conditionally_source /etc/bash_completion
+
+conditionally_source $HOME/.bash_profile.local
+
+conditionally_source /usr/local/bin/virtualenvwrapper_lazy.sh
