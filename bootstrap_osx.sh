@@ -90,32 +90,38 @@ fi
 info "Updating Homebrew formulas ..."
 brew update
 
+brew_install_or_upgrade 'aspell'
 brew_install_or_upgrade 'autoconf'
 brew_install_or_upgrade 'automake'
+brew_install_or_upgrade 'bash-completion'
 brew_install_or_upgrade 'coreutils'
 brew_install_or_upgrade 'git'
-brew_install_or_upgrade 'bash-completion'
 brew_install_or_upgrade 'htop'
+brew_install_or_upgrade 'libyaml'
+brew_install_or_upgrade 'node'
+brew_install_or_upgrade 'npm'
+brew_install_or_upgrade 'reattach-to-user-namespace'
+brew_install_or_upgrade 'shellcheck'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'tmux'
-brew_install_or_upgrade 'aspell'
-brew_install_or_upgrade 'shellcheck'
-brew_install_or_upgrade 'python'
 
+brew_install_or_upgrade 'bash'
+brew unlink bash
+brew link --overwrite bash
+
+# python stuff
+brew_install_or_upgrade 'python'
 brew unlink python
 brew link python --force
-
 pip_install_or_upgrade "virtualenv"
 pip_install_or_upgrade "virtualenvwrapper"
 pip_install_or_upgrade "ipython"
+pip_install_or_upgrade "requests"
 
+# openssl
 brew_install_or_upgrade 'openssl'
-
 brew unlink openssl
 brew link openssl --force
-
-brew_install_or_upgrade 'libyaml'
-brew_install_or_upgrade 'node'
 
 # brew_tap 'railwaycat/emacsmacport'
 # brew_install_or_upgrade 'emacs-mac'
