@@ -135,10 +135,24 @@ LS_COLORS=$LS_COLORS:'*README=4;1;33'
 # install colour
 LS_COLORS=$LS_COLORS:'*INSTALL=4;1;33'
 
+LS_COLORS=$LS_COLORS:'*.local=4;0;33'
+
 export LS_COLORS
 
 # enable support for colour coding your files/directories/symlinks.
 export CLICOLOR=true
+
+# colour value set to green.
+export GREP_COLOR='1;32'
+
+# colour for manpages
+export LESS_TERMCAP_mb=$'\E[01;31m'
+export LESS_TERMCAP_md=$'\E[01;31m'
+export LESS_TERMCAP_me=$'\E[0m'
+export LESS_TERMCAP_se=$'\E[0m'
+export LESS_TERMCAP_so=$'\E[01;44;33m'
+export LESS_TERMCAP_ue=$'\E[0m'
+export LESS_TERMCAP_us=$'\E[01;32m'
 
 # tell pip to automatically use the currently active virtualenv.
 export PIP_RESPECT_VIRTUALENV=true
@@ -169,9 +183,6 @@ export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
 # don’t clear the screen after quitting a manual page.
 export MANPAGER="less -X"
-
-# colour value set to green.
-export GREP_COLOR='1;32'
 
 # path
 conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
@@ -206,6 +217,12 @@ alias e="exit"
 alias g="git"
 alias h="history"
 
+# always ask before replacing
+alias cp='cp -i'
+
+# display every instance of the given command found in the path
+alias which='type -all'
+
 alias l="ls"
 alias sl="ls"
 alias la="ls -a"
@@ -236,8 +253,9 @@ alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
 # networking
-alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
-alias openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
+alias net.ip="dig +short myip.opendns.com @resolver1.opendns.com"
+alias net.openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
+
 alias rsync="rsync -v -P"
 
 # os-x specific

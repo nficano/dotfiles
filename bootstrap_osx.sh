@@ -104,6 +104,7 @@ brew_install_or_upgrade 'reattach-to-user-namespace'
 brew_install_or_upgrade 'shellcheck'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'tmux'
+brew_install_or_upgrade 'nmap'
 
 brew_install_or_upgrade 'bash'
 brew unlink bash
