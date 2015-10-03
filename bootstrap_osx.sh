@@ -114,8 +114,11 @@ brew link --overwrite bash
 brew_install_or_upgrade 'python'
 brew unlink python
 brew link python --force
+
 pip_install_or_upgrade "virtualenv"
 pip_install_or_upgrade "virtualenvwrapper"
+
+# I prefer these to be in my global site-packages
 pip_install_or_upgrade "ipython"
 pip_install_or_upgrade "requests"
 
