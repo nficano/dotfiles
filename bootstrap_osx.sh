@@ -118,9 +118,10 @@ brew link python --force
 pip_install_or_upgrade "virtualenv"
 pip_install_or_upgrade "virtualenvwrapper"
 
-# I prefer these to be in my global site-packages
+# we want these to be in the global site-packages
 pip_install_or_upgrade "ipython"
 pip_install_or_upgrade "requests"
+pip_install_or_upgrade "flake8"
 
 # openssl
 brew_install_or_upgrade 'openssl'
