@@ -1,9 +1,12 @@
 DOTFILES := $(PWD)
 
-install: setup-shell setup-directories install-inputrc setup-git
+install: setup-shell setup-directories install-inputrc setup-git setup-tmux
 
 bootstrap:
 	bash $(DOTFILES)/bootstrap_osx.sh
+
+setup-tmux:
+	ln -fs $(DOTFILES)/tmux.conf ${HOME}/.tmux.conf
 
 setup-shell:
 	rm -f ~/.bash_profile
