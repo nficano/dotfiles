@@ -20,7 +20,7 @@ pip_is_installed() {
 pip_install_or_upgrade() {
     if pip_is_installed "$1"; then
         info "Upgrading $1 ..."
-        pip install setuptools -qU "$1"
+        pip install -qU "$1"
     else
         info "Installing $1 ..."
         pip install -q "$1"
