@@ -124,6 +124,7 @@ pip_install_or_upgrade "virtualenvwrapper"
 pip_install_or_upgrade "ipython"
 pip_install_or_upgrade "requests"
 pip_install_or_upgrade "flake8"
+pip_install_or_upgrade "pep8"
 
 # openssl
 brew_install_or_upgrade 'openssl'
