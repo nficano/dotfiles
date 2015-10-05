@@ -16,6 +16,9 @@ pip_is_installed() {
 }
 
 pip_install_or_upgrade() {
+    # I don't have a compariable ``pip_is_upgradable`` method because if you
+    # run virtualbox, which includes ``pyvbox`` pip's get upgradable packages
+    # fails. Fuck Oracle.
     if pip_is_installed "$1"; then
         info "Upgrading $1 ..."
         pip install -qU "$1"
