@@ -9,8 +9,6 @@ info() {
     printf "$fmt\n" "$@"
 }
 
-trap 'ret=$?; test $ret -ne 0 && printf "failed\n" >&2; exit $ret' EXIT
-
 set -e
 
 pip_is_installed() {
@@ -98,14 +96,15 @@ brew_install_or_upgrade 'coreutils'
 brew_install_or_upgrade 'git'
 brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'libyaml'
+brew_install_or_upgrade 'nmap'
 brew_install_or_upgrade 'node'
 brew_install_or_upgrade 'npm'
 brew_install_or_upgrade 'reattach-to-user-namespace'
+brew_install_or_upgrade 'redis'
 brew_install_or_upgrade 'shellcheck'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'tmux'
-brew_install_or_upgrade 'nmap'
-brew_install_or_upgrade 'redis'
+
 brew_install_or_upgrade 'bash'
 brew unlink bash
 brew link --overwrite bash
