@@ -9,8 +9,6 @@ info() {
     printf "$fmt\n" "$@"
 }
 
-trap 'ret=$?; test $ret -ne 0 && printf "failed\n" >&2; exit $ret' EXIT
-
 set -e
 
 pip_is_installed() {
@@ -18,9 +16,12 @@ pip_is_installed() {
 }
 
 pip_install_or_upgrade() {
+    # I don't have a compariable ``pip_is_upgradable`` method because if you
+    # run virtualbox, which includes ``pyvbox`` pip's get upgradable packages
+    # fails. Fuck Oracle.
     if pip_is_installed "$1"; then
         info "Upgrading $1 ..."
-        pip install setuptools -qU "$1"
+        pip install -qU "$1"
     else
         info "Installing $1 ..."
         pip install -q "$1"
@@ -98,14 +99,15 @@ brew_install_or_upgrade 'coreutils'
 brew_install_or_upgrade 'git'
 brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'libyaml'
+brew_install_or_upgrade 'nmap'
 brew_install_or_upgrade 'node'
 brew_install_or_upgrade 'npm'
 brew_install_or_upgrade 'reattach-to-user-namespace'
+brew_install_or_upgrade 'redis'
 brew_install_or_upgrade 'shellcheck'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'tmux'
-brew_install_or_upgrade 'nmap'
-brew_install_or_upgrade 'redis'
+
 brew_install_or_upgrade 'bash'
 brew unlink bash
 brew link --overwrite bash
@@ -122,6 +124,7 @@ pip_install_or_upgrade "virtualenvwrapper"
 pip_install_or_upgrade "ipython"
 pip_install_or_upgrade "requests"
 pip_install_or_upgrade "flake8"
+pip_install_or_upgrade "pep8"
 
 # openssl
 brew_install_or_upgrade 'openssl'
