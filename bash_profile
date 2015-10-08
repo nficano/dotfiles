@@ -178,6 +178,9 @@ export HISTCONTROL=ignoredups:erasedups
 export HISTSIZE=100000
 export HISTFILESIZE=100000
 
+# we don't care to save these.
+export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:mount:umount:[ \t]*"
+
 # after each command, save and reload history.
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
