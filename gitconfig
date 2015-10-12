@@ -12,13 +12,7 @@
 [merge]
   summary = true
   ff = false
-[push]
-  default = upstream
-[remote "origin"]
-  push = HEAD
 [diff]
   ignoresubmodules = untracked
 [core]
   excludesfile = ~/.gitignore
-[fetch]
-  prune = true
