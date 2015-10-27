@@ -16,5 +16,3 @@
     ignoresubmodules = untracked
 [core]
     excludesfile = ~/.gitignore
-[push]
-    default = matching
