@@ -262,7 +262,7 @@ alias net.openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 # nmap
 if [ -x "$(command -v nmap)" ]; then
     alias net.explore="sudo nmap --script broadcast"
-    alias net.dhcp_discover="sudo nmap --script broadcast"
+    alias net.dhcp_discover="sudo nmap --script broadcast-dhcp-discover"
 fi
 alias rsync="rsync -v -P"
 
