@@ -6,6 +6,11 @@
 # Tab completions for sudo
 complete -cf sudo
 
+if [ -x "$(command -v aws)" ]; then
+    # Tab completions for awscli
+    complete -C aws_completer aws
+fi
+
 # Case-insensitive globbing (used in pathname expansion)
 shopt -s nocaseglob
 
