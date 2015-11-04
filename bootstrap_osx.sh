@@ -132,6 +132,14 @@ brew_install_or_upgrade 'openssl'
 brew unlink openssl
 brew link openssl --force
 
+# imaging
+brew_install_or_upgrade 'imagemagick'
+brew_install_or_upgrade 'gifsicle'
+
+# media
+brew_install_or_upgrade 'ffmpeg'
+brew_install_or_upgrade 'mplayer'
+
 # brew_tap 'railwaycat/emacsmacport'
 # brew_install_or_upgrade 'emacs-mac'
 # brew unlink emacs-mac
