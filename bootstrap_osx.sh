@@ -143,6 +143,7 @@ brew_install_or_upgrade 'mplayer'
 
 # aws
 brew_install_or_upgrade 'awscli'
+brew_install_or_upgrade 'ssh-copy-id'
 
 # brew_tap 'railwaycat/emacsmacport'
 # brew_install_or_upgrade 'emacs-mac'
