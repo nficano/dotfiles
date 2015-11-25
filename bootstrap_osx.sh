@@ -141,8 +141,6 @@ brew_install_or_upgrade 'ffmpeg'
 brew reinstall ffmpeg --with-faac
 brew_install_or_upgrade 'mplayer'
 
-# aws
-brew_install_or_upgrade 'awscli'
 brew_install_or_upgrade 'ssh-copy-id'
 
 # brew_tap 'railwaycat/emacsmacport'
