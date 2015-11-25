@@ -139,7 +139,6 @@ brew_install_or_upgrade 'gifsicle'
 # media
 brew_install_or_upgrade 'ffmpeg'
 brew reinstall ffmpeg --with-faac
-brew_install_or_upgrade 'mplayer'
 
 brew_install_or_upgrade 'ssh-copy-id'
 
