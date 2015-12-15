@@ -107,6 +107,7 @@ brew_install_or_upgrade 'redis'
 brew_install_or_upgrade 'shellcheck'
 brew_install_or_upgrade 'the_silver_searcher'
 brew_install_or_upgrade 'tmux'
+brew_install_or_upgrade 'wget'
 
 brew_install_or_upgrade 'bash'
 brew unlink bash
@@ -130,6 +131,16 @@ pip_install_or_upgrade "pep8"
 brew_install_or_upgrade 'openssl'
 brew unlink openssl
 brew link openssl --force
+
+# imaging
+brew_install_or_upgrade 'imagemagick'
+brew_install_or_upgrade 'gifsicle'
+
+# media
+brew_install_or_upgrade 'ffmpeg'
+brew reinstall ffmpeg --with-faac
+
+brew_install_or_upgrade 'ssh-copy-id'
 
 # brew_tap 'railwaycat/emacsmacport'
 # brew_install_or_upgrade 'emacs-mac'

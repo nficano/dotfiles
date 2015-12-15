@@ -6,6 +6,11 @@
 # Tab completions for sudo
 complete -cf sudo
 
+if [ -x "$(command -v aws)" ]; then
+    # Tab completions for awscli
+    complete -C aws_completer aws
+fi
+
 # Case-insensitive globbing (used in pathname expansion)
 shopt -s nocaseglob
 
@@ -262,7 +267,7 @@ alias net.openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
 # nmap
 if [ -x "$(command -v nmap)" ]; then
     alias net.explore="sudo nmap --script broadcast"
-    alias net.dhcp_discover="sudo nmap --script broadcast"
+    alias net.dhcp_discover="sudo nmap --script broadcast-dhcp-discover"
 fi
 alias rsync="rsync -v -P"
 
