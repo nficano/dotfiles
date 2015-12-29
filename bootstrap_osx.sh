@@ -147,6 +147,7 @@ brew_install_or_upgrade 'ssh-copy-id'
 # brew_install_or_upgrade 'postgres'
 # brew_install_or_upgrade 'elasticsearch'
 # brew_install_or_upgrade 'rabbitmq'
+brew_install_or_upgrade 'libsass'
 
 
 # brew_tap 'railwaycat/emacsmacport'
