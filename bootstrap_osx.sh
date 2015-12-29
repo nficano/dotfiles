@@ -101,6 +101,7 @@ brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'libyaml'
 brew_install_or_upgrade 'nmap'
 brew_install_or_upgrade 'node'
+brew_install_or_upgrade 'nodejs'
 brew_install_or_upgrade 'npm'
 brew_install_or_upgrade 'reattach-to-user-namespace'
 brew_install_or_upgrade 'redis'
@@ -141,6 +142,13 @@ brew_install_or_upgrade 'ffmpeg'
 brew reinstall ffmpeg --with-faac
 
 brew_install_or_upgrade 'ssh-copy-id'
+
+brew_install_or_upgrade 'libmemcached'
+brew_install_or_upgrade 'postgres'
+brew_install_or_upgrade 'elasticsearch'
+brew_install_or_upgrade 'rabbitmq'
+brew_install_or_upgrade 'libsass'
+
 
 # brew_tap 'railwaycat/emacsmacport'
 # brew_install_or_upgrade 'emacs-mac'

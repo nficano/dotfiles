@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# If not running interactively, don't do anything
+# If not running ractively, don't do anything
 [ -z "$PS1" ] && return
 
 # Tab completions for sudo
@@ -303,6 +303,8 @@ if [ -x "$(command -v git)" ]; then
     alias gpu='git pull'
     alias gs='git status'
 fi
+
+export EDITOR='emacs'
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
