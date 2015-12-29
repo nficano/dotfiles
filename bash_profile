@@ -304,7 +304,7 @@ if [ -x "$(command -v git)" ]; then
     alias gs='git status'
 fi
 
-export EDITOR='emacsclient'
+export EDITOR='emacs'
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
