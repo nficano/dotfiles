@@ -4,7 +4,7 @@
 # https://github.com/thoughtbot/laptop/blob/master/mac
 
 info() {
-    local fmt="$1"; shift
+    fmt="$1"; shift
     # shellcheck disable=SC2059
     printf "$fmt\n" "$@"
 }
@@ -43,13 +43,11 @@ brew_install_or_upgrade() {
 }
 
 brew_is_installed() {
-    local name
     name="$(brew_expand_alias "$1")"
     brew list -1 | grep -Fqx "$name"
 }
 
 brew_is_upgradable() {
-    local name
     name="$(brew_expand_alias "$1")"
     ! brew outdated --quiet "$name" >/dev/null
 }
@@ -63,7 +61,6 @@ brew_expand_alias() {
 }
 
 brew_launchctl_restart() {
-    local name domain plist
     name="$(brew_expand_alias "$1")"
     domain="homebrew.mxcl.$name"
     plist="$domain.plist"
@@ -135,7 +132,6 @@ brew link openssl --force
 
 # imaging
 brew_install_or_upgrade 'imagemagick'
-brew_install_or_upgrade 'gifsicle'
 
 # media
 brew_install_or_upgrade 'ffmpeg'
