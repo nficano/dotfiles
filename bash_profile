@@ -325,3 +325,6 @@ conditionally_source "/usr/local/bin/virtualenvwrapper_lazy.sh"
 if [ -x "$(command -v brew)" ]; then
     conditionally_source "$(brew --prefix)/etc/bash_completion"
 fi
+
+# Support for fuck command
+eval "$(thefuck --alias)"
