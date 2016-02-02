@@ -18,4 +18,4 @@
 [diff]
     ignoresubmodules = untracked
 [core]
-    excludesfile = ~/.gitignore
+	excludesfile = /Users/nficano/.gitignore
