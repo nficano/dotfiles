@@ -113,7 +113,8 @@ brew unlink bash
 brew link --overwrite bash
 
 # python stuff
-brew_install_or_upgrade 'python'
+# brew_install_or_upgrade 'python'
+brew install python --framework
 brew unlink python
 brew link python --force
 
