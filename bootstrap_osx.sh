@@ -94,6 +94,7 @@ brew_install_or_upgrade 'automake'
 brew_install_or_upgrade 'bash-completion'
 brew_install_or_upgrade 'coreutils'
 brew_install_or_upgrade 'git'
+brew_install_or_upgrade 'git-lfs'
 brew_install_or_upgrade 'htop'
 brew_install_or_upgrade 'libyaml'
 brew_install_or_upgrade 'nmap'
@@ -108,13 +109,15 @@ brew_install_or_upgrade 'tmux'
 brew_install_or_upgrade 'wget'
 brew_install_or_upgrade 'thefuck'
 brew_install_or_upgrade 'watchman'
+brew_install_or_upgrade 'opencv3'
+brew_install_or_upgrade 'jq'
 
 brew_install_or_upgrade 'bash'
 brew unlink bash
 brew link --overwrite bash
 
 # python stuff
-# brew_install_or_upgrade 'python'
+brew_install_or_upgrade 'python3'
 brew install python --framework
 brew unlink python
 brew link python --force
@@ -146,3 +149,6 @@ brew_install_or_upgrade 'ssh-copy-id'
 # brew_install_or_upgrade 'emacs-mac'
 # brew unlink emacs-mac
 # brew link emacs-mac --force
+
+brew tap sudar/arduino-mk
+brew install arduino-mk
