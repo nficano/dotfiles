@@ -304,6 +304,11 @@ if [ -x "$(command -v git)" ]; then
     alias gs='git status'
 fi
 
+#stupid github tool
+if [ -x "$(command -v hub)" ]; then
+    alias git='hub'
+fi
+
 export EDITOR='emacs'
 
 if [ -n "$SSH_CLIENT" ]; then
