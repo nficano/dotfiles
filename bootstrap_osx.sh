@@ -111,6 +111,7 @@ brew_install_or_upgrade 'thefuck'
 brew_install_or_upgrade 'watchman'
 brew_install_or_upgrade 'opencv3'
 brew_install_or_upgrade 'jq'
+brew_install_or_upgrade 'hub'
 
 brew_install_or_upgrade 'bash'
 brew unlink bash
