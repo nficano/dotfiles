@@ -110,7 +110,6 @@ brew_install_or_upgrade 'tmux'
 brew_install_or_upgrade 'wget'
 brew_install_or_upgrade 'thefuck'
 brew_install_or_upgrade 'watchman'
-brew_install_or_upgrade 'opencv3'
 brew_install_or_upgrade 'jq'
 
 brew_install_or_upgrade 'bash'
@@ -146,10 +145,10 @@ brew reinstall ffmpeg --with-faac
 
 brew_install_or_upgrade 'ssh-copy-id'
 
-# brew_tap 'railwaycat/emacsmacport'
-# brew_install_or_upgrade 'emacs-mac'
-# brew unlink emacs-mac
-# brew link emacs-mac --force
+brew_tap 'railwaycat/emacsmacport'
+brew_install_or_upgrade 'emacs-mac'
+brew unlink emacs-mac
+brew link emacs-mac --force
 
-brew tap sudar/arduino-mk
-brew install arduino-mk
+brew_tap 'sudar/arduino-mk'
+brew_install_or_upgrade 'arduino-mk'
