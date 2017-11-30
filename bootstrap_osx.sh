@@ -113,19 +113,21 @@ brew_install_or_upgrade 'watchman'
 brew_install_or_upgrade 'jq'
 brew_install_or_upgrade 'pandoc'
 brew_install_or_upgrade 'httpie'
+brew_install_or_upgrade 'openssh'
+brew_install_or_upgrade 'ssh-copy-id'
 
-
+# shell
 brew_install_or_upgrade 'bash'
 brew unlink bash
-brew link --overwrite bash
+brew link --overwrite --force bash
 
 # python stuff
 brew_install_or_upgrade 'python3'
 brew install python --framework
 brew unlink python
-brew link python --force
+brew link --overwrite --force python
 
-pip_install_or_upgrade "pipenv"
+brew_install_or_upgrade 'pipenv'
 pip_install_or_upgrade "virtualenv"
 pip_install_or_upgrade "virtualenvwrapper"
 
@@ -138,21 +140,21 @@ pip_install_or_upgrade "pep8"
 # openssl
 brew_install_or_upgrade 'openssl'
 brew unlink openssl
-brew link openssl --force
+brew link openssl --overwrite --force
 
 # imaging
 brew_install_or_upgrade 'imagemagick'
 
 # media
 brew_install_or_upgrade 'ffmpeg'
-brew reinstall ffmpeg --with-faac
+brew reinstall ffmpeg
 
-brew_install_or_upgrade 'ssh-copy-id'
-
+# emacs
 brew_tap 'railwaycat/emacsmacport'
 brew_install_or_upgrade 'emacs-mac'
 brew unlink emacs-mac
 brew link emacs-mac --force
 
+# arduino
 brew_tap 'sudar/arduino-mk'
 brew_install_or_upgrade 'arduino-mk'
