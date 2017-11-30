@@ -112,6 +112,7 @@ brew_install_or_upgrade 'thefuck'
 brew_install_or_upgrade 'watchman'
 brew_install_or_upgrade 'opencv3'
 brew_install_or_upgrade 'jq'
+brew_install_or_upgrade 'pandoc'
 
 brew_install_or_upgrade 'bash'
 brew unlink bash
@@ -123,6 +124,7 @@ brew install python --framework
 brew unlink python
 brew link python --force
 
+pip_install_or_upgrade "pipenv"
 pip_install_or_upgrade "virtualenv"
 pip_install_or_upgrade "virtualenvwrapper"
 

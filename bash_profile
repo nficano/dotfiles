@@ -5,6 +5,7 @@
 
 # Tab completions for sudo
 complete -cf sudo
+complete -o default -o nospace -W "$(cat ~/.ssh/config.d/* | grep "^Host " | awk '{print $2}')" ssh scp
 
 if [ -x "$(command -v aws)" ]; then
     # Tab completions for awscli
@@ -164,7 +165,6 @@ export PIP_RESPECT_VIRTUALENV=true
 
 # when using virtualenvwrapper, tell pip to automatically create its
 # virtualenvs in ``$WORKON_HOME``.
-export PIP_VIRTUALENV_BASE=$WORKON_HOME
 export WORKON_HOME=$HOME/.virtualenvs
 
 # don't create .pyc files.
@@ -194,7 +194,8 @@ export MANPAGER="less -X"
 
 # path
 conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
-export PATH=.:./bin:${PATH}
+conditionally_prefix_path "/usr/local/opt/openssl/bin"
+# export PATH=.:./bin:${PATH}
 
 # =======
 # aliases
@@ -229,7 +230,7 @@ alias h="history"
 alias cp='cp -i'
 
 # display every instance of the given command found in the path
-alias which='type -all'
+# alias which='type -all'
 
 alias l="ls"
 alias sl="ls"
