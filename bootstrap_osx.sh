@@ -115,6 +115,7 @@ brew_install_or_upgrade 'pandoc'
 brew_install_or_upgrade 'httpie'
 brew_install_or_upgrade 'openssh'
 brew_install_or_upgrade 'ssh-copy-id'
+brew_install_or_upgrade 'fzf'
 
 # shell
 brew_install_or_upgrade 'bash'

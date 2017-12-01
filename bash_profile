@@ -327,6 +327,7 @@ setup_ssh
 conditionally_source "/usr/local/etc/bash_completion.d"
 conditionally_source "$HOME/.bash_profile.local"
 conditionally_source "/usr/local/bin/virtualenvwrapper_lazy.sh"
+conditionally_source "$HOME/.fzf.bash"
 
 if [ -x "$(command -v brew)" ]; then
     conditionally_source "$(brew --prefix)/etc/bash_completion"
