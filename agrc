@@ -1,0 +1,6 @@
+--ignore-dir=node_modules
+--ignore=bundle.*
+--type-add=css=.sass,.less,.scss
+--type-add=j2=.j2
+--sort-files
+--color

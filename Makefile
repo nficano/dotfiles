@@ -1,6 +1,6 @@
 DOTFILES := $(PWD)
 
-install: setup-shell setup-directories install-inputrc setup-git setup-tmux setup-pip
+install: setup-shell setup-directories install-inputrc setup-git setup-tmux setup-pip setup-agrc
 
 bootstrap:
 	bash $(DOTFILES)/bootstrap_osx.sh
@@ -21,6 +21,9 @@ setup-pip:
 install-inputrc:
 	rm -f ~/.inputrc
 	ln -fs $(DOTFILES)/inputrc ${HOME}/.inputrc
+
+setup-agrc:
+	ln -fs $(DOTFILES)/agrc ${HOME}/.agrc
 
 setup-directories:
 	mkdir -p ~/.virtualenvs

@@ -276,6 +276,8 @@ alias rsync="rsync -v -P"
 if [[ $OSTYPE =~ darwin ]]; then
     alias o="open ./"
     alias dnsflush="dscacheutil -flushcache"
+    alias fixcamera='sudo killall VDCAssistant'
+    alias fixspeak='killall -9 com.apple.speech.speechsynthesisd'
 fi
 
 # mercurial
@@ -325,9 +327,11 @@ unset hostname
 setup_ssh
 
 conditionally_source "/usr/local/etc/bash_completion.d"
-conditionally_source "$HOME/.bash_profile.local"
 conditionally_source "/usr/local/bin/virtualenvwrapper_lazy.sh"
 conditionally_source "$HOME/.fzf.bash"
+conditionally_source "$HOME/.nvm/nvm.sh"
+conditionally_source "$HOME/.bash_profile.local"
+conditionally_source "$HOME/.iterm2_shell_integration.bash"
 
 if [ -x "$(command -v brew)" ]; then
     conditionally_source "$(brew --prefix)/etc/bash_completion"
@@ -335,5 +339,3 @@ fi
 
 # Support for fuck command
 eval "$(thefuck --alias)"
-
-test -e "${HOME}/.iterm2_shell_integration.bash" && source "${HOME}/.iterm2_shell_integration.bash"
