@@ -195,6 +195,7 @@ export MANPAGER="less -X"
 # path
 conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
 conditionally_prefix_path "/usr/local/opt/openssl/bin"
+conditionally_prefix_path "/usr/local/opt/python/libexec/bin"
 # export PATH=.:./bin:${PATH}
 
 # =======
@@ -337,5 +338,12 @@ if [ -x "$(command -v brew)" ]; then
     conditionally_source "$(brew --prefix)/etc/bash_completion"
 fi
 
-# Support for fuck command
-eval "$(thefuck --alias)"
+if [ -x "$(command -v thefuck)" ]; then
+  # Support for fuck command
+  eval "$(thefuck --alias)"
+fi
+
+if [ -x "$(command -v direnv)" ]; then
+  # Support for direnv
+  eval "$(direnv hook bash)"
+fi

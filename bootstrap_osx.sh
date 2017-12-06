@@ -116,6 +116,7 @@ brew_install_or_upgrade 'httpie'
 brew_install_or_upgrade 'openssh'
 brew_install_or_upgrade 'ssh-copy-id'
 brew_install_or_upgrade 'fzf'
+brew_install_or_upgrade 'direnv'
 
 # shell
 brew_install_or_upgrade 'bash'
