@@ -11,7 +11,20 @@ info() {
 
 set -e
 
-xcode-select --install
+# Install Xcode Command Line Tools
+if ! $(xcode-select -p &>/dev/null); then
+  xcode-select --install &>/dev/null
+
+  # Wait until the Xcode Command Line Tools are installed
+  until $(xcode-select -p &>/dev/null); do
+    sleep 5
+  done
+fi
+
+# Accept the Xcode/iOS license agreement
+if ! $(sudo xcodebuild -license status); then
+  sudo xcodebuild -license accept
+fi
 
 if [ ! -d "$HOME/.bin/" ]; then
   mkdir "$HOME/.bin"
@@ -183,5 +196,25 @@ brew_install_or_upgrade 'arduino-mk'
 
 # cask
 brew_tap caskroom/cask
+brew cask install 1password
+brew cask install adobe-creative-cloud
 brew cask install atom
+brew cask install dropbox
+brew cask install fantastical
+brew cask install firefox
+brew cask install grammarly
+brew cask install imagealpha
+brew cask install imageoptim
+brew cask install insomnia
+brew cask install iterm2
+brew cask install macdown
+brew cask install microsoft-office
+brew cask install mysqlworkbench
+brew cask install purevpn
+brew cask install sketch
+brew cask install slack
 brew cask install spotify
+brew cask install the-unarchiver
+brew cask install transmission
+brew cask install vlc
+brew cask install zoomus
