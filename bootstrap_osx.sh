@@ -11,6 +11,25 @@ info() {
 
 set -e
 
+xcode-select --install
+
+if [ ! -d "$HOME/.bin/" ]; then
+  mkdir "$HOME/.bin"
+fi
+
+HOMEBREW_PREFIX="/usr/local"
+
+if [ -d "$HOMEBREW_PREFIX" ]; then
+  if ! [ -r "$HOMEBREW_PREFIX" ]; then
+    sudo chown -R "$LOGNAME:admin" /usr/local
+  fi
+else
+  sudo mkdir "$HOMEBREW_PREFIX"
+  sudo chflags norestricted "$HOMEBREW_PREFIX"
+  sudo chown -R "$LOGNAME:admin" "$HOMEBREW_PREFIX"
+fi
+
+
 pip_is_installed() {
     pip freeze | grep -v '^\-e' | cut -d = -f 1 | grep -Fqx "$1";
 }
@@ -117,6 +136,7 @@ brew_install_or_upgrade 'openssh'
 brew_install_or_upgrade 'ssh-copy-id'
 brew_install_or_upgrade 'fzf'
 brew_install_or_upgrade 'direnv'
+brew_install_or_upgrade 'yarn'
 
 # shell
 brew_install_or_upgrade 'bash'
@@ -160,3 +180,8 @@ brew link emacs-mac --force
 # arduino
 brew_tap 'sudar/arduino-mk'
 brew_install_or_upgrade 'arduino-mk'
+
+# cask
+brew_tap caskroom/cask
+brew cask install atom
+brew cask install spotify
