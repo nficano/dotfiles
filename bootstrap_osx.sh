@@ -150,6 +150,7 @@ brew_install_or_upgrade 'ssh-copy-id'
 brew_install_or_upgrade 'fzf'
 brew_install_or_upgrade 'direnv'
 brew_install_or_upgrade 'yarn'
+brew_install_or_upgrade 'unison'
 
 # shell
 brew_install_or_upgrade 'bash'
@@ -210,6 +211,7 @@ brew cask install iterm2
 brew cask install macdown
 brew cask install microsoft-office
 brew cask install mysqlworkbench
+brew cask install notion
 brew cask install purevpn
 brew cask install sketch
 brew cask install slack
