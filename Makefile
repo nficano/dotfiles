@@ -27,7 +27,7 @@ setup-agrc:
 
 setup-directories:
 	mkdir -p ~/.virtualenvs
-	mkdir -p ~/p
+	mkdir -p ~/github
 	mkdir -p ~/Downloads
 	mkdir -p ~/Repos
 

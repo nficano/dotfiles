@@ -11,6 +11,38 @@ info() {
 
 set -e
 
+# Install Xcode Command Line Tools
+if ! $(xcode-select -p &>/dev/null); then
+  xcode-select --install &>/dev/null
+
+  # Wait until the Xcode Command Line Tools are installed
+  until $(xcode-select -p &>/dev/null); do
+    sleep 5
+  done
+fi
+
+# Accept the Xcode/iOS license agreement
+if ! $(sudo xcodebuild -license status); then
+  sudo xcodebuild -license accept
+fi
+
+if [ ! -d "$HOME/.bin/" ]; then
+  mkdir "$HOME/.bin"
+fi
+
+HOMEBREW_PREFIX="/usr/local"
+
+if [ -d "$HOMEBREW_PREFIX" ]; then
+  if ! [ -r "$HOMEBREW_PREFIX" ]; then
+    sudo chown -R "$LOGNAME:admin" /usr/local
+  fi
+else
+  sudo mkdir "$HOMEBREW_PREFIX"
+  sudo chflags norestricted "$HOMEBREW_PREFIX"
+  sudo chown -R "$LOGNAME:admin" "$HOMEBREW_PREFIX"
+fi
+
+
 pip_is_installed() {
     pip freeze | grep -v '^\-e' | cut -d = -f 1 | grep -Fqx "$1";
 }
@@ -117,6 +149,8 @@ brew_install_or_upgrade 'openssh'
 brew_install_or_upgrade 'ssh-copy-id'
 brew_install_or_upgrade 'fzf'
 brew_install_or_upgrade 'direnv'
+brew_install_or_upgrade 'yarn'
+brew_install_or_upgrade 'unison'
 
 # shell
 brew_install_or_upgrade 'bash'
@@ -160,3 +194,29 @@ brew link emacs-mac --force
 # arduino
 brew_tap 'sudar/arduino-mk'
 brew_install_or_upgrade 'arduino-mk'
+
+# cask
+brew_tap caskroom/cask
+brew cask install 1password
+brew cask install adobe-creative-cloud
+brew cask install atom
+brew cask install dropbox
+brew cask install fantastical
+brew cask install firefox
+brew cask install grammarly
+brew cask install imagealpha
+brew cask install imageoptim
+brew cask install insomnia
+brew cask install iterm2
+brew cask install macdown
+brew cask install microsoft-office
+brew cask install mysqlworkbench
+brew cask install notion
+brew cask install purevpn
+brew cask install sketch
+brew cask install slack
+brew cask install spotify
+brew cask install the-unarchiver
+brew cask install transmission
+brew cask install vlc
+brew cask install zoomus
