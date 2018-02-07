@@ -266,3 +266,6 @@ brew_cask_install_or_upgrade 'the-unarchiver'
 brew_cask_install_or_upgrade 'transmission'
 brew_cask_install_or_upgrade 'vlc'
 brew_cask_install_or_upgrade 'zoomus'
+
+info "Synchronizing files with Dropbox ..."
+./dropbox_sync.sh
