@@ -184,7 +184,7 @@ export HISTSIZE=100000
 export HISTFILESIZE=100000
 
 # we don't care to save these.
-export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:mount:umount:[ \t]*"
+export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:[ \t]*"
 
 # after each command, save and reload history.
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
@@ -313,7 +313,7 @@ if [ -x "$(command -v hub)" ]; then
     alias git='hub'
 fi
 
-export EDITOR='emacs'
+export EDITOR='atom'
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
@@ -322,7 +322,7 @@ else
     hostname="\h"
 fi
 
-export PS1="\u at ${hostname} \[\e[1;32m\]\w\[\e[0m\] "
+export PS1="${hostname} \[\e[1;32m\]\w\[\e[0m\] [\A] > "
 unset hostname
 
 setup_ssh

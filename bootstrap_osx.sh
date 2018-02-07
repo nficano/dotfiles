@@ -60,6 +60,32 @@ pip_install_or_upgrade() {
     fi
 }
 
+
+brew_cask_install_or_upgrade() {
+  if brew_cask_is_installed "$1"; then
+    if brew_cask_is_upgradable "$1"; then
+      info "Upgrading %s ..." "$1"
+      brew cask upgrade "$@"
+    else
+      info "Already using the latest version of %s. Skipping ..." "$1"
+    fi
+  elif is_application_installed "$1"; then
+    info "Unable to upgrade %s. Installed outside Cask. Skipping ..." "$1"
+  else
+    info "Installing %s ..." "$1"
+    brew cask install "$@"
+  fi
+}
+
+is_application_installed() {
+  name="$(brew_cask_expand_artifacts "$1")"
+  ls /Applications/ | grep -qi "$name">/dev/null;
+}
+
+brew_cask_is_installed() {
+  brew cask list | grep -qi "$1">/dev/null;
+}
+
 brew_install_or_upgrade() {
     if brew_is_installed "$1"; then
         if brew_is_upgradable "$1"; then
@@ -84,8 +110,16 @@ brew_is_upgradable() {
     ! brew outdated --quiet "$name" >/dev/null
 }
 
+brew_cask_is_upgradable() {
+    ! brew cask outdated --quiet "$1" >/dev/null
+}
+
 brew_tap() {
   brew tap "$1" 2>/dev/null
+}
+
+brew_cask_expand_artifacts() {
+  brew cask info "$1" 2>/dev/null | tail -1 | grep -o '^.*.app'
 }
 
 brew_expand_alias() {
@@ -158,6 +192,7 @@ brew unlink bash
 brew link --overwrite --force bash
 
 # python stuff
+brew_install_or_upgrade 'python'
 brew_install_or_upgrade 'python3'
 brew install python --framework
 brew unlink python
@@ -197,26 +232,37 @@ brew_install_or_upgrade 'arduino-mk'
 
 # cask
 brew_tap caskroom/cask
-brew cask install 1password
-brew cask install adobe-creative-cloud
-brew cask install atom
-brew cask install dropbox
-brew cask install fantastical
-brew cask install firefox
-brew cask install grammarly
-brew cask install imagealpha
-brew cask install imageoptim
-brew cask install insomnia
-brew cask install iterm2
-brew cask install macdown
-brew cask install microsoft-office
-brew cask install mysqlworkbench
-brew cask install notion
-brew cask install purevpn
-brew cask install sketch
-brew cask install slack
-brew cask install spotify
-brew cask install the-unarchiver
-brew cask install transmission
-brew cask install vlc
-brew cask install zoomus
+# quicklook plugins
+
+brew_cask_install_or_upgrade 'qlcolorcode'
+brew_cask_install_or_upgrade 'qlstephen'
+brew_cask_install_or_upgrade 'qlmarkdown'
+brew_cask_install_or_upgrade 'quicklook-json'
+brew_cask_install_or_upgrade 'qlimagesize'
+brew_cask_install_or_upgrade 'webpquicklook'
+brew_cask_install_or_upgrade 'suspicious-package'
+brew_cask_install_or_upgrade 'quicklookase'
+brew_cask_install_or_upgrade 'qlvideo'
+
+brew_cask_install_or_upgrade '1password'
+brew_cask_install_or_upgrade 'atom'
+brew_cask_install_or_upgrade 'dropbox'
+brew_cask_install_or_upgrade 'fantastical'
+brew_cask_install_or_upgrade 'firefox'
+brew_cask_install_or_upgrade 'grammarly'
+brew_cask_install_or_upgrade 'imagealpha'
+brew_cask_install_or_upgrade 'imageoptim'
+brew_cask_install_or_upgrade 'insomnia'
+brew_cask_install_or_upgrade 'iterm'
+brew_cask_install_or_upgrade 'macdown'
+brew_cask_install_or_upgrade 'microsoft-office'
+brew_cask_install_or_upgrade 'mysqlworkbench'
+brew_cask_install_or_upgrade 'notion'
+brew_cask_install_or_upgrade 'purevpn'
+brew_cask_install_or_upgrade 'sketch'
+brew_cask_install_or_upgrade 'slack'
+brew_cask_install_or_upgrade 'spotify'
+brew_cask_install_or_upgrade 'the-unarchiver'
+brew_cask_install_or_upgrade 'transmission'
+brew_cask_install_or_upgrade 'vlc'
+brew_cask_install_or_upgrade 'zoomus'
