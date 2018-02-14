@@ -232,8 +232,8 @@ brew_install_or_upgrade 'arduino-mk'
 
 # cask
 brew_tap caskroom/cask
-# quicklook plugins
 
+# quicklook plugins
 brew_cask_install_or_upgrade 'qlcolorcode'
 brew_cask_install_or_upgrade 'qlstephen'
 brew_cask_install_or_upgrade 'qlmarkdown'
@@ -246,6 +246,7 @@ brew_cask_install_or_upgrade 'qlvideo'
 
 brew_cask_install_or_upgrade '1password'
 brew_cask_install_or_upgrade 'atom'
+brew_cask_install_or_upgrade 'docker'
 brew_cask_install_or_upgrade 'dropbox'
 brew_cask_install_or_upgrade 'fantastical'
 brew_cask_install_or_upgrade 'firefox'
