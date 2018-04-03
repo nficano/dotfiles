@@ -1,9 +1,12 @@
 DOTFILES := $(PWD)
 
-install: setup-shell setup-directories install-inputrc setup-git setup-tmux setup-pip setup-agrc
+install: setup-shell setup-directories install-inputrc setup-git setup-tmux setup-pip setup-agrc setup-nano
 
 bootstrap:
 	bash $(DOTFILES)/bootstrap_osx.sh
+
+setup-nano:
+	ln -fs $(DOTFILES)/nanorc ${HOME}/.nanorc
 
 setup-tmux:
 	ln -fs $(DOTFILES)/tmux.conf ${HOME}/.tmux.conf

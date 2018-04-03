@@ -313,7 +313,7 @@ if [ -x "$(command -v hub)" ]; then
     alias git='hub'
 fi
 
-export EDITOR='atom'
+export EDITOR='nano'
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
