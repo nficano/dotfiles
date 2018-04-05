@@ -22,9 +22,9 @@ INTERVAL=${INTERVAL:-5}
 TIMEOUT=${TIMEOUT:-1}
 
 info() {
-    fmt="$1"; shift
-    # shellcheck disable=SC2059
-    printf "$fmt\\n" "$@"
+  fmt="$1"; shift
+  # shellcheck disable=SC2059
+  printf "$fmt\\n" "$@"
 }
 
 is_wan_down() {
