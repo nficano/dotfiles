@@ -17,7 +17,7 @@ CHECK_IP=${CHECK_IP:-8.8.8.8}
 CHECK_PORT=${CHECK_PORT:-53}
 
 WAN_MAX_RETRIES=${WAN_MAX_RETRIES:-3}
-UBEE_MAX_RETRIES=${UBEE_MAX_RETRIES:-3}
+MODEM_MAX_RETRIES=${MODEM_MAX_RETRIES:-3}
 INTERVAL=${INTERVAL:-5}
 TIMEOUT=${TIMEOUT:-1}
 
@@ -45,7 +45,7 @@ is_wan_down() {
 is_modem_online() {
   count=0
   ret=0
-  while [ $((count)) -le $((UBEE_MAX_RETRIES)) ] && [ $((ret)) -eq 0 ]; do
+  while [ $((count)) -le $((MODEM_MAX_RETRIES)) ] && [ $((ret)) -eq 0 ]; do
     if nc -w "${TIMEOUT}" "${GATEWAY_IP}" 80 > /dev/null 2>&1; then
       ret=1;
       break;
