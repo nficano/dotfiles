@@ -63,28 +63,22 @@ reboot_router() {
 }
 
 reboot_modem() {
-  if ! is_modem_online
-  then
-    info "Rebooting Modem ..."
-    curl \
-      --basic \
-      --user "technician:C0nf1gur3Ubee#" \
-      -X POST \
-      -d 'ResetYes=0x01' \
-      -d 'FactoryDefaultConfirm=0' \
-      -d 'RestoreFactoryNo=0x00' \
-      -d 'UserRestoreFactoryNo=0x00' \
-      -d 'RestoreWiFiNo=0x00' \
-      --silent \
-      http://"$GATEWAY_IP"/goform/RgFactoryDefault > /dev/null 2>&1;
-      sleep 1m
-    else
-      info "Modem Unreachable."
-      exit 1
-    fi
+  info "Rebooting Modem ..."
+  curl \
+    --basic \
+    --user "technician:C0nf1gur3Ubee#" \
+    -X POST \
+    -d 'ResetYes=0x01' \
+    -d 'FactoryDefaultConfirm=0' \
+    -d 'RestoreFactoryNo=0x00' \
+    -d 'UserRestoreFactoryNo=0x00' \
+    -d 'RestoreWiFiNo=0x00' \
+    --silent \
+    http://"$GATEWAY_IP"/goform/RgFactoryDefault > /dev/null 2>&1;
+    sleep 1m
 }
 
-detect_outage_and_repair_connection() {
+main() {
   if ! is_modem_online && is_wan_down
   then
     info "WAN is not connected."
@@ -97,4 +91,4 @@ detect_outage_and_repair_connection() {
   exit 0
 }
 
-detect_outage_and_repair_connection
+main
