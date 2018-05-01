@@ -177,7 +177,7 @@ brew_install_or_upgrade 'libpng'
 brew_install_or_upgrade 'libtiff'
 brew_install_or_upgrade 'libyaml'
 brew_install_or_upgrade 'nmap'
-brew_install_or_upgrade 'node'
+brew_install_or_upgrade 'node@8'
 brew_install_or_upgrade 'nodejs'
 brew_install_or_upgrade 'npm'
 brew_install_or_upgrade 'openexr'
@@ -196,6 +196,7 @@ brew_install_or_upgrade 'unison'
 brew_install_or_upgrade 'watchman'
 brew_install_or_upgrade 'wget'
 brew_install_or_upgrade 'yarn'
+brew link --overwrite --force yarn
 
 # shell
 brew_install_or_upgrade 'bash'

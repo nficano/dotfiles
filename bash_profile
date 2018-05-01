@@ -196,6 +196,7 @@ export MANPAGER="less -X"
 conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
 conditionally_prefix_path "/usr/local/opt/openssl/bin"
 conditionally_prefix_path "/usr/local/opt/python/libexec/bin"
+conditionally_prefix_path "/usr/local/opt/node@8/bin"
 # export PATH=.:./bin:${PATH}
 
 # =======

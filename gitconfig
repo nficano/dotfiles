@@ -1,28 +1,29 @@
 [include]
-    path = ~/.gitconfig.local
+	path = ~/.gitconfig.local
 [apply]
-    whitespace = nowarn
+	whitespace = nowarn
 [color]
-    diff = auto
-    status = auto
-    branch = auto
-    interactive = auto
-    ui = true
-    pager = true
+	diff = auto
+	status = auto
+	branch = auto
+	interactive = auto
+	ui = true
+	pager = true
 [merge]
-    summary = true
-    ff = false
-    tool = kdiff3
+	summary = true
+	ff = false
+	tool = kdiff3
 [mergetool "kdiff3"]
-    path = /Applications/kdiff3.app/Contents/MacOS/kdiff3
+	path = /Applications/kdiff3.app/Contents/MacOS/kdiff3
 [diff]
-    ignoresubmodules = untracked
-    tool = kdiff3
+	ignoresubmodules = untracked
+	tool = kdiff3
 [core]
-    excludesfile = /Users/nficano/.gitignore
+	excludesfile = /Users/nficano/.gitignore
 [push]
-    default = simple
+	default = simple
 [filter "lfs"]
-    clean = git-lfs clean %f
-    smudge = git-lfs smudge %f
-    required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	required = true
+	process = git-lfs filter-process
