@@ -15,34 +15,40 @@ unison_sync() {
     -batch \
     -prefer $1 \
     -silent \
-    -logfile /var/log/unison.log
+    -logfile ~/unison.log
 }
 
-info "Synchronizing Fonts..."
+info "Synchronizing Fonts ..."
 unison_sync "$HOME/Library/Fonts/" "Fonts/"
 
-info "Synchronizing AWS credentials..."
+info "Synchronizing AWS credentials ..."
 unison_sync "$HOME/.aws/" "aws/"
 
-info "Synchronizing ssh..."
+info "Synchronizing ssh ..."
 unison_sync "$HOME/.ssh/" "ssh/"
 
-info "Synchronizing bash history..."
+info "Synchronizing bash history ..."
 unison_sync "$HOME/.bash_history" "bash_history"
 
-info "Synchronizing bash_profile.local..."
+info "Synchronizing bash_profile.local ..."
 unison_sync "$HOME/.bash_profile.local" "bash_profile.local"
 
-info "Synchronizing Keychains..."
+info "Synchronizing Keychains ..."
 unison_sync "$HOME/Library/Keychains/" "Library/Keychains/"
 
-info "Generating Brew Installs List..."
+info "Synchronizing Projects ..."
+rsync -a \
+  --exclude=.DS_Store \
+  --exclude=node_modules \
+  "$HOME/github" "$DEST_DIR"
+
+info "Generating Brew Installs List ..."
 brew list > "$DEST_DIR/brew_installs.txt"
 
-info "Generating Brew Cask Installs List..."
+info "Generating Brew Cask Installs List ..."
 brew cask list > "$DEST_DIR/brewcask_installs.txt"
 
-info "Generating MacOS App Installs List..."
+info "Generating MacOS App Installs List ..."
 find /Applications \
   -iname *.app \
   ! -iname "App Store.app" \
