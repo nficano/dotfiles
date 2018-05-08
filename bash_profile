@@ -5,7 +5,9 @@
 
 # Tab completions for sudo
 complete -cf sudo
-complete -o default -o nospace -W "$(cat ~/.ssh/config.d/* | grep "^Host " | awk '{print $2}')" ssh scp
+if [ -d "~/.ssh/config.d/" ]; then
+  complete -o default -o nospace -W "$(cat ~/.ssh/config.d/* | grep "^Host " | awk '{print $2}')" ssh scp
+fi
 
 if [ -x "$(command -v aws)" ]; then
     # Tab completions for awscli
