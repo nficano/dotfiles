@@ -20,6 +20,7 @@
 	tool = kdiff3
 [core]
 	excludesfile = /Users/nficano/.gitignore
+	autocrlf = input
 [push]
 	default = simple
 [filter "lfs"]
