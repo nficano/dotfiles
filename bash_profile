@@ -320,7 +320,7 @@ export EDITOR='nano'
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
-    hostname="\[\e[1;31m\]\h\[\e[0m\]"
+    hostname="\u@\[\e[1;31m\]\h\[\e[0m\]"
 else
     hostname="\h"
 fi
