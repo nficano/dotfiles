@@ -10,7 +10,7 @@
 # WAN HEALTHCHECK AND REPAIR FOR THE SPECTRUM UBEE DVW32CB AND ROUTER RUNNING
 # TOMATO OR DD-WRT.
 #
-GATEWAY_IP=${GATEWAY_IP:-192.168.100.1}
+GATEWAY_IP=${GATEWAY_IP:-172.16.1.1}
 GATEWAY_PORT=${GATEWAY_PORT:-80}
 
 CHECK_IP=${CHECK_IP:-8.8.8.8}
@@ -36,7 +36,7 @@ is_wan_down() {
       break;
     else
       sleep "$INTERVAL"
-      $count++
+      count++;
     fi
   done
   return $ret;
@@ -51,7 +51,7 @@ is_modem_online() {
       break;
     else
       sleep "$INTERVAL"
-      $count++
+      count++;
     fi
   done
   return $ret;
@@ -79,6 +79,8 @@ reboot_modem() {
 }
 
 main() {
+  reboot_modem
+  reboot_router  
   if ! is_modem_online && is_wan_down
   then
     info "WAN is not connected."

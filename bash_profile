@@ -5,13 +5,17 @@
 
 # Tab completions for sudo
 complete -cf sudo
-if [ -d "~/.ssh/config.d/" ]; then
+if [ -d "$HOME/.ssh/config.d/" ]; then
   complete -o default -o nospace -W "$(cat ~/.ssh/config.d/* | grep "^Host " | awk '{print $2}')" ssh scp
 fi
 
 if [ -x "$(command -v aws)" ]; then
     # Tab completions for awscli
     complete -C aws_completer aws
+fi
+
+if [ -x "$(command -v pyenv)" ]; then
+  eval "$(pyenv init -)"
 fi
 
 # Case-insensitive globbing (used in pathname expansion)
@@ -284,6 +288,10 @@ if [[ $OSTYPE =~ darwin ]]; then
     alias fixspeak='killall -9 com.apple.speech.speechsynthesisd'
 fi
 
+if [ -x "$(command -v bat)" ]; then
+  alias cat="bat"
+fi
+
 # mercurial
 if [ -x "$(command -v hg)" ]; then
     alias hM="hg commit -m 'Merged'"
@@ -317,6 +325,7 @@ if [ -x "$(command -v hub)" ]; then
 fi
 
 export EDITOR='nano'
+export VISUAL='atom'
 
 if [ -n "$SSH_CLIENT" ]; then
     # make hostname red if connected via ssh.
@@ -349,4 +358,8 @@ fi
 if [ -x "$(command -v direnv)" ]; then
   # Support for direnv
   eval "$(direnv hook bash)"
+fi
+
+if ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]]; then
+  PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";
 fi
