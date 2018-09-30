@@ -354,12 +354,6 @@ if [ -x "$(command -v thefuck)" ]; then
   # Support for fuck command
   eval "$(thefuck --alias)"
 fi
+[ -x "$(command -v direnv)" ] && eval "$(direnv hook bash)"
+! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]] && PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";
 
-if [ -x "$(command -v direnv)" ]; then
-  # Support for direnv
-  eval "$(direnv hook bash)"
-fi
-
-if ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]]; then
-  PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";
-fi
