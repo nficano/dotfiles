@@ -12,12 +12,8 @@
 [merge]
 	summary = true
 	ff = false
-	tool = kdiff3
-[mergetool "kdiff3"]
-	path = /Applications/kdiff3.app/Contents/MacOS/kdiff3
 [diff]
 	ignoresubmodules = untracked
-	tool = kdiff3
 [core]
 	excludesfile = /Users/nficano/.gitignore
 	autocrlf = input
