@@ -54,6 +54,7 @@ find /Applications \
   ! -iname "App Store.app" \
   ! -iname "Automator.app" \
   ! -iname "Backup and Sync.app" \
+  ! -iname "Books.app" \
   ! -iname "Calculator.app" \
   ! -iname "Calendar.app" \
   ! -iname "Chess.app" \
@@ -64,6 +65,7 @@ find /Applications \
   ! -iname "FaceTime.app" \
   ! -iname "Font Book.app" \
   ! -iname "GarageBand.app" \
+  ! -iname "Home.app" \
   ! -iname "iBooks.app" \
   ! -iname "Image Capture.app" \
   ! -iname "iMovie.app" \
@@ -75,6 +77,7 @@ find /Applications \
   ! -iname "Maps.app" \
   ! -iname "Messages.app" \
   ! -iname "Mission Control.app" \
+  ! -iname "News.app" \
   ! -iname "Notes.app" \
   ! -iname "Numbers.app" \
   ! -iname "Pages.app" \
@@ -86,9 +89,12 @@ find /Applications \
   ! -iname "Safari.app" \
   ! -iname "Siri.app" \
   ! -iname "Stickies.app" \
+  ! -iname "Stocks.app" \
   ! -iname "System Preferences.app" \
   ! -iname "TextEdit.app" \
   ! -iname "Time Machine.app" \
+  ! -iname "VoiceMemos.app" \
+  ! -iname "Xcode.app" \
   -maxdepth 1 \
   -exec basename {} \; | sort \
   > "$DEST_DIR/osx_installs.txt"
