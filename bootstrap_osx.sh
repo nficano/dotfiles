@@ -284,3 +284,9 @@ brew_cask_install_or_upgrade 'zoomus'
 
 info "Synchronizing files with Dropbox ..."
 ./dropbox_sync.sh
+
+if ! launchctl list | grep -Eiq 'com.dotfiles.DropboxSync'; then
+  info "Loading DropboxSync launchd script ..."
+  script="$(git rev-parse --show-toplevel)/LaunchAgents/com.dotfiles.DropboxSync.plist"
+  launchctl load $script
+fi
