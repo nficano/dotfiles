@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>org.nficano.dotfiles.DropboxSync.plist</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/bash</string>
+		<string>dropbox_sync.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/tmp/org.nficano.dotfiles.DropboxSync.plist.err</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/org.nficano.dotfiles.DropboxSync.plist.out</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Minute</key>
+			<integer>0</integer>
+		</dict>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/nficano/github/dotfiles</string>
+</dict>
+</plist>

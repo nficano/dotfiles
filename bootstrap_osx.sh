@@ -11,6 +11,13 @@ info() {
 
 set -e
 
+if ! launchctl list | grep -Eiq 'org.nficano.dotfiles.DropboxSync.plist'; then
+  info "Loading DropboxSync launchd script ..."
+  script="$(git rev-parse --show-toplevel)/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist"
+  ln -s $script $HOME/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist
+  launchctl load $HOME/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist
+fi
+
 # Install Xcode Command Line Tools
 if ! $(xcode-select -p &>/dev/null); then
   xcode-select --install &>/dev/null
@@ -284,9 +291,3 @@ brew_cask_install_or_upgrade 'zoomus'
 
 info "Synchronizing files with Dropbox ..."
 ./dropbox_sync.sh
-
-if ! launchctl list | grep -Eiq 'com.dotfiles.DropboxSync'; then
-  info "Loading DropboxSync launchd script ..."
-  script="$(git rev-parse --show-toplevel)/LaunchAgents/com.dotfiles.DropboxSync.plist"
-  launchctl load $script
-fi

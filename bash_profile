@@ -198,6 +198,9 @@ export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 # don’t clear the screen after quitting a manual page.
 export MANPAGER="less -X"
 
+# stfu direnv
+export DIRENV_LOG_FORMAT=
+
 # path
 conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
 conditionally_prefix_path "/usr/local/opt/openssl/bin"
@@ -289,7 +292,7 @@ if [[ $OSTYPE =~ darwin ]]; then
 fi
 
 if [ -x "$(command -v bat)" ]; then
-  alias cat="bat"
+  alias cat="bat --paging never"
 fi
 
 # mercurial
@@ -356,4 +359,3 @@ if [ -x "$(command -v thefuck)" ]; then
 fi
 [ -x "$(command -v direnv)" ] && eval "$(direnv hook bash)"
 ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]] && PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";
-

@@ -101,3 +101,4 @@ find /Applications \
 
 info ""
 info "✨  Done."
+exit 0
