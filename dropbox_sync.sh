@@ -15,7 +15,7 @@ unison_sync() {
     -batch \
     -prefer $1 \
     -silent \
-    -logfile ~/unison.log
+    -logfile ~/tmp/unison.log
 }
 
 info "Synchronizing Fonts ..."
