@@ -241,12 +241,6 @@ brew_install_or_upgrade 'imagemagick'
 brew_install_or_upgrade 'ffmpeg'
 brew reinstall ffmpeg
 
-# emacs
-brew_tap 'railwaycat/emacsmacport'
-brew_install_or_upgrade 'emacs-mac'
-brew unlink emacs-mac
-brew link emacs-mac --force
-
 # arduino
 brew_tap 'sudar/arduino-mk'
 brew_install_or_upgrade 'arduino-mk'
