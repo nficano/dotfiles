@@ -1,7 +1,9 @@
 #!/bin/sh
+set -e
 
 # Based off of thoughtbot's labtop script; see:
 # https://github.com/thoughtbot/laptop/blob/master/mac
+HOMEBREW_PREFIX="/usr/local"
 
 info() {
     fmt="$1"; shift
@@ -9,35 +11,24 @@ info() {
     printf "$fmt\n" "$@"
 }
 
-set -e
-
-if ! launchctl list | grep -Eiq 'org.nficano.dotfiles.DropboxSync.plist'; then
-  info "Loading DropboxSync launchd script ..."
-  script="$(git rev-parse --show-toplevel)/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist"
-  ln -s $script $HOME/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist
-  launchctl load $HOME/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist
-fi
-
 # Install Xcode Command Line Tools
-if ! $(xcode-select -p &>/dev/null); then
-  xcode-select --install &>/dev/null
+if ! xcode-select -p > /dev/null; then
+  xcode-select --install > /dev/null
 
   # Wait until the Xcode Command Line Tools are installed
-  until $(xcode-select -p &>/dev/null); do
+  until xcode-select -p > /dev/null; do
     sleep 5
   done
 fi
 
 # Accept the Xcode/iOS license agreement
-if ! $(sudo xcodebuild -license status); then
+if ! sudo xcodebuild -license status; then
   sudo xcodebuild -license accept
 fi
 
 if [ ! -d "$HOME/.bin/" ]; then
   mkdir "$HOME/.bin"
 fi
-
-HOMEBREW_PREFIX="/usr/local"
 
 if [ -d "$HOMEBREW_PREFIX" ]; then
   if ! [ -r "$HOMEBREW_PREFIX" ]; then
@@ -49,12 +40,23 @@ else
   sudo chown -R "$LOGNAME:admin" "$HOMEBREW_PREFIX"
 fi
 
+setup_launch_agent () {
+  if ! launchctl list | grep -Eiq 'org.nficano.dotfiles.DropboxSync.plist'; then
+    info "Loading DropboxSync launchd script ..."
+    root="$(git rev-parse --show-toplevel)"
+    src="$root/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist"
+    dst="$HOME/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist"
 
-pip_is_installed() {
+    ln -s $src $dst
+    launchctl load $dst
+  fi
+}
+
+pip_is_installed () {
     pip freeze | grep -v '^\-e' | cut -d = -f 1 | grep -Fqx "$1";
 }
 
-pip_install_or_upgrade() {
+pip_install_or_upgrade () {
     # I don't have a compariable ``pip_is_upgradable`` method because if you
     # run virtualbox, which includes ``pyvbox`` pip's get upgradable packages
     # fails. Fuck Oracle.
@@ -68,7 +70,7 @@ pip_install_or_upgrade() {
 }
 
 
-brew_cask_install_or_upgrade() {
+brew_cask_install_or_upgrade () {
   if brew_cask_is_installed "$1"; then
     if brew_cask_is_upgradable "$1"; then
       info "Upgrading %s ..." "$1"
@@ -84,16 +86,16 @@ brew_cask_install_or_upgrade() {
   fi
 }
 
-is_application_installed() {
+is_application_installed () {
   name="$(brew_cask_expand_artifacts "$1")"
-  ls /Applications/ | grep -qi "$name">/dev/null;
+  ls /Applications/ | grep -qi "$name" > /dev/null;
 }
 
-brew_cask_is_installed() {
+brew_cask_is_installed () {
   brew cask list | grep -qi "$1">/dev/null;
 }
 
-brew_install_or_upgrade() {
+brew_install_or_upgrade () {
     if brew_is_installed "$1"; then
         if brew_is_upgradable "$1"; then
             info "Upgrading %s ..." "$1"
@@ -288,6 +290,4 @@ brew_cask_install_or_upgrade 'transmission'
 brew_cask_install_or_upgrade 'vlc'
 brew_cask_install_or_upgrade 'wireshark'
 brew_cask_install_or_upgrade 'zoomus'
-
-info "Synchronizing files with Dropbox ..."
-./dropbox_sync.sh
+setup_launch_agent
