@@ -1,42 +1,33 @@
 #!/bin/bash
 
 DEST_DIR="$HOME/Dropbox/$HOSTNAME Home"
+SECONDS=0
 
-info() {
+info () {
     fmt="$1"; shift
+    now=$(date +"%b %d %H:%M:%S")
     # shellcheck disable=SC2059
-    printf "$fmt\n" "$@"
+    printf "$now $fmt\n" "$@"
 }
 
 
-unison_sync() {
+unison_sync () {
+  info "Synchronizing \"$1\" with \"$DEST_DIR/$2\""
   unison $1 "$DEST_DIR/$2" \
     -auto \
     -batch \
     -prefer $1 \
-    -silent \
-    -logfile ~/tmp/unison.log
+    -silent
 }
 
-info "Synchronizing Fonts ..."
 unison_sync "$HOME/Library/Fonts/" "Fonts/"
-
-info "Synchronizing AWS credentials ..."
 unison_sync "$HOME/.aws/" "aws/"
-
-info "Synchronizing ssh ..."
 unison_sync "$HOME/.ssh/" "ssh/"
-
-info "Synchronizing bash history ..."
 unison_sync "$HOME/.bash_history" "bash_history"
-
-info "Synchronizing bash_profile.local ..."
 unison_sync "$HOME/.bash_profile.local" "bash_profile.local"
-
-info "Synchronizing Keychains ..."
 unison_sync "$HOME/Library/Keychains/" "Library/Keychains/"
 
-info "Synchronizing Projects ..."
+info "Synchronizing \"$HOME/github\" to \"$DEST_DIR\""
 rsync -a \
   --exclude=.DS_Store \
   --exclude=node_modules \
@@ -50,7 +41,7 @@ brew cask list > "$DEST_DIR/brewcask_installs.txt"
 
 info "Generating MacOS App Installs List ..."
 find /Applications \
-  -iname *.app \
+  -iname "*.app" \
   ! -iname "App Store.app" \
   ! -iname "Automator.app" \
   ! -iname "Backup and Sync.app" \
@@ -99,6 +90,5 @@ find /Applications \
   -exec basename {} \; | sort \
   > "$DEST_DIR/osx_installs.txt"
 
-info ""
-info "✨  Done."
+info "Quick Back-Up Completed in $(($SECONDS))s"
 exit 0
