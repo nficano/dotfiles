@@ -26,9 +26,7 @@ RETRY_INTERVAL=5
 on_outage_detected () {
   err "lan/wan connectivity issue detected!"
   if is_reboot_permitted; then
-    err "rebooting modem"
     reboot_modem
-    err "rebooting router"
     reboot_router
   else
     err "router must be up for five minutes before attempting reboot"
@@ -37,24 +35,6 @@ on_outage_detected () {
 
 on_no_issues_detected () {
   log "lan/wan connectivity appears to be ok"
-}
-
-log () {
-  timestamp=$(date +"%b %d %H:%M:%S")
-  script=$(basename "$0")
-  message="$1"; shift
-  # shellcheck disable=SC2059
-  printf "$timestamp ${script}[$$]: $message\\n" "$@"
-  logger -p cron.debug -t $script "$message"
-}
-
-err () {
-  timestamp=$(date +"%b %d %H:%M:%S")
-  script=$(basename "$0")
-  message="$1"; shift
-  # shellcheck disable=SC2059
-  printf "$timestamp ${script}[$$]: $message\\n" "$@"
-  logger -p cron.err -t $script "$message"
 }
 
 reboot_router () {
@@ -147,6 +127,24 @@ is_lan_up () {
     fi
   fi
   return 1
+}
+
+log () {
+  timestamp=$(date +"%b %d %H:%M:%S")
+  script=$(basename "$0")
+  message="$1"; shift
+  # shellcheck disable=SC2059
+  printf "$timestamp ${script}[$$]: $message\\n" "$@"
+  logger -p cron.debug -t $script "$message"
+}
+
+err () {
+  timestamp=$(date +"%b %d %H:%M:%S")
+  script=$(basename "$0")
+  message="$1"; shift
+  # shellcheck disable=SC2059
+  printf "$timestamp ${script}[$$]: $message\\n" "$@"
+  logger -p cron.err -t $script "$message"
 }
 
 if is_lan_up; then
