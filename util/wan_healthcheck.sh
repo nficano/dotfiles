@@ -113,22 +113,6 @@ is_http_response_ok () {
   return 1
 }
 
-is_port_open () {
-  count=1
-  while [ $((count)) -le $((MAX_RETRIES)) ]; do
-    log "checking if $1 ($2) is listening on port $3 (attempt $count of $MAX_RETRIES)..."
-    if nc -zw1 $2 $3 > /dev/null 2>&1; then
-      log "$1 ($2) has port $3 open"
-      return 0
-    else
-      err "$1 ($2) does not appear to have port $3 open retrying in ${RETRY_INTERVAL}s"
-      sleep "$RETRY_INTERVAL"
-      count=$((count+1));
-    fi
-  done
-  return 1
-}
-
 is_pingable () {
   count=1
   while [ $((count)) -le $((MAX_RETRIES)) ]; do
