@@ -12,7 +12,6 @@
 
 set -e
 
-# PUBLIC_IP=67.250.80.1
 PUBLIC_IP=$(ip route | awk '/default/ { print $3 }')
 GOOGLE_DNS_IP=8.8.8.8
 
