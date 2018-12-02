@@ -46,7 +46,7 @@ reboot_modem () {
   log "rebooting modem"
   curl \
     --basic \
-    --user "technician:C0nf1gur3Ubee#" \
+    --user "$MODEM_USERNAME:$MODEM_PASSWORD" \
     -X POST \
     -d 'ResetYes=0x01' \
     -d 'FactoryDefaultConfirm=0' \
@@ -70,8 +70,10 @@ is_reboot_permitted () {
 is_http_response_ok () {
   count=1
   while [ $((count)) -le $((MAX_RETRIES)) ]; do
-    log "checking if $1 ($2) is returning a 2xx or 3xx http status code (attempt $count of $MAX_RETRIES)"
-    case "$(curl --max-time 2 --silent --dump-header - --output /dev/null $2 | sed 's/^[^ ]*  *\([0-9]\).*/\1/; 1q')" in
+    log "checking if $1 ($2) returns a 200 response (attempt $count)"
+    headers="$(curl --max-time 2 --silent --dump-header - -o /dev/null $2)"
+
+    case "$(echo $headers | sed 's/^[^ ]*  *\([0-9]\).*/\1/; 1q')" in
       [23])
       log "successfully made http connection to $1 ($2)"
       return 0
@@ -84,7 +86,7 @@ is_http_response_ok () {
       ;;
 
       *)
-      err "failed to establish http connection to $1 ($2) retrying in ${RETRY_INTERVAL}s"
+      err "no http connectivity to $1 ($2) retrying in ${RETRY_INTERVAL}s"
       sleep "$RETRY_INTERVAL"
       count=$((count+1));
       ;;
@@ -96,12 +98,12 @@ is_http_response_ok () {
 is_pingable () {
   count=1
   while [ $((count)) -le $((MAX_RETRIES)) ]; do
-    log "checking if $1 ($2) is responding to ICMP requests (attempt $count of $MAX_RETRIES)"
+    log "checking if $1 ($2) is pingable (attempt $count)"
     if ping -q -c 1 -W 1 $2 >/dev/null; then
-      log "$1 ($2) successfully responded to ICMP request"
+      log "$1 ($2) successfully responded to ping"
       return 0
     else
-      err "$1 ($2) failed to respond to ICMP request retrying in ${RETRY_INTERVAL}s"
+      err "$1 ($2) no ICMP response - retrying in ${RETRY_INTERVAL}s"
       sleep "$RETRY_INTERVAL"
       count=$((count+1));
     fi
@@ -110,8 +112,8 @@ is_pingable () {
 }
 
 is_wan_up () {
-  if is_pingable 'DNS' $GOOGLE_DNS_IP; then
-    if is_pingable 'DNS queried domain' 'google.com'; then
+  if is_pingable 'dns' $GOOGLE_DNS_IP; then
+    if is_pingable 'domain' 'google.com'; then
       if is_http_response_ok 'domain' 'google.com'; then
         return 0
       fi
@@ -147,11 +149,18 @@ err () {
   logger -p cron.err -t $script "$message"
 }
 
-if is_lan_up; then
-  if is_wan_up; then
-    on_no_issues_detected
-    exit 0
+run_healthcheck () {
+  log "checking if lan is up"
+  if is_lan_up; then
+    log "checking if wan is up"
+    if is_wan_up; then
+      on_no_issues_detected
+      exit 0
+    fi
   fi
-fi
-on_outage_detected
-exit 1
+  on_outage_detected
+  exit 1
+}
+
+log "starting network healthcheck"
+run_healthcheck
