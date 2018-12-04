@@ -273,13 +273,14 @@ alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
 # networking
-alias net.ip="dig +short myip.opendns.com @resolver1.opendns.com"
-alias net.openports="sudo lsof -Pan -i tcp -i udp | grep -i 'listen'"
+alias net.ip="ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p'"
+alias net.mask='ifconfig | grep $(net.ip) | grep -o "0x[0-9a-f]*"'
+alias net.info='sipcalc $(net.ip) $(net.mask)'
 
 # nmap
 if [ -x "$(command -v nmap)" ]; then
-    alias net.explore="sudo nmap --script broadcast"
-    alias net.dhcp_discover="sudo nmap --script broadcast-dhcp-discover"
+    alias pen.snmp='sudo nmap -sU -p161 --script snmp-brute --script-args snmplist=community.lst $(net.ip) $(net.mask)'
+
 fi
 alias rsync="rsync -v -P"
 
@@ -351,6 +352,10 @@ conditionally_source "$HOME/.iterm2_shell_integration.bash"
 
 if [ -x "$(command -v brew)" ]; then
     conditionally_source "$(brew --prefix)/etc/bash_completion"
+fi
+
+if [ -x "$(command -v rbenv)" ]; then
+  eval "$(rbenv init -)"
 fi
 
 if [ -x "$(command -v thefuck)" ]; then

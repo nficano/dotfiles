@@ -12,6 +12,9 @@
 
 set -e
 
+STATSD_HOSTNAME=${STATSD_HOSTNAME:-ip-172-16-1-164}
+STATSD_PORT=${STATSD_PORT:-8125}
+
 PUBLIC_IP=$(ip route | awk '/default/ { print $3 }')
 GOOGLE_DNS_IP=8.8.8.8
 
@@ -24,16 +27,19 @@ RETRY_INTERVAL=5
 
 on_outage_detected () {
   err "lan/wan connectivity issue detected!"
+  metric "failed" 1
   if is_reboot_permitted; then
     reboot_modem
     reboot_router
   else
+    metric "reboot.failure.too_soon" 1
     err "router must be up for five minutes before attempting reboot"
   fi
 }
 
 on_no_issues_detected () {
   log "lan/wan connectivity appears to be ok"
+  metric "succeeded" 1
 }
 
 reboot_router () {
@@ -75,17 +81,20 @@ is_http_response_ok () {
     case "$(echo $headers | sed 's/^[^ ]*  *\([0-9]\).*/\1/; 1q')" in
       [23])
       log "successfully made http connection to $1 ($2)"
+      metric "http_response.succeeded.2xx" 1
       return 0
       ;;
 
       5)
       err "$1 ($2) returned a 5xx status code. retrying in ${RETRY_INTERVAL}s"
+      metric "http_response.failure.5xx" 1
       sleep "$RETRY_INTERVAL"
       count=$((count+1));
       ;;
 
       *)
       err "no http connectivity to $1 ($2) retrying in ${RETRY_INTERVAL}s"
+      metric "http_response.failed" 1
       sleep "$RETRY_INTERVAL"
       count=$((count+1));
       ;;
@@ -100,9 +109,11 @@ is_pingable () {
     log "checking if $1 ($2) is pingable (attempt $count)"
     if ping -q -c 1 -W 1 $2 >/dev/null; then
       log "$1 ($2) successfully responded to ping"
+      metric "ping.succeeded" 1
       return 0
     else
       err "$1 ($2) no ICMP response - retrying in ${RETRY_INTERVAL}s"
+      metric "ping.failed" 1
       sleep "$RETRY_INTERVAL"
       count=$((count+1));
     fi
@@ -128,6 +139,10 @@ is_lan_up () {
     fi
   fi
   return 1
+}
+
+metric () {
+  echo "wan_healthcheck.connectivity.$1:$2|c" | nc -w 1 $STATSD_HOSTNAME $STATSD_PORT
 }
 
 log () {
@@ -162,4 +177,5 @@ run_healthcheck () {
 }
 
 log "starting network healthcheck"
+metric "started" 1
 run_healthcheck
