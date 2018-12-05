@@ -135,7 +135,8 @@ is_lan_up () {
 }
 
 metric () {
-  echo "wan_healthcheck.connectivity.$1:$2|c" | nc -w 1 $STATSD_HOSTNAME $STATSD_PORT
+  prefix='wan_healthcheck.connectivity'
+  echo "$prefix.$1:$2|c" | nc -w 1 $STATSD_HOSTNAME $STATSD_PORT
 }
 
 log () {
