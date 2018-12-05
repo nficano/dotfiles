@@ -1,12 +1,5 @@
 #!/bin/sh
 
-#          dP
-#          88
-# dP    dP 88d888b. .d8888b. .d8888b.
-# 88    88 88'  `88 88ooood8 88ooood8
-# 88.  .88 88.  .88 88.  ... 88.  ...
-# `88888P' 88Y8888' `88888P' `88888P'
-#
 # WAN HEALTHCHECK AND REPAIR FOR THE SPECTRUM UBEE DVW32CB AND ROUTER RUNNING
 # TOMATO OR DD-WRT.
 
@@ -112,7 +105,7 @@ is_pingable () {
       metric "ping.succeeded" 1
       return 0
     else
-      err "$1 ($2) no ICMP response - retrying in ${RETRY_INTERVAL}s"
+      err "$1 ($2) no response to ping - retrying in ${RETRY_INTERVAL}s"
       metric "ping.failed" 1
       sleep "$RETRY_INTERVAL"
       count=$((count+1));
