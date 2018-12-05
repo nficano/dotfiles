@@ -100,6 +100,7 @@ is_pingable () {
   count=1
   while [ $((count)) -le $((MAX_RETRIES)) ]; do
     log "checking if $1 ($2) is pingable (attempt $count)"
+
     if ping -q -c 1 -W 1 $2 >/dev/null; then
       log "$1 ($2) successfully responded to ping"
       metric "ping.succeeded" 1
