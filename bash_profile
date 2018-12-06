@@ -342,6 +342,11 @@ conditionally_source "$HOME/.nvm/nvm.sh"
 conditionally_source "$HOME/.bash_profile.local"
 conditionally_source "$HOME/.iterm2_shell_integration.bash"
 
+if [ -f "$HOME/.bash_completion.d/inet" ]; then
+  # shellcheck source=/dev/null
+  source "$HOME/.bash_completion.d/inet"
+fi
+
 if [ -x "$(command -v brew)" ]; then
     conditionally_source "$(brew --prefix)/etc/bash_completion"
 fi

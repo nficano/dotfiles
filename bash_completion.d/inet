@@ -1,0 +1,3 @@
+#!/bin/bash
+_inet_options='"ip devices" "ip gateway" "ip host" "ip modem" "ip network" "ip private" "ip public" isp "probe modem" "probe router" "subnet ip" "subnet bits" "subnet hex" routing-table subnet'
+complete -W "${_inet_options}" 'inet'
