@@ -202,6 +202,8 @@ export MANPAGER="less -X"
 export DIRENV_LOG_FORMAT=
 
 # path
+conditionally_prefix_path "$HOME/.bin"
+conditionally_prefix_path "/usr/local/opt/grep/libexec/gnubin"
 conditionally_prefix_path "/usr/local/opt/coreutils/libexec/gnubin"
 conditionally_prefix_path "/usr/local/opt/openssl/bin"
 conditionally_prefix_path "/usr/local/opt/python/libexec/bin"
@@ -272,16 +274,6 @@ alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
-# networking
-alias net.ip="ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p'"
-alias net.mask='ifconfig | grep $(net.ip) | grep -o "0x[0-9a-f]*"'
-alias net.info='sipcalc $(net.ip) $(net.mask)'
-
-# nmap
-if [ -x "$(command -v nmap)" ]; then
-    alias pen.snmp='sudo nmap -sU -p161 --script snmp-brute --script-args snmplist=community.lst $(net.ip) $(net.mask)'
-
-fi
 alias rsync="rsync -v -P"
 
 # os-x specific
@@ -359,8 +351,8 @@ if [ -x "$(command -v rbenv)" ]; then
 fi
 
 if [ -x "$(command -v thefuck)" ]; then
-  # Support for fuck command
   eval "$(thefuck --alias)"
 fi
+
 [ -x "$(command -v direnv)" ] && eval "$(direnv hook bash)"
 ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]] && PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";

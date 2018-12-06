@@ -15,6 +15,7 @@ setup-shell:
 	rm -f ~/.bash_profile
 	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
 	ln -fs $(DOTFILES)/hushlogin ${HOME}/.hushlogin
+	ln -s $(DOTFILES)/bin ${HOME}/.bin
 
 setup-pip:
 	mkdir ~/.pip
