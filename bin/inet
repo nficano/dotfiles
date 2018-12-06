@@ -89,6 +89,45 @@ unknown_command () {
   echo "Try 'inet --help' for more information."
 }
 
+device () {
+  local name="$1"
+  local size="$3"
+  local caption="$2"
+  printf "%${size}s%s\n" '' "│"
+  printf "%${size}s%s\n" '' "└─[$name] $caption"
+}
+
+host () {
+  local name="$1"
+  local size="$3"
+  local caption="$2"
+  printf "%${size}s%s\n" '' "│"
+  printf "%${size}s%s\n" '' "├─[$name] $caption"
+}
+
+indent() {
+  sed 's/^/  /';
+}
+
+draw_network_map () {
+  sudo -v
+  echo "Network Map:"
+  echo
+  echo "[INTERNET] $(public_ip_address) - $(isp)"
+  device "MODEM" "$(modem_ip_address)" 5
+  device "ROUTER" "$(gateway_ip_address)" 10
+  for item in $(lan_host_discovery)
+  do
+    if [ $item != "$(gateway_ip_address)" ]; then
+      if [ $item == "$(host_ip_address)" ]; then
+        device "$item" " <-- YOU" 15
+      else
+        host "$item" "" 15
+      fi
+    fi
+  done
+}
+
 help () {
 cat <<EOF
 
@@ -140,6 +179,7 @@ case "$@" in
   "ip public"     ) public_ip_address ;;
   "ip router"     ) gateway_ip_address ;;
   "isp"           ) isp ;;
+  "map network"   ) draw_network_map ;;
   "probe modem"   ) probe_modem ;;
   "probe router"  ) probe_router ;;
   "routing-table" ) routing_table ;;
