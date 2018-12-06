@@ -19,6 +19,10 @@ host_ip_address () {
   | awk '{print $2}'
 }
 
+routing_table () {
+  netstat -nr -f inet
+}
+
 network_ip_address () {
   sipcalc "$(host_ip_address)" "$(network_mask_hex)" \
   | grep "Network address" \
@@ -107,6 +111,7 @@ Commands:
   inet ip private         alias to "ip host"
   inet ip public          the globally unique address assigned to your network
                           by your isp
+  inet routing-table      display your routing table.
   inet ip router          alias to "ip gateway"
   inet isp                displays the name of your isp
   inet probe modem        attempts to identify the operating system, open
@@ -137,6 +142,7 @@ case "$@" in
   "isp"           ) isp ;;
   "probe modem"   ) probe_modem ;;
   "probe router"  ) probe_router ;;
+  "routing-table" ) routing_table ;;
   "subnet bits"   ) network_mask_bits ;;
   "subnet hex"    ) network_mask_hex ;;
   "subnet ip"     ) network_mask ;;
