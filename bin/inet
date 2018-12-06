@@ -119,6 +119,12 @@ Commands:
 EOF
 }
 
+if [ ! -x "$(command -v nmap)" ] || [ ! -x "$(command -v sipcalc)" ]; then
+  echo "Error: 'nmap' and 'sipcalc' must first be installed."
+  echo "To fix, try running: brew install nmap sipcalc"
+  exit 1
+fi
+
 case "$@" in
   "ip devices"    ) lan_host_discovery ;;
   "ip gateway"    ) gateway_ip_address ;;
