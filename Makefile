@@ -16,7 +16,7 @@ setup-shell:
 	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
 	ln -fs $(DOTFILES)/hushlogin ${HOME}/.hushlogin
 	ln -s $(DOTFILES)/bin ${HOME}/.bin
-	ln -s $(DOTFILES)/bash_completion.d ${HOME}/.bash_completion.d
+	ln -fs $(DOTFILES)/dircolors ${HOME}/.dircolors
 
 setup-pip:
 	mkdir ~/.pip
