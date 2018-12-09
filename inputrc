@@ -5,8 +5,9 @@ set input-meta on
 set output-meta on
 set convert-meta off
 
-# Make Tab autocomplete regardless of filename case
+# Perform file completion in a case insensitive fashion
 set completion-ignore-case on
+# Display matches for ambiguous patterns at first tab press
 set show-all-if-ambiguous on
 set bell-style none
 set print-completions-horizontally off
@@ -19,24 +20,11 @@ set expand-tilde on
 # Readline used by Bash 4.)
 set skip-completed-text on
 
-"\e[1~": beginning-of-line      # Home key
-"\e[4~": end-of-line            # End key
-"\e[3~": delete-char            # Delete key
-"\e[1;5C": forward-word         # Ctrl+left
-"\e[1;5D": backward-word        # Ctrl+right
-"\e[5C": forward-word           # Ctrl+right
-"\e[5D": backward-word          # Ctrl+left
-"\e\e[C": forward-word          # Alt+right
-"\e\e[D": backward-word         # Alt+left
-"\C-K": unix-line-discard       # Ctrl+K
-"\e\"": "@{}\e[D"               # Insert @{} move cursor into braces
+# Use Alt/Meta + Delete to delete the preceding word
+"\e[3;3~": kill-word
 
-# This allows you to search through your history using the up and down arrows ...
-# i.e. type "cd" and press the up arrow and you'll search through everything in
-# your history that starts with "cd".
+
+# Use the text that has already been typed as the prefix for searching through
+# commands (basically more intelligent Up/Down behavior)
 "\e[A": history-search-backward
 "\e[B": history-search-forward
-"\ep": history-search-backward
-
-"\e[3;3~": kill-word
-"\eb":  backward-word # alt-b

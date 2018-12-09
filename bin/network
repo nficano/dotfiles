@@ -71,6 +71,14 @@ modem_ip_address () {
   egrep -o '([0-9]{1,3}[.]){3}[0-9]{1,3}'
 }
 
+open_router_config () {
+  python -mwebbrowser "http://$(gateway_ip_address)"
+}
+
+open_modem_config () {
+  python -mwebbrowser "http://$(modem_ip_address)"
+}
+
 probe_modem () {
   sudo nmap --min-parallelism 100 -A "$(modem_ip_address)"
 }
@@ -118,6 +126,7 @@ Commands:
   -probe <modem|router>       attempts to identify the operating system, open
                               ports, and running software on your modem or
                               router.
+  -webconfig <modem|router>   opens the web config for your modem or router.
   -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
   -help|-h                    displays help and usage.
 EOF
@@ -145,6 +154,8 @@ case "$@" in
   "-getsubnet -o bits"     ) network_mask_bits ;;
   "-getsubnet -o hex"      ) network_mask_hex ;;
   "-getsubnet"             ) network_mask ;;
+  "-webconfig modem"       ) open_modem_config ;;
+  "-webconfig router"      ) open_router_config ;;
   "listcommands"           ) get_commands; exit 0 ;;
   "--help"                 ) help; exit 0 ;;
   "-h"                     ) help; exit 0 ;;
