@@ -88,7 +88,7 @@ probe_router () {
 }
 
 usage () {
-  echo "Usage: network <command> <subcommand>"
+  echo "Usage: network [OPTION]..."
   echo "Try 'network --help' for more information."
 }
 
@@ -132,28 +132,28 @@ Commands:
 EOF
 }
 
-if [ ! -x "$(command -v nmap)" ] || [ ! -x "$(command -v sipcalc)" ]; then
-  echo "Error: 'nmap' and 'sipcalc' must first be installed."
-  echo "To fix, try running: brew install nmap sipcalc"
+if [ ! -x "$(command -v nmap)" ] || [ ! -x "$(command -v sipcalc)" ] || [ ! -x "$(command -v egrep)" ]; then
+  echo "Error: 'nmap', 'sipcalc', and 'egrep' must first be installed."
+  echo "To fix, try running: brew install nmap sipcalc egrep"
   exit 1
 fi
 
 case "$@" in
-  "-getlanhosts"           ) lan_host_discovery ;;
   "-getgatewayip"          ) gateway_ip_address ;;
   "-gethostip"             ) host_ip_address ;;
+  "-getispname"            ) get_isp_name ;;
+  "-getlanhosts"           ) lan_host_discovery ;;
   "-getmodemip"            ) modem_ip_address ;;
   "-getnetworkip"          ) network_ip_address ;;
   "-getprivateip"          ) host_ip_address ;;
   "-getpublicip"           ) public_ip_address ;;
   "-getrouterip"           ) gateway_ip_address ;;
-  "-getispname"            ) get_isp_name ;;
-  "-probe modem"           ) probe_modem ;;
-  "-probe router"          ) probe_router ;;
   "-getroutingtable"       ) routing_table ;;
   "-getsubnet -o bits"     ) network_mask_bits ;;
   "-getsubnet -o hex"      ) network_mask_hex ;;
   "-getsubnet"             ) network_mask ;;
+  "-probe modem"           ) probe_modem ;;
+  "-probe router"          ) probe_router ;;
   "-webconfig modem"       ) open_modem_config ;;
   "-webconfig router"      ) open_router_config ;;
   "listcommands"           ) get_commands; exit 0 ;;

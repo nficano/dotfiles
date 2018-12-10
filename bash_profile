@@ -31,11 +31,6 @@ evaluate () {
   [[ -x "$(command -v $1)" ]] && eval "$2"
 }
 
-# cd into whatever is the forefront Finder window.
-cdf () {  # short for cdfinder
-  cd "`osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)'`" || exit 0
-}
-
 la () {
  	ls -l  "$@" | awk '
     {
@@ -181,6 +176,10 @@ if [[ $OSTYPE =~ darwin ]]; then
   alias o="open ./"
   alias fixcamera='sudo killall VDCAssistant'
   alias fixspeak='killall -9 com.apple.speech.speechsynthesisd'
+  # cd into whatever is the forefront Finder window.
+  cdf () {  # short for cdfinder
+    cd "`osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)'`" || exit 0
+  }  
 fi
 
 if [ -x "$(command -v bat)" ]; then
