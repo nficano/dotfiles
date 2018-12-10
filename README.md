@@ -1,4 +1,4 @@
-# Nick's dotfiles
+# my dotfiles
 
 ## Installation
 
