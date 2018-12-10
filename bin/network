@@ -3,52 +3,52 @@
 set -e
 
 get_isp_name () {
-  whois "$(public_ip_address)" \
+  whois "$(get_public_ip_address)" \
   | grep OrgName \
   | awk '{$1="";print}' \
   | xargs
 }
 
-public_ip_address () {
+get_public_ip_address () {
   echo "$(curl -s "https://api.ipify.org/")"
 }
 
-host_ip_address () {
+get_host_ip_address () {
   ifconfig \
   | egrep 'inet\s(192|172|10)' \
   | awk '{print $2}'
 }
 
-routing_table () {
+get_routing_table () {
   netstat -nr -f inet
 }
 
-network_ip_address () {
-  sipcalc "$(host_ip_address)" "$(network_mask_hex)" \
+get_network_ip_address () {
+  sipcalc "$(get_host_ip_address)" "$(get_network_mask_hex)" \
   | grep "Network address" \
   | awk '{print $4}'
 }
 
-network_mask () {
-  sipcalc "$(host_ip_address)" "$(network_mask_hex)" \
+get_network_mask () {
+  sipcalc "$(get_host_ip_address)" "$(get_network_mask_hex)" \
   | grep "Network mask" \
   | awk '{print $4}' \
   | egrep -o '([0-9]{1,3}[.]){3}[0-9]{1,3}'
 }
 
-network_mask_bits () {
-  sipcalc "$(host_ip_address)" "$(network_mask_hex)" \
+get_network_mask_bits () {
+  sipcalc "$(get_host_ip_address)" "$(get_network_mask_hex)" \
   | grep "Network mask (bits)" \
   | awk '{print $5}'
 }
 
-network_mask_hex () {
+get_network_mask_hex () {
   ifconfig \
   | egrep 'inet\s(192|172|10)' \
   | awk '{print $4}'
 }
 
-gateway_ip_address () {
+get_gateway_ip_address () {
   netstat -rn \
   | egrep 'default\s+(192|172|10)' \
   | awk '{print $2}'
@@ -56,7 +56,7 @@ gateway_ip_address () {
 
 lan_host_discovery () {
   sudo nmap \
-  "$(network_ip_address)/$(network_mask_bits)" \
+  "$(get_network_ip_address)/$(get_network_mask_bits)" \
   -sn \
   -n \
   --min-parallelism 100 \
@@ -64,7 +64,7 @@ lan_host_discovery () {
   | awk '{print $5}'
 }
 
-modem_ip_address () {
+get_modem_ip_address () {
   sudo nmap \
   -sS 192.168.100.1 192.168.0.1 10.0.0.1 10.1.10.1 \
   --min-parallelism 100 |
@@ -72,36 +72,36 @@ modem_ip_address () {
 }
 
 open_router_config () {
-  python -mwebbrowser "http://$(gateway_ip_address)"
+  python -mwebbrowser "http://$(get_gateway_ip_address)"
 }
 
 open_modem_config () {
-  python -mwebbrowser "http://$(modem_ip_address)"
+  python -mwebbrowser "http://$(get_modem_ip_address)"
 }
 
 probe_modem () {
-  sudo nmap --min-parallelism 100 -A "$(modem_ip_address)"
+  sudo nmap --min-parallelism 100 -A "$(get_modem_ip_address)"
 }
 
 probe_router () {
-  sudo nmap --min-parallelism 100 -A "$(gateway_ip_address)"
+  sudo nmap --min-parallelism 100 -A "$(get_gateway_ip_address)"
 }
 
-usage () {
+show_usage () {
   echo "Usage: network [OPTION]..."
   echo "Try 'network --help' for more information."
 }
 
-unknown_command () {
+show_unknown_command () {
   echo "ERROR: unknown command \"$1\""
   echo "Try 'network --help' for more information."
 }
 
 get_commands () {
-  echo "$(help)" | grep -o '\-[a-z]*'
+  echo "$(show_help)" | grep -o '\-[a-z]*'
 }
 
-help () {
+show_help () {
 cat <<EOF
 
 network – utility for gathering information about your local network.
@@ -139,27 +139,27 @@ if [ ! -x "$(command -v nmap)" ] || [ ! -x "$(command -v sipcalc)" ] || [ ! -x "
 fi
 
 case "$@" in
-  "-getgatewayip"          ) gateway_ip_address ;;
-  "-gethostip"             ) host_ip_address ;;
+  "-getgatewayip"          ) get_gateway_ip_address ;;
+  "-gethostip"             ) get_host_ip_address ;;
   "-getispname"            ) get_isp_name ;;
   "-getlanhosts"           ) lan_host_discovery ;;
-  "-getmodemip"            ) modem_ip_address ;;
-  "-getnetworkip"          ) network_ip_address ;;
-  "-getprivateip"          ) host_ip_address ;;
-  "-getpublicip"           ) public_ip_address ;;
-  "-getrouterip"           ) gateway_ip_address ;;
-  "-getroutingtable"       ) routing_table ;;
-  "-getsubnet -o bits"     ) network_mask_bits ;;
-  "-getsubnet -o hex"      ) network_mask_hex ;;
-  "-getsubnet"             ) network_mask ;;
+  "-getmodemip"            ) get_modem_ip_address ;;
+  "-getnetworkip"          ) get_network_ip_address ;;
+  "-getprivateip"          ) get_host_ip_address ;;
+  "-getpublicip"           ) get_public_ip_address ;;
+  "-getrouterip"           ) get_gateway_ip_address ;;
+  "-getroutingtable"       ) get_routing_table ;;
+  "-getsubnet -o bits"     ) get_network_mask_bits ;;
+  "-getsubnet -o hex"      ) get_network_mask_hex ;;
+  "-getsubnet"             ) get_network_mask ;;
   "-probe modem"           ) probe_modem ;;
   "-probe router"          ) probe_router ;;
   "-webconfig modem"       ) open_modem_config ;;
   "-webconfig router"      ) open_router_config ;;
   "listcommands"           ) get_commands; exit 0 ;;
-  "--help"                 ) help; exit 0 ;;
-  "-h"                     ) help; exit 0 ;;
-  ""                       ) usage; exit 0 ;;
-  *                        ) unknown_command "$@"; exit 1 ;;
+  "--help"                 ) show_help; exit 0 ;;
+  "-h"                     ) show_help; exit 0 ;;
+  ""                       ) show_usage; exit 0 ;;
+  *                        ) show_unknown_command "$@"; exit 1 ;;
 esac
 exit 0

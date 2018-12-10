@@ -5,17 +5,15 @@ set -e
 # https://github.com/thoughtbot/laptop/blob/master/mac
 HOMEBREW_PREFIX="/usr/local"
 
-info() {
-    fmt="$1"; shift
-    # shellcheck disable=SC2059
-    printf "$fmt\n" "$@"
+info () {
+  message="$1"; shift
+  # shellcheck disable=SC2059
+  printf "$message\n" "$@"
 }
 
 # Install Xcode Command Line Tools
 if ! xcode-select -p > /dev/null; then
   xcode-select --install > /dev/null
-
-  # Wait until the Xcode Command Line Tools are installed
   until xcode-select -p > /dev/null; do
     sleep 5
   done
@@ -40,37 +38,22 @@ else
   sudo chown -R "$LOGNAME:admin" "$HOMEBREW_PREFIX"
 fi
 
-setup_launch_agent () {
-  if ! launchctl list | grep -Eiq 'org.nficano.dotfiles.DropboxSync.plist'; then
-    info "Loading DropboxSync launchd script ..."
-    root="$(git rev-parse --show-toplevel)"
-    src="$root/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist"
-    dst="$HOME/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist"
+pip_is_installed  () {
+  pip freeze | grep -v '^\-e' | cut -d = -f 1 | grep -Fqx "$1";
+}
 
-    ln -s $src $dst
-    launchctl load $dst
+pip_install_or_upgrade  () {
+  if pip_is_installed "$1"; then
+    info "Upgrading $1 ..."
+    pip install -qU "$1"
+  else
+    info "Installing $1 ..."
+    pip install -q "$1"
   fi
 }
 
-pip_is_installed () {
-    pip freeze | grep -v '^\-e' | cut -d = -f 1 | grep -Fqx "$1";
-}
 
-pip_install_or_upgrade () {
-    # I don't have a compariable ``pip_is_upgradable`` method because if you
-    # run virtualbox, which includes ``pyvbox`` pip's get upgradable packages
-    # fails. Fuck Oracle.
-    if pip_is_installed "$1"; then
-        info "Upgrading $1 ..."
-        pip install -qU "$1"
-    else
-        info "Installing $1 ..."
-        pip install -q "$1"
-    fi
-}
-
-
-brew_cask_install_or_upgrade () {
+brew_cask_install_or_upgrade  () {
   if brew_cask_is_installed "$1"; then
     if brew_cask_is_upgradable "$1"; then
       info "Upgrading %s ..." "$1"
@@ -86,78 +69,78 @@ brew_cask_install_or_upgrade () {
   fi
 }
 
-is_application_installed () {
+is_application_installed  () {
   name="$(brew_cask_expand_artifacts "$1")"
   ls /Applications/ | grep -qi "$name" > /dev/null;
 }
 
-brew_cask_is_installed () {
+brew_cask_is_installed  () {
   brew cask list | grep -qi "$1">/dev/null;
 }
 
-brew_install_or_upgrade () {
-    if brew_is_installed "$1"; then
-        if brew_is_upgradable "$1"; then
-            info "Upgrading %s ..." "$1"
-            brew upgrade "$@"
-        else
-            info "Already using the latest version of %s. Skipping ..." "$1"
-        fi
+brew_install_or_upgrade  () {
+  if brew_is_installed "$1"; then
+    if brew_is_upgradable "$1"; then
+      info "Upgrading %s ..." "$1"
+      brew upgrade "$@"
     else
-        info "Installing %s ..." "$1"
-        brew install "$@"
+      info "Already using the latest version of %s. Skipping ..." "$1"
     fi
+  else
+    info "Installing %s ..." "$1"
+    brew install "$@"
+  fi
 }
 
-brew_is_installed() {
-    name="$(brew_expand_alias "$1")"
-    brew list -1 | grep -Fqx "$name"
+brew_is_installed () {
+  name="$(brew_expand_alias "$1")"
+  brew list -1 | grep -Fqx "$name"
 }
 
-brew_is_upgradable() {
-    name="$(brew_expand_alias "$1")"
-    ! brew outdated --quiet "$name" >/dev/null
+brew_is_upgradable () {
+  name="$(brew_expand_alias "$1")"
+  ! brew outdated --quiet "$name" >/dev/null
 }
 
-brew_cask_is_upgradable() {
-    ! brew cask outdated --quiet "$1" >/dev/null
+brew_cask_is_upgradable () {
+  ! brew cask outdated --quiet "$1" >/dev/null
 }
 
-brew_tap() {
+brew_tap () {
   brew tap "$1" 2>/dev/null
 }
 
-brew_cask_expand_artifacts() {
+brew_cask_expand_artifacts () {
   brew cask info "$1" 2>/dev/null | tail -1 | grep -o '^.*.app'
 }
 
-brew_expand_alias() {
-    brew info "$1" 2>/dev/null | head -1 | awk '{gsub(/:/, ""); print $1}'
+brew_expand_alias () {
+  brew info "$1" 2>/dev/null | head -1 | awk '{gsub(/:/, ""); print $1}'
 }
 
-brew_launchctl_restart() {
-    name="$(brew_expand_alias "$1")"
-    domain="homebrew.mxcl.$name"
-    plist="$domain.plist"
+brew_launchctl_restart () {
+  name="$(brew_expand_alias "$1")"
+  domain="homebrew.mxcl.$name"
+  plist="$domain.plist"
 
-    info "Restarting %s ..." "$1"
-    mkdir -p "$HOME/Library/LaunchAgents"
-    ln -sfv "/usr/local/opt/$name/$plist" "$HOME/Library/LaunchAgents"
+  info "Restarting %s ..." "$1"
+  mkdir -p "$HOME/Library/LaunchAgents"
+  ln -sfv "/usr/local/opt/$name/$plist" "$HOME/Library/LaunchAgents"
 
-    if launchctl list | grep -Fq "$domain"; then
-        launchctl unload "$HOME/Library/LaunchAgents/$plist" >/dev/null
-    fi
-    launchctl load "$HOME/Library/LaunchAgents/$plist" >/dev/null
+  if launchctl list | grep -Fq "$domain"; then
+    launchctl unload "$HOME/Library/LaunchAgents/$plist" >/dev/null
+  fi
+  launchctl load "$HOME/Library/LaunchAgents/$plist" >/dev/null
 }
 
 if ! command -v brew >/dev/null; then
-    info "Installing Homebrew ..."
-    curl -fsS \
-         'https://raw.githubusercontent.com/Homebrew/install/master/install' | ruby
+  info "Installing Homebrew ..."
+  curl -fsS \
+       'https://raw.githubusercontent.com/Homebrew/install/master/install' | ruby
 
-    export PATH="/usr/local/bin:$PATH"
+  export PATH="/usr/local/bin:$PATH"
 else
-    info "Homebrew already installed. Skipping ..."
+  info "Homebrew already installed. Skipping ..."
 fi
 
 info "Updating Homebrew formulas ..."
@@ -284,4 +267,3 @@ brew_cask_install_or_upgrade 'transmission'
 brew_cask_install_or_upgrade 'vlc'
 brew_cask_install_or_upgrade 'wireshark'
 brew_cask_install_or_upgrade 'zoomus'
-setup_launch_agent

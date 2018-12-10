@@ -10,7 +10,6 @@ info () {
     printf "$now $fmt\n" "$@"
 }
 
-
 unison_sync () {
   info "Synchronizing \"$1\" with \"$DEST_DIR/$2\""
   unison $1 "$DEST_DIR/$2" \
