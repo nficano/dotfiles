@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# If not running ractively, don't do anything
-[ -z "$PS1" ] && return
+if [[ $- != *i* ]] ; then
+  return
+fi
 
 # tab completions for sudo
 complete -cf sudo
