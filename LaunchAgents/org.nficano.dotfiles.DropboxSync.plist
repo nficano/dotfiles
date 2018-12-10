@@ -12,7 +12,7 @@
     <key>ProgramArguments</key>
     <array>
       <string>/usr/local/bin/bash</string>
-      <string>dropbox_sync.sh</string>
+      <string>dropbox-sync</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -28,6 +28,6 @@
       </dict>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/nficano/github/dotfiles</string>
+    <string>/Users/nficano/github/dotfiles/bin</string>
   </dict>
 </plist>
