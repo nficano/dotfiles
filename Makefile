@@ -1,41 +1,26 @@
 DOTFILES := $(PWD)
 
-install: setup-shell setup-directories install-inputrc setup-git setup-tmux setup-pip setup-agrc setup-nano
+install: setup
 
 bootstrap:
-	bash $(DOTFILES)/bootstrap_osx.sh
+	bash $(DOTFILES)/bin/bootstrap-osx
 
-setup-nano:
-	ln -fs $(DOTFILES)/nanorc ${HOME}/.nanorc
-
-setup-tmux:
-	ln -fs $(DOTFILES)/tmux.conf ${HOME}/.tmux.conf
-
-setup-shell:
-	rm -f ~/.bash_profile
-	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
-	ln -fs $(DOTFILES)/hushlogin ${HOME}/.hushlogin
-	ln -s $(DOTFILES)/bin ${HOME}/.bin
-	ln -fs $(DOTFILES)/dircolors ${HOME}/.dircolors
-
-setup-pip:
-	mkdir ~/.pip
-	ln -fs $(DOTFILES)/pip.conf ${HOME}/.pip/pip.conf
-
-
-install-inputrc:
-	rm -f ~/.inputrc
-	ln -fs $(DOTFILES)/inputrc ${HOME}/.inputrc
-
-setup-agrc:
-	ln -fs $(DOTFILES)/agrc ${HOME}/.agrc
-
-setup-directories:
+setup:
 	mkdir -p ~/.virtualenvs
-	mkdir -p ~/github
 	mkdir -p ~/Downloads
+	mkdir -p ~/github
 	mkdir -p ~/Repos
-
-setup-git:
+	mkdir ~/.pip
+	rm -f ~/.bash_profile
+	rm -f ~/.inputrc
+	ln -fs $(DOTFILES)/agrc ${HOME}/.agrc
+	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
+	ln -fs $(DOTFILES)/dircolors ${HOME}/.dircolors
 	ln -fs $(DOTFILES)/gitconfig ${HOME}/.gitconfig
 	ln -fs $(DOTFILES)/gitignore ${HOME}/.gitignore
+	ln -fs $(DOTFILES)/hushlogin ${HOME}/.hushlogin
+	ln -fs $(DOTFILES)/inputrc ${HOME}/.inputrc
+	ln -fs $(DOTFILES)/nanorc ${HOME}/.nanorc
+	ln -fs $(DOTFILES)/pip.conf ${HOME}/.pip/pip.conf
+	ln -fs $(DOTFILES)/tmux.conf ${HOME}/.tmux.conf
+	ln -s $(DOTFILES)/bin ${HOME}/.bin
