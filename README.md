@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://s3.amazonaws.com/nf-assets/logo.svg" alt="dotfiles" width="383" height="117">
+  <img src="https://s3.amazonaws.com/nf-assets/dotfiles-logo.svg" alt="dotfiles" width="474" height="148">
 </p>
 
 ## About
