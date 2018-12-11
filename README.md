@@ -18,11 +18,11 @@ recommend using it for reference purposes only.
 
 ## Highlights
 
-- ``bin/network`` - a utility for gathering information about your local network.
 - ``bin/dropbox-sync`` - syncronizes frequently updated files to dropbox.
-- ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs dropbox-sync hourly via launchd.
 - ``bin/findmyiphone`` - triggers "Find My iPhone" from command-line.
 - ``bin/lan-doctor`` - detects and automatically fixes network issues.
+- ``bin/network`` - a utility for gathering information about your local network.
+- ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs dropbox-sync hourly via launchd.
 
 ## Installation
 
