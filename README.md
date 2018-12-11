@@ -26,7 +26,7 @@ recommend using it for reference purposes only.
 
 ## Utilities
 
-### bin/network: A utility for gathering information about your local network.
+### network: A utility for gathering information about your local network.
 
 ```
 Commands:
