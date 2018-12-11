@@ -4,7 +4,7 @@
 
 ## About
 
-This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, and various utilities that have no other home. I prefer Bash because it's the default shell on most systems, and I favor portability above all else.
+This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, and various utilities that have no other home. I use Bash as my shell because its set the default on most systems, and I favor portability above all else.
 
 While I will outline how to install my setup from scratch, I would recommend using my setup for reference purposes only.
 
