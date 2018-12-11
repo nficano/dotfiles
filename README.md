@@ -24,6 +24,8 @@ recommend using it for reference purposes only.
 - ``bin/network`` - a utility for gathering information about your local network.
 - ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs dropbox-sync hourly via launchd.
 
+## Utilities
+
 ### bin/network
 
 A utility for gathering information about your local network.
