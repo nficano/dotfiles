@@ -3,11 +3,6 @@
 </p>
 
 ## About
-<<<<<<< HEAD
-
-This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, and various utilities that have no other home. I use Bash as my shell because its set the default on most systems, and I favor portability above all else.
-=======
->>>>>>> updated readme
 
 This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, and various utilities that have no other home.
 
