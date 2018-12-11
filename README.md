@@ -8,7 +8,7 @@ This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, 
 
 While I will outline how to install my configuration from scratch, I would recommend using it for reference purposes only.
 
-## Directory Structure
+## Structure
 
 - ``bin`` - all of my custom executable scripts.
 - ``misc`` - stuff that doesn't have a home.
