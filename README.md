@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/nficano/dotfiles/master/artwork/logo@2x.png" alt="dotfiles" width="331" height="74">
+  <img src="https://raw.githubusercontent.com/nficano/dotfiles/master/artwork/logo@2x.png" alt="dotfiles" width="383" height="117">
 </p>
 
 ## About
