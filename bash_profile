@@ -64,29 +64,22 @@ includeif "/usr/local/opt/node@8/bin"
 includeif "/usr/local/opt/openssl/bin"
 includeif "/usr/local/opt/python/libexec/bin"
 
-sourceif "/usr/local/etc/bash_completion.d"
+sourceif "/usr/local/etc/bash_completion"
 sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
 sourceif "$HOME/.fzf.bash"
 sourceif "$HOME/.nvm/nvm.sh"
 sourceif "$HOME/.bash_profile.local"
 sourceif "$HOME/.iterm2_shell_integration.bash"
 
+evalif "aws" "$(complete -C aws_completer aws)"
+evalif "dircolors" "$(dircolors -b $HOME/.dircolors)"
+evalif "direnv" "$(direnv hook bash)"
+evalif "pyenv" "$(pyenv init -)"
 evalif "rbenv" "$(rbenv init -)"
 evalif "thefuck" "$(thefuck --alias)"
-evalif "aws" "$(complete -C aws_completer aws)"
-evalif "pyenv" "$(pyenv init -)"
-evalif "direnv" "$(direnv hook bash)"
-
-if [ -x "$(command -v dircolors)" ]; then
-  eval "$(dircolors -b $HOME/.dircolors)"
-fi
 
 if [ -x "$(command -v network)" ]; then
   complete -W "$(network listcommands)" 'network'
-fi
-
-if [ -x "$(command -v brew)" ]; then
-  sourceif "$(brew --prefix)/etc/bash_completion"
 fi
 
 if ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]]; then
