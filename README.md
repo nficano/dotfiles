@@ -28,8 +28,9 @@ recommend using it for reference purposes only.
 
 ### network: A utility for gathering information about your local network.
 
+##### Commands
+
 ```
-Commands:
   -getlanhosts                discover all devices on your network.
   -getgatewayip               displays the address of your "network gateway",
                               or the edge device (ie: router) that sits
