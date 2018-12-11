@@ -19,20 +19,20 @@ silence () {
   "$@" 2> /dev/null > /dev/null;
 }
 
-addpath () {
+includeif () {
   [[ -d "$1" ]] && PATH="$1:${PATH}"
 }
 
-include () {
+sourceif () {
   # shellcheck source=/dev/null
   [[ -f "$1" ]] && source "$1"
 }
 
-evaluate () {
+evalif () {
   [[ -x "$(command -v $1)" ]] && eval "$2"
 }
 
-la () {
+lsp () {
  	ls -l  "$@" | awk '
     {
       k=0;
@@ -56,26 +56,26 @@ setup_ssh () {
   fi
 }
 
-addpath "$HOME/.bin"
-addpath "/usr/local/opt/gnu-tar/libexec/gnubin"
-addpath "/usr/local/opt/grep/libexec/gnubin"
-addpath "/usr/local/opt/coreutils/libexec/gnubin"
-addpath "/usr/local/opt/openssl/bin"
-addpath "/usr/local/opt/python/libexec/bin"
-addpath "/usr/local/opt/node@8/bin"
+includeif "$HOME/.bin"
+includeif "/usr/local/opt/coreutils/libexec/gnubin"
+includeif "/usr/local/opt/gnu-tar/libexec/gnubin"
+includeif "/usr/local/opt/grep/libexec/gnubin"
+includeif "/usr/local/opt/node@8/bin"
+includeif "/usr/local/opt/openssl/bin"
+includeif "/usr/local/opt/python/libexec/bin"
 
-include "/usr/local/etc/bash_completion.d"
-include "/usr/local/bin/virtualenvwrapper_lazy.sh"
-include "$HOME/.fzf.bash"
-include "$HOME/.nvm/nvm.sh"
-include "$HOME/.bash_profile.local"
-include "$HOME/.iterm2_shell_integration.bash"
+sourceif "/usr/local/etc/bash_completion.d"
+sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
+sourceif "$HOME/.fzf.bash"
+sourceif "$HOME/.nvm/nvm.sh"
+sourceif "$HOME/.bash_profile.local"
+sourceif "$HOME/.iterm2_shell_integration.bash"
 
-evaluate "rbenv" "$(rbenv init -)"
-evaluate "thefuck" "$(thefuck --alias)"
-evaluate "aws" "$(complete -C aws_completer aws)"
-evaluate "pyenv" "$(pyenv init -)"
-evaluate "direnv" "$(direnv hook bash)"
+evalif "rbenv" "$(rbenv init -)"
+evalif "thefuck" "$(thefuck --alias)"
+evalif "aws" "$(complete -C aws_completer aws)"
+evalif "pyenv" "$(pyenv init -)"
+evalif "direnv" "$(direnv hook bash)"
 
 if [ -x "$(command -v dircolors)" ]; then
   eval "$(dircolors -b $HOME/.dircolors)"
@@ -86,7 +86,7 @@ if [ -x "$(command -v network)" ]; then
 fi
 
 if [ -x "$(command -v brew)" ]; then
-  include "$(brew --prefix)/etc/bash_completion"
+  sourceif "$(brew --prefix)/etc/bash_completion"
 fi
 
 if ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]]; then
@@ -150,6 +150,7 @@ alias cp='cp -i'
 
 alias l="ls"
 alias sl="ls"
+alias la="ls -la"
 
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
