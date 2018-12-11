@@ -10,9 +10,9 @@ While I will outline how to install my configuration from scratch, I would recom
 
 ## Directory Structure
 
-``bin`` - all of my custom executable scripts.
-``misc`` - stuff that doesn't have a home.
-``rc.d`` - config files that I symlink to my home directory.
+- ``bin`` - all of my custom executable scripts.
+- ``misc`` - stuff that doesn't have a home.
+- ``rc.d`` - config files that I symlink to my home directory.
 
 ## Installation
 
