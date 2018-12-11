@@ -2,7 +2,7 @@
   <img src="https://s3.amazonaws.com/nf-assets/dotfiles-logo.svg" alt="dotfiles" width="474" height="148">
 </p>
 
-## Nick Ficano's Dotfiles
+## Nick Ficano's dotfiles
 
 This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment,
 and various utilities that have no other home.
