@@ -3,16 +3,21 @@
 </p>
 
 ## About
+<<<<<<< HEAD
 
 This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, and various utilities that have no other home. I use Bash as my shell because its set the default on most systems, and I favor portability above all else.
+=======
+>>>>>>> updated readme
 
-While I will outline how to install my setup from scratch, I would recommend using my setup for reference purposes only.
+This repo contains my dotfiles, the scripts to bootstrap my Mac OS environment, and various utilities that have no other home.
 
-## Overview
+While I will outline how to install my configuration from scratch, I would recommend using it for reference purposes only.
 
-These instructions will get you a copy of the project up and running on your
-local machine for development and testing purposes. See deployment for notes on
-how to deploy the project on a live system.
+## Directory Structure
+
+``bin`` - all of my custom executable scripts.
+``misc`` - stuff that doesn't have a home.
+``rc.d`` - config files that I symlink to my home directory.
 
 ## Installation
 
