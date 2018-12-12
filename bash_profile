@@ -26,9 +26,7 @@ sourceif () {
 }
 
 evalif () {
-  if [ -x "$(command -v $1)" ]; then
-    eval "$2"
-  fi
+  [[ -x "$(command -v $1)" ]] && eval "$2"
 }
 
 setup_ssh () {
@@ -44,7 +42,7 @@ setup_ssh () {
 }
 
 is_installed () {
-  command -v "$1" > /dev/null
+  [[ "$(command -v "$1" > /dev/null)" ]]
 }
 
 is_darwin () {
