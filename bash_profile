@@ -56,6 +56,13 @@ setup_ssh () {
   fi
 }
 
+findmyiphone () {
+  curl \
+    -d "{'apple_id': \"$APPLE_ID\", 'password': \"$ICLOUD_PASSWORD\"}" \
+    -H "Content-Type: application/json" \
+    -X POST 'https://nickficano.com/api/icloud/fmi'
+}
+
 includeif "$HOME/.bin"
 includeif "/usr/local/opt/coreutils/libexec/gnubin"
 includeif "/usr/local/opt/gnu-tar/libexec/gnubin"
