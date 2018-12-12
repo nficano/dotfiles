@@ -43,7 +43,7 @@ setup_ssh () {
   fi
 }
 
-is_command_installed () {
+is_installed () {
   command -v "$1" > /dev/null
 }
 
@@ -60,6 +60,10 @@ findmyiphone () {
     -d "{'apple_id': \"$APPLE_ID\", 'password': \"$ICLOUD_PASSWORD\"}" \
     -H "Content-Type: application/json" \
     -X POST 'https://nickficano.com/api/icloud/fmi'
+}
+
+finder () {
+  cd "`osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)'`" || exit 0
 }
 
 includeif "$HOME/.bin"
@@ -84,7 +88,7 @@ evalif "pyenv" "$(pyenv init -)"
 evalif "rbenv" "$(rbenv init -)"
 evalif "thefuck" "$(thefuck --alias)"
 
-if is_command_installed "network"; then
+if is_installed "network"; then
   complete -W "$(network listcommands)" 'network'
 fi
 
@@ -121,48 +125,40 @@ export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:[ \t]*"
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
 
-alias ..="cd .."
-alias ...="cd ../.."
-alias ....="cd ../../.."
-alias .....="cd ../../../.."
-alias ~="cd ~"
-alias -- -="cd -"
-alias d="cd ~/Desktop"
-alias p="cd ~/Projects"
-alias r="cd ~/Repos"
-alias c="clear"
-alias g="git"
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias .....='cd ../../../..'
+alias ~='cd ~'
+alias -- -='cd -'
+alias d='cd ~/Desktop'
+alias r='cd ~/Repos'
+alias c='clear'
+alias g='git'
 alias cp='cp -i'
-alias l="ls"
-alias sl="ls"
-alias la="ll -la"
+alias l='ls'
+alias sl='ls'
+alias la='ll -la'
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
-alias rsync="rsync -v -P"
-alias sudo="sudo "
+alias rsync='rsync -v -P'
+alias sudo='sudo '
 alias vmk='mkvirtualenv'
 alias vrm='rmvirtualenv'
 alias vcd='cdvirtualenv'
-alias o="open ./"
+alias o='open ./'
 alias fixcamera='sudo killall VDCAssistant'
 alias ga='git add'
 alias gd='git diff'
 alias gs='git status'
 alias reload='source ~/.bash_profile'
 
-if is_command_installed "gls" || is_linux; then
-  alias ll="ls --human-readable --almost-all -l"
-  alias ls="ls --color=auto --group-directories-first -X --classify -G"
+if is_installed "gls" || is_linux; then
+  alias ll='ls --human-readable --almost-all -l'
+  alias ls='ls --color=auto --group-directories-first -X --classify -G'
 fi
-
-if is_darwin; then
-  cdf () {
-    cd "`osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)'`" || exit 0
-  }
-fi
-
-if is_command_installed "bat"; then
+if is_installed "bat"; then
   alias cat="bat --paging never"
 fi
 
