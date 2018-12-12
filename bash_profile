@@ -16,6 +16,18 @@ silence () {
   "$@" 2> /dev/null > /dev/null;
 }
 
+is_installed () {
+  [[ "$(command -v "$1" > /dev/null)" ]]
+}
+
+is_darwin () {
+  [[ $(uname -s) == "Darwin" ]]
+}
+
+is_linux () {
+  [[ $(uname -s) == "Linux" ]]
+}
+
 includeif () {
   [[ -d "$1" ]] && PATH="$1:${PATH}"
 }
@@ -26,7 +38,7 @@ sourceif () {
 }
 
 evalif () {
-  [[ -x "$(command -v $1)" ]] && eval "$2"
+  is_installed "$1"  && eval "$2"
 }
 
 setup_ssh () {
@@ -39,18 +51,6 @@ setup_ssh () {
   if [ -d "$HOME/.ssh" ]; then
     find "$HOME/.ssh" -name '*\.pem' | silence xargs ssh-add
   fi
-}
-
-is_installed () {
-  [[ "$(command -v "$1" > /dev/null)" ]]
-}
-
-is_darwin () {
-  [[ $(uname -s) == "Darwin" ]]
-}
-
-is_linux () {
-  [[ $(uname -s) == "Linux" ]]
 }
 
 findmyiphone () {
