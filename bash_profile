@@ -38,7 +38,9 @@ sourceif () {
 }
 
 evalif () {
-  is_installed "$1"  && eval "$2"
+  if is_installed "$1"; then
+    eval "$2"
+  fi
 }
 
 setup_ssh () {
