@@ -44,20 +44,12 @@ setup_ssh () {
   fi
 }
 
-is_mac_os () {
-  if [[ $OSTYPE =~ darwin ]]; then
-    return 0
-  else
-    return 1
-  fi
+os_is_darwin () {
+  [[ $(uname -s) == "Darwin" ]]
 }
 
-is_linux () {
-  if [[  $OSTYPE =~ gnu ]]; then
-    return 0
-  else
-    return 1
-  fi
+os_is_linux () {
+  [[ $(uname -s) == "Linux" ]]
 }
 
 findmyiphone () {
@@ -166,7 +158,7 @@ alias tree='find . -type d | sed -e "s/[^-][^\/]*\//  |/g;s/|\([^ ]\)/|-\1/"'
 
 # check if coreutils is installed (os-x) or if os contains gnu, if so we can
 # use these aliases.
-if [ -d "/usr/local/opt/coreutils/libexec/gnubin" ] || is_linux; then
+if [ -d "/usr/local/opt/coreutils/libexec/gnubin" ] || os_is_linux; then
   alias ll="ls --human-readable --almost-all -l"
   alias ls="ls --color=auto --group-directories-first -X --classify -G"
 fi
@@ -178,7 +170,7 @@ if [ -x "$(command -v virtualenvwrapper.sh)" ]; then
 fi
 
 # os-x specific
-if is_mac_os; then
+if os_is_darwin; then
   alias o="open ./"
   alias fixcamera='sudo killall VDCAssistant'
   alias fixspeak='killall -9 com.apple.speech.speechsynthesisd'
