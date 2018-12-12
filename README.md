@@ -24,7 +24,7 @@ recommend using it for reference purposes only.
 
 - ``bin/dropbox-sync`` - syncronizes frequently updated files to dropbox.
 - ``bin/findmyiphone`` - triggers "Find My iPhone" from command-line.
-- ``bin/lan-doctor`` - detects and automatically repairs network issues.
+- ``bin/lan-doctor`` - detects and repairs network issues.
 - ``bin/network`` - a utility for gathering information about your local network.
 - ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs dropbox-sync hourly via launchd.
 
