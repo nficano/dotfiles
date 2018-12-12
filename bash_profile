@@ -124,7 +124,6 @@ export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:[ \t]*"
 # Save and reload the history after each command finishes
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
-
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
