@@ -22,10 +22,10 @@ recommend using it for reference purposes only.
 
 ## Highlights
 
-- ``bin/dropbox-sync`` - syncronizes frequently updated files to dropbox.
+- ``bin/sync-to-dropbox`` - syncronizes frequently updated files to dropbox.
 - ``bin/network`` - a utility for gathering information about your local network.
 - ``misc/lan-doctor`` - detects and repairs network issues.
-- ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs dropbox-sync hourly via launchd.
+- ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs sync-to-dropbox hourly via launchd.
 
 ## Utilities
 
