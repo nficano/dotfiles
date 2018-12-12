@@ -4,8 +4,6 @@ if [[ $- != *i* ]] ; then
   return
 fi
 
-complete -cf sudo       # tab completions for sudo
-
 shopt -s nocaseglob     # case-insensitive path expansion globbing
 shopt -s checkwinsize   # check the window size after each command, and
                         # update LINES and COLUMNS if the size has changed.
@@ -88,9 +86,8 @@ evalif "pyenv" "$(pyenv init -)"
 evalif "rbenv" "$(rbenv init -)"
 evalif "thefuck" "$(thefuck --alias)"
 
-if is_installed "network"; then
-  complete -W "$(network listcommands)" 'network'
-fi
+is_installed "network" && complete -W "$(network listcommands)" 'network'
+complete -cf sudo  # tab completions for sudo
 
 if ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]]; then
   PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";
@@ -146,19 +143,15 @@ alias sudo='sudo '
 alias vmk='mkvirtualenv'
 alias vrm='rmvirtualenv'
 alias vcd='cdvirtualenv'
-alias o='open ./'
-alias fixcamera='sudo killall VDCAssistant'
 alias ga='git add'
 alias gd='git diff'
 alias gs='git status'
 alias reload='source ~/.bash_profile'
 
-if is_installed "gls" || is_linux; then
-  alias ll='ls --human-readable --almost-all -l'
-  alias ls='ls --color=auto --group-directories-first -X --classify -G'
-fi
-if is_installed "bat"; then
-  alias cat="bat --paging never"
-fi
+is_darwin && alias o='open ./'
+is_darwin && alias fixcamera='sudo killall VDCAssistant'
+is_installed "gls" || is_linux && alias ls='ls --color=auto -gXF --file-type'
+is_installed "gls" || is_linux && alias ll='ls --color=auto -algX'
+is_installed "bat" && alias cat="bat --paging never"
 
 setup_ssh
