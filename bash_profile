@@ -26,7 +26,7 @@ sourceif () {
 }
 
 evalif () {
-  [[ -x "$(command -v $1)" ]] && eval "$2"
+  is_installed $1 && eval "$2"
 }
 
 setup_ssh () {
