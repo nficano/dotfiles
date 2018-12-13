@@ -26,8 +26,8 @@ sourceif () {
 }
 
 evalif () {
-  if [ -x "$(command -v $1)" ]; then
-    eval "$2"
+  if is_installed $1; then
+    eval "$($2)"
   fi
 }
 
@@ -62,10 +62,6 @@ findmyiphone () {
     -X POST 'https://nickficano.com/api/icloud/fmi'
 }
 
-finder () {
-  cd "`osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)'`" || exit 0
-}
-
 includeif "$HOME/.bin"
 includeif "/usr/local/opt/coreutils/libexec/gnubin"
 includeif "/usr/local/opt/gnu-tar/libexec/gnubin"
@@ -81,19 +77,14 @@ sourceif "$HOME/.nvm/nvm.sh"
 sourceif "$HOME/.bash_profile.local"
 sourceif "$HOME/.iterm2_shell_integration.bash"
 
-evalif "aws" "$(complete -C aws_completer aws)"
-evalif "dircolors" "$(dircolors -b $HOME/.dircolors)"
-evalif "direnv" "$(direnv hook bash)"
-evalif "pyenv" "$(pyenv init -)"
-evalif "rbenv" "$(rbenv init -)"
-evalif "thefuck" "$(thefuck --alias)"
+evalif "aws" "complete -C aws_completer aws"
+evalif "direnv" "direnv hook bash"
+evalif "pyenv" "pyenv init -"
+evalif "rbenv" "rbenv init -"
+evalif "thefuck" "thefuck --alias"
+silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
-is_installed "network" && complete -W "$(network listcommands)" 'network'
 complete -cf sudo  # tab completions for sudo
-
-if ! [[ "$PROMPT_COMMAND" =~ _direnv_hook ]]; then
-  PROMPT_COMMAND="_direnv_hook;$PROMPT_COMMAND";
-fi
 
 export EDITOR='nano'
 export VISUAL='atom'
@@ -152,8 +143,11 @@ alias reload='source ~/.bash_profile'
 
 is_darwin && alias o='open ./'
 is_darwin && alias fixcamera='sudo killall VDCAssistant'
+is_darwin && alias finder='cd "$(eval fpwd)" || exit 0'
 is_installed "gls" || is_linux && alias ls='ls --color=auto -gXF --file-type'
 is_installed "gls" || is_linux && alias ll='ls --color=auto -algX'
 is_installed "bat" && alias cat="bat --paging never"
+
+is_installed "network" && complete -W "$(network listcommands)" 'network'
 
 setup_ssh
