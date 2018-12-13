@@ -79,7 +79,6 @@ open_modem_config () {
 probe_modem () {
   sudo nmap \
   --min-parallelism 100 \
-  --script nmap-vulners \
   -A \
   -T4 "$(get_modem_ip_address)"
 }
@@ -87,13 +86,33 @@ probe_modem () {
 probe_router () {
   sudo nmap \
   --min-parallelism 100 \
-  --script nmap-vulners \
   -A \
   -T4 "$(get_gateway_ip_address)"
 }
 
-vulnerability_scan () {
-  sudo nmap --min-parallelism 100 --script vulscan -A -T4 "$1"
+exploit_scan () {
+  if ! is_vulscan_installed || ! is_nmap_vulners_installed; then
+    install_nmap_scripts
+  fi
+  sudo nmap \
+  --script nmap-vulners,vulscan \
+  --script-args vulscandb=scipvuldb.csv \
+  -sV "$(get_network_ip_address)/$(get_network_mask_bits)"
+}
+
+os_scan () {
+  sudo nmap \
+  --min-parallelism 100 \
+  -A \
+  -T4 "$(get_network_ip_address)/$(get_network_mask_bits)"
+}
+
+snmp_scan () {
+  sudo nmap \
+  --script snmp-brute,snmp-info \
+  --script-args snmplist=community.lst \
+  -sU -p161 \
+  "$(get_network_ip_address)/$(get_network_mask_bits)"
 }
 
 show_usage () {
@@ -108,6 +127,47 @@ show_unknown_command () {
 
 get_commands () {
   echo "$(show_help)" | grep -o '\-[a-z]*'
+}
+
+get_nmap_script_path () {
+  dirname "$(find /usr/local -type f -name '*.nse' -print | head -n 1)"
+}
+
+is_nmap_vulners_installed () {
+  [[ -d "$(get_nmap_script_path)/nmap-vulners" ]]
+}
+
+is_vulscan_installed () {
+  [[ -d "$(get_nmap_script_path)/vulscan" ]]
+}
+
+install_nmap_vulners () {
+  cd "$(get_nmap_script_path)" || exit 1
+  git clone https://github.com/vulnersCom/nmap-vulners.git
+}
+
+install_vulscan () {
+  cd "$(get_nmap_script_path)" || exit 1
+  git clone https://github.com/scipag/vulscan.git
+}
+
+update_vulscan () {
+  cd "$(get_nmap_script_path)/vulscan/utilities/updater" || exit 1
+  chmod +x "$(get_nmap_script_path)/vulscan/utilities/updater/updateFiles.sh"
+  "$(get_nmap_script_path)/vulscan/utilities/updater/updateFiles.sh"
+}
+
+install_nmap_scripts () {
+  install_nmap_vulners
+  install_vulscan
+  update_vulscan
+}
+
+contains () {
+  local -r haystack="$1"
+  local -r needle="$2"
+
+  [[ "$haystack" == *"$needle"* ]]
 }
 
 show_help () {
@@ -135,8 +195,12 @@ Commands:
   -probe <modem|router>       attempts to identify the operating system, open
                               ports, and running software on your modem or
                               router.
-  -vulscan <target>           runs an advanced vulnerability scan against a
-                              target ip or hostname.
+  -exploitscan                runs an advanced vulnerability scan against all
+                              lan hosts.
+  -osscan                     runs an aggressive operating system/version scan.
+  -snmpscan                   attempts to find lan hosts running snmp (simple
+                              network management protocol)/brute force guessing
+                              the community string.
   -webconfig <modem|router>   opens the web config for your modem or router.
   -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
   -help|-h                    displays help and usage.
@@ -165,7 +229,10 @@ case "$@" in
   "-getsubnet"             ) get_network_mask ;;
   "-probe modem"           ) probe_modem ;;
   "-probe router"          ) probe_router ;;
-  "-vulscan"*              ) shift; vulnerability_scan "$1" ;;
+  "-exploitscan"*          ) shift; exploit_scan "$@" ;;
+  "-osscan"*               ) shift; os_scan "$@" ;;
+  "-snmpscan"*             ) shift; snmp_scan "$@" ;;
+  "-updatevulscan"         ) update_vulscan ;;
   "-webconfig modem"       ) open_modem_config ;;
   "-webconfig router"      ) open_router_config ;;
   "listcommands"           ) get_commands; exit 0 ;;
