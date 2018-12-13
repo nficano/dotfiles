@@ -14,7 +14,6 @@ setup:
 	rm -f ~/.bash_profile
 	rm -f ~/.inputrc
 	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
-	ln -fs $(DOTFILES)/launchd/org.nficano.dotfiles.DropboxSync.plist ${HOME}/Library/LaunchAgents/org.nficano.dotfiles.DropboxSync.plist
 	ln -fs $(DOTFILES)/rc.d/agrc ${HOME}/.agrc
 	ln -fs $(DOTFILES)/rc.d/dircolors ${HOME}/.dircolors
 	ln -fs $(DOTFILES)/rc.d/gitignore ${HOME}/.gitignore
