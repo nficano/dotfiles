@@ -55,13 +55,10 @@ get_gateway_ip_address () {
 }
 
 lan_host_discovery () {
-  sudo nmap \
-  "$(get_network_ip_address)/$(get_network_mask_bits)" \
-  -sn \
-  -n \
-  --min-parallelism 100 \
-  | grep report \
-  | awk '{print $5}'
+  sudo nmap "$(get_network_ip_address)/$(get_network_mask_bits)" -sP -oG - \
+  | grep Host \
+  | awk '{print $2 "\t" $3}' \
+  | sort
 }
 
 get_modem_ip_address () {
@@ -80,11 +77,23 @@ open_modem_config () {
 }
 
 probe_modem () {
-  sudo nmap --min-parallelism 100 -A "$(get_modem_ip_address)"
+  sudo nmap \
+  --min-parallelism 100 \
+  --script nmap-vulners \
+  -A \
+  -T4 "$(get_modem_ip_address)"
 }
 
 probe_router () {
-  sudo nmap --min-parallelism 100 -A "$(get_gateway_ip_address)"
+  sudo nmap \
+  --min-parallelism 100 \
+  --script nmap-vulners \
+  -A \
+  -T4 "$(get_gateway_ip_address)"
+}
+
+vulnerability_scan () {
+  sudo nmap --min-parallelism 100 --script vulscan -A -T4 "$1"
 }
 
 show_usage () {
@@ -126,6 +135,8 @@ Commands:
   -probe <modem|router>       attempts to identify the operating system, open
                               ports, and running software on your modem or
                               router.
+  -vulscan <target>           runs an advanced vulnerability scan against a
+                              target ip or hostname.
   -webconfig <modem|router>   opens the web config for your modem or router.
   -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
   -help|-h                    displays help and usage.
@@ -154,6 +165,7 @@ case "$@" in
   "-getsubnet"             ) get_network_mask ;;
   "-probe modem"           ) probe_modem ;;
   "-probe router"          ) probe_router ;;
+  "-vulscan"*              ) shift; vulnerability_scan "$1" ;;
   "-webconfig modem"       ) open_modem_config ;;
   "-webconfig router"      ) open_router_config ;;
   "listcommands"           ) get_commands; exit 0 ;;
