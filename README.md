@@ -50,17 +50,21 @@ A utility for gathering information about your local network.
 -getpublicip                the globally unique address assigned to your
                             network by your isp
 -getroutingtable            display your routing table.
+-getarptable                display your address resolution protocol (arp)
+                            table.
 -getrouterip                alias to "ip gateway"
 -getispname                 displays the name of your isp
 -probe <modem|router>       attempts to identify the operating system, open
                             ports, and running software on your modem or
                             router.
--exploitscan                runs an advanced vulnerability scan against all
-                            lan hosts.
--osscan                     runs an aggressive operating system/version scan.
--snmpscan                   attempts to find lan hosts running snmp (simple
-                            network management protocol)/brute force guessing
-                            the community string.
+-exploitscan [target]       runs an advanced vulnerability scan against your
+                            current subnet (or target ip if provided).
+-osscan [target]            runs an *aggressive* operating system/version
+                            detection scan against your current subnet (or
+                            target ip if provided).
+-snmpscan [target]          runs a simple network management protocol (snmp)
+                            scan against your current subnet (or target ip if
+                            provided).
 -webconfig <modem|router>   opens the web config for your modem or router.
 -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
 ```

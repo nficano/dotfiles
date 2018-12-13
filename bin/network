@@ -2,6 +2,10 @@
 # network - utility for gathering information about your local network.
 set -e
 
+get_arp_table () {
+  arp -al | awk '{printf "%-35s %-20s %-5s \n", $1, $2, $4}'
+}
+
 get_isp_name () {
   whois "$(get_public_ip_address)" \
   | grep OrgName \
@@ -97,14 +101,15 @@ exploit_scan () {
   sudo nmap \
   --script nmap-vulners,vulscan \
   --script-args vulscandb=scipvuldb.csv \
-  -sV "$(get_network_ip_address)/$(get_network_mask_bits)"
+  -sV "$(get_target "$1")"
 }
 
 os_scan () {
   sudo nmap \
   --min-parallelism 100 \
   -A \
-  -T4 "$(get_network_ip_address)/$(get_network_mask_bits)"
+  -Pn \
+  -T4 "$(get_target "$1")"
 }
 
 snmp_scan () {
@@ -112,7 +117,15 @@ snmp_scan () {
   --script snmp-brute,snmp-info \
   --script-args snmplist=community.lst \
   -sU -p161 \
-  "$(get_network_ip_address)/$(get_network_mask_bits)"
+   "$(get_target "$1")"
+}
+
+get_target () {
+  if [ -z "$1" ]; then
+    echo "$(get_network_ip_address)/$(get_network_mask_bits)"
+  else
+    echo "$1"
+  fi
 }
 
 show_usage () {
@@ -190,17 +203,21 @@ Commands:
   -getpublicip                the globally unique address assigned to your
                               network by your isp
   -getroutingtable            display your routing table.
+  -getarptable                display your address resolution protocol (arp)
+                              table.
   -getrouterip                alias to "ip gateway"
   -getispname                 displays the name of your isp
   -probe <modem|router>       attempts to identify the operating system, open
                               ports, and running software on your modem or
                               router.
-  -exploitscan                runs an advanced vulnerability scan against all
-                              lan hosts.
-  -osscan                     runs an aggressive operating system/version scan.
-  -snmpscan                   attempts to find lan hosts running snmp (simple
-                              network management protocol)/brute force guessing
-                              the community string.
+  -exploitscan [target]       runs an advanced vulnerability scan against your
+                              current subnet (or target ip if provided).
+  -osscan [target]            runs an *aggressive* operating system/version
+                              detection scan against your current subnet (or
+                              target ip if provided).
+  -snmpscan [target]          runs a simple network management protocol (snmp) 
+                              scan against your current subnet (or target ip if
+                              provided).
   -webconfig <modem|router>   opens the web config for your modem or router.
   -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
   -help|-h                    displays help and usage.
@@ -224,14 +241,15 @@ case "$@" in
   "-getpublicip"           ) get_public_ip_address ;;
   "-getrouterip"           ) get_gateway_ip_address ;;
   "-getroutingtable"       ) get_routing_table ;;
+  "-getarptable"           ) get_arp_table ;;
   "-getsubnet -o bits"     ) get_network_mask_bits ;;
   "-getsubnet -o hex"      ) get_network_mask_hex ;;
   "-getsubnet"             ) get_network_mask ;;
   "-probe modem"           ) probe_modem ;;
   "-probe router"          ) probe_router ;;
-  "-exploitscan"*          ) shift; exploit_scan "$@" ;;
-  "-osscan"*               ) shift; os_scan "$@" ;;
-  "-snmpscan"*             ) shift; snmp_scan "$@" ;;
+  "-exploitscan"*          ) shift; exploit_scan "$1" ;;
+  "-osscan"*               ) shift; os_scan "$1" ;;
+  "-snmpscan"*             ) shift; snmp_scan "$1" ;;
   "-updatevulscan"         ) update_vulscan ;;
   "-webconfig modem"       ) open_modem_config ;;
   "-webconfig router"      ) open_router_config ;;
