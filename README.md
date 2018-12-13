@@ -36,27 +36,33 @@ A utility for gathering information about your local network.
 ##### Commands
 
 ```
-  -getlanhosts                discover all devices on your network.
-  -getgatewayip               displays the address of your "network gateway",
-                              or the edge device (ie: router) that sits
-                              between you and another network (ie: the
-                              Internet).
-  -gethostip                  displays your host ip address
-  -getmodemip                 attempts to find the ip address of your modem
-                              (first hop after your router/gateway).
-  -getnetworkip               the common prefix of your private ip address,
-                              used to refer to your subnet as a whole.
-  -getprivateip               alias to "ip host"
-  -getpublicip                the globally unique address assigned to your
-                              network by your isp
-  -getroutingtable            display your routing table.
-  -getrouterip                alias to "ip gateway"
-  -getispname                 displays the name of your isp
-  -probe <modem|router>       attempts to identify the operating system, open
-                              ports, and running software on your modem or
-                              router.
-  -webconfig <modem|router>   opens the web config for your modem or router.
-  -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
+-getlanhosts                discover all devices on your network.
+-getgatewayip               displays the address of your "network gateway",
+                            or the edge device (ie: router) that sits
+                            between you and another network (ie: the
+                            Internet).
+-gethostip                  displays your host ip address
+-getmodemip                 attempts to find the ip address of your modem
+                            (first hop after your router/gateway).
+-getnetworkip               the common prefix of your private ip address,
+                            used to refer to your subnet as a whole.
+-getprivateip               alias to "ip host"
+-getpublicip                the globally unique address assigned to your
+                            network by your isp
+-getroutingtable            display your routing table.
+-getrouterip                alias to "ip gateway"
+-getispname                 displays the name of your isp
+-probe <modem|router>       attempts to identify the operating system, open
+                            ports, and running software on your modem or
+                            router.
+-exploitscan                runs an advanced vulnerability scan against all
+                            lan hosts.
+-osscan                     runs an aggressive operating system/version scan.
+-snmpscan                   attempts to find lan hosts running snmp (simple
+                            network management protocol)/brute force guessing
+                            the community string.
+-webconfig <modem|router>   opens the web config for your modem or router.
+-getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
 ```
 
 ## Installation
