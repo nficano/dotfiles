@@ -85,7 +85,7 @@ evalif "thefuck" "thefuck --alias"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo  # tab completions for sudo
-
+export RELEASE='0.0.1'
 export EDITOR='nano'
 export VISUAL='atom'
 export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
