@@ -28,14 +28,31 @@ show_unknown_command () {
   echo "Try 'dots --help' for more information."
 }
 
+get_latest_version () {
+  curl -s https://api.github.com/repos/nficano/dotfiles/tags | jq -r '.[0].name'
+}
+
+check_for_updates () {
+  latest="$(get_latest_version)"
+  installed="v$DOTFILES_VERSION"
+  if [ "$latest" = "$installed" ]; then
+    echo "You're up-to-date! -" \
+     "nficano/dotfiles $installed is the newest version available."
+  else
+    echo "New version available! -" \
+      "nficano/dotfiles $latest is ready to be installed."
+  fi
+}
+
 show_help () {
 cat <<EOF
 
 dots – utility for managing dotfiles
 
 Commands:
-  -help|-h       displays help and usage.
-  -editprofile   opens bash_profile in your preferred editor.
+  -help|-h          displays help and usage.
+  -editprofile      opens bash_profile in your preferred editor.
+  -checkforupdates  checks if your dotfiles are up-to-date.
 EOF
 }
 
@@ -46,9 +63,10 @@ get_commands () {
 case "$@" in
   "-editprofile"           ) edit_bash_profile ;;
   "--help"                 ) show_help; exit 0 ;;
+  "-checkforupdates"       ) check_for_updates ;;
+  "-listcommands"          ) get_commands; exit 0 ;;
   "-h"                     ) show_help; exit 0 ;;
   ""                       ) show_usage; exit 0 ;;
-  "-listcommands"          ) get_commands; exit 0 ;;
   *                        ) show_unknown_command "$@"; exit 1 ;;
 esac
 exit 0
