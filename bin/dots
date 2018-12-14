@@ -40,7 +40,7 @@ check_for_updates () {
      "nficano/dotfiles $installed is the newest version available."
   else
     echo "New version available! -" \
-      "nficano/dotfiles $latest is ready to be installed."
+      "nficano/dotfiles $latest is ready to be installed (current $installed)."
   fi
 }
 
