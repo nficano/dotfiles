@@ -85,11 +85,17 @@ evalif "thefuck" "thefuck --alias"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo  # tab completions for sudo
-export RELEASE='1.0.1'
+
 export EDITOR='nano'
 export VISUAL='atom'
-export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
+
+export LANG='en_US.UTF-8';
+export LC_ALL='en_US.UTF-8';
 export TERM=xterm-256color
+
+export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
+
+export DOTFILES_VERSION='1.0.1'
 
 # highlighting inside manpages and elsewhere
 export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
@@ -105,6 +111,10 @@ export GREP_COLOR='1;32'                # make match highlight color green
 export DIRENV_LOG_FORMAT=               # stfu direnv
 export WORKON_HOME=$HOME/.virtualenvs
 export PYTHONDONTWRITEBYTECODE=true
+
+export NODE_REPL_HISTORY=$HOME/.node_history  # persistent node REPL history
+export NODE_REPL_HISTORY_SIZE='32768'         # allow 32³ entries
+export NODE_REPL_MODE='sloppy'                # allow non-strict mode code
 
 export HISTCONTROL=ignoredups:erasedups
 export HISTSIZE=100000
@@ -139,8 +149,10 @@ alias vcd='cdvirtualenv'
 alias ga='git add'
 alias gd='git diff'
 alias gs='git status'
-alias reload='source ~/.bash_profile'
+alias reload='exec ${SHELL} -l'
+alias map='xargs -n1'
 
+is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
 is_darwin && alias o='open ./'
 is_darwin && alias fixcamera='sudo killall VDCAssistant'
 is_darwin && alias finder='cd "$(eval fpwd)" || exit 0'
