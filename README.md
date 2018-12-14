@@ -3,6 +3,8 @@
   <div align="center">
     <a href="https://travis-ci.org/nficano/dotfiles"><img src="https://travis-ci.org/nficano/dotfiles.svg?branch=master" /></a>  
     <img src="https://img.shields.io/github/tag/nficano/dotfiles.svg" />
+    <img src="https://img.shields.io/badge/platforms-MacOS%20%7C%20Linux-blue.svg" />
+    <img src="https://img.shields.io/github/last-commit/nficano/dotfiles.svg" />
   </div>
 </p>
 
