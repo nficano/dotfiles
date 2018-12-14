@@ -1,10 +1,10 @@
 <p align="center">
   <img src="https://s3.amazonaws.com/nf-assets/dotfiles-logo.svg" alt="dotfiles" width="474" height="148" />
   <div align="center">
-    <a href="https://travis-ci.org/nficano/dotfiles"><img src="https://travis-ci.org/nficano/dotfiles.svg?branch=master" /></a>  
-    <img src="https://img.shields.io/github/tag/nficano/dotfiles.svg" />
-    <img src="https://img.shields.io/badge/platforms-darwin%20%7C%20linux-blue.svg" />
+    <a href="https://travis-ci.org/nficano/dotfiles"><img src="https://travis-ci.org/nficano/dotfiles.svg?branch=master" /></a>
     <img src="https://img.shields.io/github/last-commit/nficano/dotfiles.svg" />
+    <img src="https://img.shields.io/github/tag/nficano/dotfiles.svg" />
+    <img src="https://img.shields.io/badge/platforms-macos%20%7C%20linux-blue.svg" />
   </div>
 </p>
 
