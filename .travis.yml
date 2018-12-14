@@ -1,0 +1,5 @@
+language: bash
+os: osx
+install: "make"
+script:
+  - make install

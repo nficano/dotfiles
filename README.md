@@ -4,6 +4,11 @@
     alt="dotfiles"
     width="474"
     height="148" />
+
+    <div align="center">
+      <a href="https://travis-ci.org/nficano/dotfiles"><img src="https://travis-ci.org/nficano/dotfiles.svg?branch=master" /></a>  
+      <img src="https://img.shields.io/github/tag/nficano/dotfiles.svg" />
+    </div>    
 </p>
 
 ## Nick Ficano's dotfiles
