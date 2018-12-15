@@ -53,10 +53,6 @@ get_path_checksum () {
   find "$1" -type f -exec md5sum {} \; | sort -k 2 | md5sum  | awk '{print $1}'
 }
 
-get_file_checksum () {
-  md5sum "$1" | awk '{print $1}'
-}
-
 backup () {
   dotfiles_prefix="$(get_dotfiles_prefix)"
   build_prefix="${TMPDIR-'/tmp'}/.build"
