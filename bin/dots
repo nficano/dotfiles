@@ -55,7 +55,7 @@ get_path_checksum () {
 
 backup () {
   dotfiles_prefix="$(get_dotfiles_prefix)"
-  build_prefix="${TMPDIR-'/tmp'}/.build"
+  build_prefix="${TMPDIR-/tmp}/.build"
   backup_prefix="$dotfiles_prefix/.versions/v$DOTFILES_VERSION"
 
   mkdir -p $backup_prefix
