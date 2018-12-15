@@ -13,13 +13,13 @@ setup:
 	mkdir -p ~/.pip
 	rm -f ~/.bash_profile
 	rm -f ~/.inputrc
-	ln -fs $(DOTFILES)/bash_profile ${HOME}/.bash_profile
-	ln -fs $(DOTFILES)/rc.d/agrc ${HOME}/.agrc
-	ln -fs $(DOTFILES)/rc.d/dircolors ${HOME}/.dircolors
-	ln -fs $(DOTFILES)/rc.d/gitignore ${HOME}/.gitignore
-	ln -fs $(DOTFILES)/rc.d/hushlogin ${HOME}/.hushlogin
-	ln -fs $(DOTFILES)/rc.d/inputrc ${HOME}/.inputrc
-	ln -fs $(DOTFILES)/rc.d/nanorc ${HOME}/.nanorc
-	ln -fs $(DOTFILES)/rc.d/pip.conf ${HOME}/.pip/pip.conf
-	ln -fs $(DOTFILES)/rc.d/tmux.conf ${HOME}/.tmux.conf
-	ln -fs $(DOTFILES)/bin ${HOME}/.bin
+	ln -fsn $(DOTFILES)/bash_profile ${HOME}/.bash_profile
+	ln -fsn $(DOTFILES)/rc.d/agrc ${HOME}/.agrc
+	ln -fsn $(DOTFILES)/rc.d/dircolors ${HOME}/.dircolors
+	ln -fsn $(DOTFILES)/rc.d/gitignore ${HOME}/.gitignore
+	ln -fsn $(DOTFILES)/rc.d/hushlogin ${HOME}/.hushlogin
+	ln -fsn $(DOTFILES)/rc.d/inputrc ${HOME}/.inputrc
+	ln -fsn $(DOTFILES)/rc.d/nanorc ${HOME}/.nanorc
+	ln -fsn $(DOTFILES)/rc.d/pip.conf ${HOME}/.pip/pip.conf
+	ln -fsn $(DOTFILES)/rc.d/tmux.conf ${HOME}/.tmux.conf
+	ln -sn $(DOTFILES)/bin ${HOME}/.bin
