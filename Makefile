@@ -22,4 +22,4 @@ setup:
 	ln -fs $(DOTFILES)/rc.d/nanorc ${HOME}/.nanorc
 	ln -fs $(DOTFILES)/rc.d/pip.conf ${HOME}/.pip/pip.conf
 	ln -fs $(DOTFILES)/rc.d/tmux.conf ${HOME}/.tmux.conf
-	ln -s $(DOTFILES)/bin ${HOME}/.bin
+	ln -fs $(DOTFILES)/bin ${HOME}/.bin

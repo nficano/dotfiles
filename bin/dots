@@ -84,10 +84,9 @@ backup () {
 
 upgrade () {
   if is_update_available; then
-    silence reload_bash_profile
     version="v$DOTFILES_VERSION"
     log "%s" "New version available!" \
-      "installing nficano/dotfiles $(get_latest_version)..."
+      "installing nficano/dotfiles $(get_latest_version) ..."
     backup
     cd "$(get_dotfiles_prefix)" || exit 1
     silence git fetch --all
