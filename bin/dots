@@ -46,7 +46,7 @@ get_repo_tags () {
 }
 
 get_latest_version () {
-  echo "$(get_repo_tags)" | jq -r '.[0].name'
+  echo "$(get_repo_tags)" | grep -Po 'v\d+.\d+.\d+' | head -1
 }
 
 get_path_checksum () {
@@ -59,7 +59,7 @@ get_file_checksum () {
 
 backup () {
   dotfiles_prefix="$(get_dotfiles_prefix)"
-  build_prefix="$TMPDIR/.build"
+  build_prefix="${TMPDIR-'/tmp'}/.build"
   backup_prefix="$dotfiles_prefix/.versions/v$DOTFILES_VERSION"
 
   mkdir -p $backup_prefix
