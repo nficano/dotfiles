@@ -112,8 +112,7 @@ check_for_updates () {
       "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
   else
     log "%s" "New version available!" \
-      "nficano/dotfiles $(get_latest_version) is ready to be version " \
-      "(current v$DOTFILES_VERSION)."
+      "nficano/dotfiles $(get_latest_version) is ready to be installed!"
   fi
 }
 
