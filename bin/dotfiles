@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# dots - utility for managing dotfiles
+# dotfiles - utility for managing dotfiles
 set -e
 shopt -s dotglob
 
 GITHUB_API_URL='https://api.github.com'
 GITHUB_REPO='nficano/dotfiles'
-
-silence () {
-  "$@" 2> /dev/null > /dev/null;
-}
 
 log () {
   # shellcheck disable=SC2059
@@ -31,29 +27,19 @@ get_dotfiles_prefix () {
   echo "$(git rev-parse --show-toplevel)"
 }
 
-show_usage () {
-  log "Usage: dots [OPTION]..."
-  log "Try 'dots --help' for more information."
-}
-
-show_unknown_command () {
-  log "ERROR: unknown command \"$1\""
-  log "Try 'dots --help' for more information."
-}
-
-get_repo_tags () {
-  curl -s  "$GITHUB_API_URL/repos/$GITHUB_REPO/tags"
-}
-
 get_latest_version () {
-  echo "$(get_repo_tags)" | grep -Po 'v\d+.\d+.\d+' | head -1
+  repo_tags=$(curl -s  "$GITHUB_API_URL/repos/$GITHUB_REPO/tags")
+  echo "$repo_tags" | grep -Po 'v\d+.\d+.\d+' | head -1
 }
 
 get_path_checksum () {
-  find "$1" -type f -exec md5sum {} \; | sort -k 2 | md5sum  | awk '{print $1}'
+  find "$1" -type f -exec md5sum {} \; \
+  | sort -k 2 \
+  | md5sum \
+  | awk '{print $1}'
 }
 
-backup () {
+backup_local_dotfiles () {
   dotfiles_prefix="$(get_dotfiles_prefix)"
   build_prefix="${TMPDIR-/tmp}/.build"
   backup_prefix="$dotfiles_prefix/.versions/v$DOTFILES_VERSION"
@@ -72,24 +58,29 @@ backup () {
   checksum="$(get_path_checksum "$build_prefix")"
   mv "$backup_prefix/backup.zip" "$backup_prefix/$checksum.zip"
   rm -rf $build_prefix
-  log "Sucessfully backed up nficano/dotfiles to: $backup_prefix/$checksum.zip"
+  log "Backed up $GITHUB_REPO to: $backup_prefix/$checksum.zip"
+}
+
+pull_latest_changes () {
+  log "Synchronize local repository with upstream changes ..."
+  cd "$(get_dotfiles_prefix)" || exit 1
+  git fetch --all
+  git reset --hard origin/master
 }
 
 upgrade () {
   if is_update_available; then
     latest="$(get_latest_version)"
     log "New version available! (v$DOTFILES_VERSION → $latest)"
-    log "Installing nficano/dotfiles $(get_latest_version) ..."
-    backup
-    cd "$(get_dotfiles_prefix)" || exit 1
-    git fetch --all
-    git reset --hard origin/master
+    log "Installing $GITHUB_REPO $(get_latest_version) ..."
+    backup_local_dotfiles
+    pull_latest_changes
     make install
     log "Upgrade completed successfully!"
     log "Nearly up to date! Run \"reload\" to finish updating."
   else
     log "You're up to date!"
-    log "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
+    log "$GITHUB_REPO v$DOTFILES_VERSION is the newest version available."
   fi
 }
 
@@ -103,27 +94,26 @@ is_update_available () {
   fi
 }
 
-check_for_updates () {
-  if ! is_update_available; then
-    log "You're up to date!"
-    log "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
-  else
-    log "New version available!"
-    log "nficano/dotfiles $(get_latest_version) is ready to be installed!"
-  fi
+show_usage () {
+  log "Usage: dotfiles [OPTION]..."
+  log "Try 'dotfiles --help' for more information."
+}
+
+show_unknown_command () {
+  log "ERROR: unknown command \"$1\""
+  log "Try 'dotfiles --help' for more information."
 }
 
 show_help () {
 cat <<EOF
 
-dots – utility for managing dotfiles
+dotfiles – utility for managing dotfiles
 
 Commands:
   -help|-h            displays help and usage.
-  -editprofile        opens bash_profile in your editor.
-  -checkforupdates    checks if your dotfiles is the latest version.
-  -upgrade            upgrades your dotfiles to latest version.
-  -backup             makes a copy of your current dotfiles.
+  -edit               opens ``~/.bash_profile`` in your editor.
+  -upgrade            upgrade to the latest dotfiles release.
+  -backup             creates local dotfiles backup.
 EOF
 }
 
@@ -133,11 +123,10 @@ get_commands () {
 
 case "$@" in
   "--help"                 ) show_help; exit 0 ;;
-  "-checkforupdates"       ) check_for_updates ;;
-  "-editprofile"           ) edit_bash_profile ;;
+  "-edit"                  ) edit_bash_profile ;;
   "-listcommands"          ) get_commands; exit 0 ;;
   "-upgrade"               ) upgrade ;;
-  "-backup"                ) backup ;;
+  "-backup"                ) backup_local_dotfiles ;;
   "-h"                     ) show_help; exit 0 ;;
   ""                       ) show_usage; exit 0 ;;
   *                        ) show_unknown_command "$@"; exit 1 ;;

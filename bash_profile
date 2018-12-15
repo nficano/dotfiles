@@ -155,6 +155,7 @@ is_darwin && alias fixcamera='sudo killall VDCAssistant'
 is_darwin && alias finder='cd "$(eval fpwd)" || exit 0'
 is_linux || is_installed "gls" && alias ls='ls --color=auto -gXF --file-type'
 is_linux || is_installed "gls" && alias ll='ls --color=auto -algX'
+
 is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
 is_installed "bat" && alias cat="bat --paging never"
 is_installed "network" && complete -W "$(network listcommands)" 'network'

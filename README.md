@@ -26,7 +26,7 @@ recommend using it for reference purposes only.
 
 - ``bin/sync-to-dropbox`` - syncronizes frequently updated files to dropbox.
 - ``bin/network`` - a utility for gathering information about your local network.
-- ``bin/dots`` - a utility for managing dotfiles.
+- ``bin/dotfiles`` - a utility for managing dotfiles.
 - ``misc/lan-doctor`` - detects and repairs network issues.
 - ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs sync-to-dropbox hourly via launchd.
 
@@ -72,17 +72,16 @@ A utility for gathering information about your local network.
 -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
 ```
 
-### dots
+### dotfiles
 
 A utility for managing dotfiles.
 
 ##### Commands
 
 ```
--editprofile        opens bash_profile in your editor.
--checkforupdates    checks if your dotfiles is the latest version.
--upgrade            upgrades your dotfiles to latest version.
--backup             makes a copy of your current dotfiles.
+-edit               opens ``~/.bash_profile`` in your editor.
+-upgrade            upgrade to the latest dotfiles release.
+-backup             creates local dotfiles backup.
 ```
 
 ## Installation

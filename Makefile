@@ -18,6 +18,7 @@ setup:
 	ln -fsn $(DOTFILES)/rc.d/agrc ${HOME}/.agrc
 	ln -fsn $(DOTFILES)/rc.d/dircolors ${HOME}/.dircolors
 	ln -fsn $(DOTFILES)/rc.d/gitignore ${HOME}/.gitignore
+	ln -fsn $(DOTFILES)/rc.d/gitmessage ${HOME}/.gitmessage
 	ln -fsn $(DOTFILES)/rc.d/hushlogin ${HOME}/.hushlogin
 	ln -fsn $(DOTFILES)/rc.d/inputrc ${HOME}/.inputrc
 	ln -fsn $(DOTFILES)/rc.d/nanorc ${HOME}/.nanorc

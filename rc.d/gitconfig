@@ -15,7 +15,7 @@
 [diff]
 	ignoresubmodules = untracked
 [core]
-	excludesfile = /Users/nficano/.gitignore
+	excludesfile = ~/.gitignore
 	autocrlf = input
 	pager = diff-so-fancy | less --tabs=4 -RFX
 [push]
@@ -39,3 +39,5 @@
 	whitespace = red reverse
 [pull]
 	rebase = true
+[commit]
+  template = ~/.gitmessage
