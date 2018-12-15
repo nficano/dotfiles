@@ -68,7 +68,7 @@ backup () {
 
   (
     cd $build_prefix;
-    zip -ur "backup.zip" ./* -x "*.versions*" -x "*.git*"
+    zip -ur "backup.zip" ./* -x "*.versions*"
   )
 
   mv "$build_prefix/backup.zip" "$backup_prefix/backup.zip"
