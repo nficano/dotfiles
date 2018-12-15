@@ -75,6 +75,7 @@ backup () {
   checksum="$(get_path_checksum "$build_prefix")"
   mv "$backup_prefix/backup.zip" "$backup_prefix/$checksum.zip"
   rm -rf $build_prefix
+  log "Sucessfully backed up your dotfiles to: $backup_prefix/$checksum.zip"
 }
 
 upgrade () {
@@ -87,10 +88,7 @@ upgrade () {
     git fetch --all
     git reset --hard origin/master
     make install
-    log "%s" "You're now up-to-date!" \
-      "nficano/dotfiles has been updated from v$DOTFILES_VERSION to $latest"
-    # shellcheck source=/dev/null
-    source ~/.bash_profile
+    log "%s" "Nearly up to date! Run \"reload\" to finish updating to $latest."
   else
     log "%s" "You're up-to-date!" \
       "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
