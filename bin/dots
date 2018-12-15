@@ -79,10 +79,17 @@ backup () {
 
 upgrade () {
   if is_update_available; then
+    version="v$DOTFILES_VERSION"
+    log "%s" "New version available!" \
+      "installing nficano/dotfiles $(get_latest_version)..."
     backup
     cd "$(get_dotfiles_prefix)" || exit 1
-    git fetch --all
-    git reset --hard origin/master
+    silence git fetch --all
+    silence git reset --hard origin/master
+    silence make install
+    reload
+    log "%s" "You're now up-to-date!" \
+      "nficano/dotfiles has been updated from v$DOTFILES_VERSION to $version"
   else
     log "%s" "You're up-to-date!" \
       "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
