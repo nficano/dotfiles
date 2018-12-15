@@ -11,8 +11,9 @@ setup:
 	mkdir -p ~/github
 	mkdir -p ~/Repos
 	mkdir -p ~/.pip
-	rm -f ~/.bash_profile
-	rm -f ~/.inputrc
+	rm -f ${HOME}/.bash_profile
+	rm -f ${HOME}/.inputrc
+	rm -f ${HOME}/.bin
 	ln -fsn $(DOTFILES)/bash_profile ${HOME}/.bash_profile
 	ln -fsn $(DOTFILES)/rc.d/agrc ${HOME}/.agrc
 	ln -fsn $(DOTFILES)/rc.d/dircolors ${HOME}/.dircolors
@@ -22,4 +23,4 @@ setup:
 	ln -fsn $(DOTFILES)/rc.d/nanorc ${HOME}/.nanorc
 	ln -fsn $(DOTFILES)/rc.d/pip.conf ${HOME}/.pip/pip.conf
 	ln -fsn $(DOTFILES)/rc.d/tmux.conf ${HOME}/.tmux.conf
-	ln -sn $(DOTFILES)/bin ${HOME}/.bin
+	ln -s $(DOTFILES)/bin ${HOME}/.bin
