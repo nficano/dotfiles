@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # dots - utility for managing dotfiles
 set -e
+shopt -s dotglob
+
 GITHUB_API_URL='https://api.github.com'
 GITHUB_REPO='nficano/dotfiles'
 
@@ -64,7 +66,7 @@ backup () {
   mkdir -p $backup_prefix
   mkdir -p $build_prefix
 
-  cp -R $dotfiles_prefix/* $build_prefix/
+  cp -r $dotfiles_prefix/* $build_prefix/
 
   (
     cd $build_prefix;
