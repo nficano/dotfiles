@@ -89,8 +89,6 @@ complete -cf sudo  # tab completions for sudo
 export EDITOR='nano'
 export VISUAL='atom'
 
-export LANG='en_US.UTF-8';
-export LC_ALL='en_US.UTF-8';
 export TERM=xterm-256color
 
 export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
