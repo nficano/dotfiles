@@ -87,7 +87,6 @@ upgrade () {
     silence git fetch --all
     silence git reset --hard origin/master
     silence make install
-    silence reload_bash_profile
     log "%s" "You're now up-to-date!" \
       "nficano/dotfiles has been updated from v$DOTFILES_VERSION to $latest"
     # shellcheck source=/dev/null
