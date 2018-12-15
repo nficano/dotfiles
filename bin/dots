@@ -14,6 +14,11 @@ log () {
   printf "$message\n" "$@"
 }
 
+reload_bash_profile () {
+  # shellcheck source=/dev/null
+  source "$(get_dotfiles_prefix)/bash_profile"
+}
+
 edit_bash_profile () {
   bash_profile="$(get_dotfiles_prefix)/bash_profile"
   open_file_with_preferred_editor "$bash_profile"
@@ -79,6 +84,7 @@ backup () {
 
 upgrade () {
   if is_update_available; then
+    silence reload_bash_profile
     version="v$DOTFILES_VERSION"
     log "%s" "New version available!" \
       "installing nficano/dotfiles $(get_latest_version)..."
@@ -87,7 +93,7 @@ upgrade () {
     silence git fetch --all
     silence git reset --hard origin/master
     silence make install
-    reload
+    silence reload_bash_profile
     log "%s" "You're now up-to-date!" \
       "nficano/dotfiles has been updated from v$DOTFILES_VERSION to $version"
   else
