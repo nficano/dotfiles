@@ -68,7 +68,7 @@ backup () {
 
   (
     cd $build_prefix;
-    silence zip -ur "backup.zip" ./* -x "*.versions*" -x "*.git*"
+    zip -ur "backup.zip" ./* -x "*.versions*" -x "*.git*"
   )
 
   mv "$build_prefix/backup.zip" "$backup_prefix/backup.zip"
@@ -84,9 +84,9 @@ upgrade () {
       "installing nficano/dotfiles $(get_latest_version) ..."
     backup
     cd "$(get_dotfiles_prefix)" || exit 1
-    silence git fetch --all
-    silence git reset --hard origin/master
-    silence make install
+    git fetch --all
+    git reset --hard origin/master
+    make install
     log "%s" "You're now up-to-date!" \
       "nficano/dotfiles has been updated from v$DOTFILES_VERSION to $latest"
     # shellcheck source=/dev/null
