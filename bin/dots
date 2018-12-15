@@ -11,9 +11,8 @@ silence () {
 }
 
 log () {
-  message="$1"; shift
   # shellcheck disable=SC2059
-  printf "$message\n" "$@"
+  printf "$(tput setaf 2)%s$(tput sgr0)\n" "$@"
 }
 
 edit_bash_profile () {
@@ -77,23 +76,24 @@ backup () {
   checksum="$(get_path_checksum "$build_prefix")"
   mv "$backup_prefix/backup.zip" "$backup_prefix/$checksum.zip"
   rm -rf $build_prefix
-  log "Sucessfully backed up your dotfiles to: $backup_prefix/$checksum.zip"
+  log "Sucessfully backed up nficano/dotfiles to: $backup_prefix/$checksum.zip"
 }
 
 upgrade () {
   if is_update_available; then
     latest="$(get_latest_version)"
-    log "%s" "New version available!" \
-      "installing nficano/dotfiles $(get_latest_version) ..."
+    log "New version available! (v$DOTFILES_VERSION → $latest)"
+    log "Installing nficano/dotfiles $(get_latest_version) ..."
     backup
     cd "$(get_dotfiles_prefix)" || exit 1
     git fetch --all
     git reset --hard origin/master
     make install
-    log "%s" "Nearly up to date! Run \"reload\" to finish updating to $latest."
+    log "Upgrade completed successfully!"
+    log "Nearly up to date! Run \"reload\" to finish updating."
   else
-    log "%s" "You're up-to-date!" \
-      "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
+    log "You're up to date!"
+    log "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
   fi
 }
 
@@ -109,11 +109,11 @@ is_update_available () {
 
 check_for_updates () {
   if ! is_update_available; then
-    log "%s" "You're up-to-date!" \
-      "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
+    log "You're up to date!"
+    log "nficano/dotfiles v$DOTFILES_VERSION is the newest version available."
   else
-    log "%s" "New version available!" \
-      "nficano/dotfiles $(get_latest_version) is ready to be installed!"
+    log "New version available!"
+    log "nficano/dotfiles $(get_latest_version) is ready to be installed!"
   fi
 }
 
