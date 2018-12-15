@@ -79,7 +79,10 @@ A utility for managing dotfiles.
 ##### Commands
 
 ```
--editprofile   opens bash_profile in your preferred editor.
+-editprofile        opens bash_profile in your editor.
+-checkforupdates    checks if your dotfiles is the latest version.
+-upgrade            upgrades your dotfiles to latest version.
+-backup             makes a copy of your current dotfiles.
 ```
 
 ## Installation
