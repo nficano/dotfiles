@@ -1,45 +1,57 @@
 #!/usr/bin/env bash
-# dotfiles - utility for managing dotfiles
-set -e
+#/ dotfiles – utility for managing dotfiles.
+#/
+#/ Commands:
+#/   -help | -h   displays help and usage.
+#/   -edit        opens "~/.bash_profile" in your editor.
+#/   -upgrade     upgrade to the latest dotfiles release.
+#/   -backup      creates local dotfiles backup.
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
 shopt -s dotglob
+export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 GITHUB_API_URL='https://api.github.com'
 GITHUB_REPO='nficano/dotfiles'
 
-log () {
+log() {
   # shellcheck disable=SC2059
   printf "$(tput setaf 2)%s$(tput sgr0)\n" "$@"
 }
 
-edit_bash_profile () {
+edit_bash_profile() {
   bash_profile="$(get_dotfiles_prefix)/bash_profile"
   open_file_with_preferred_editor "$bash_profile"
 }
 
-open_file_with_preferred_editor () {
+open_file_with_preferred_editor() {
   ${VISUAL:-${EDITOR:-vim}} $1
 }
 
-get_dotfiles_prefix () {
+get_dotfiles_prefix() {
   fp="$(readlink -f ${0})"
   dir=$(dirname $fp)
   cd $dir || exit 1
   echo "$(git rev-parse --show-toplevel)"
 }
 
-get_latest_version () {
-  repo_tags=$(curl -s  "$GITHUB_API_URL/repos/$GITHUB_REPO/tags")
+get_latest_version() {
+  repo_tags=$(curl -s "$GITHUB_API_URL/repos/$GITHUB_REPO/tags")
   echo "$repo_tags" | grep -Po 'v\d+.\d+.\d+' | head -1
 }
 
-get_path_checksum () {
-  find "$1" -type f -exec md5sum {} \; \
-  | sort -k 2 \
-  | md5sum \
-  | awk '{print $1}'
+get_path_checksum() {
+  find "$1" -type f -exec md5sum {} \; |
+    sort -k 2 |
+    md5sum |
+    awk '{print $1}'
 }
 
-backup_local_dotfiles () {
+backup_local_dotfiles() {
   dotfiles_prefix="$(get_dotfiles_prefix)"
   build_prefix="${TMPDIR-/tmp}/.build"
   backup_prefix="$dotfiles_prefix/.versions/v$DOTFILES_VERSION"
@@ -50,7 +62,7 @@ backup_local_dotfiles () {
   cp -r $dotfiles_prefix/* $build_prefix/
 
   (
-    cd $build_prefix;
+    cd $build_prefix
     zip -ur "backup.zip" ./* -x "*.versions*"
   )
 
@@ -61,14 +73,14 @@ backup_local_dotfiles () {
   log "Backed up $GITHUB_REPO to: $backup_prefix/$checksum.zip"
 }
 
-pull_latest_changes () {
+pull_latest_changes() {
   log "Synchronize local repository with upstream changes ..."
   cd "$(get_dotfiles_prefix)" || exit 1
   git fetch --all
   git reset --hard origin/master
 }
 
-upgrade () {
+upgrade() {
   if is_update_available; then
     latest="$(get_latest_version)"
     log "New version available! (v$DOTFILES_VERSION → $latest)"
@@ -77,14 +89,14 @@ upgrade () {
     pull_latest_changes
     make install
     log "Upgrade completed successfully!"
-    log "Nearly up to date! Run \"reload\" to finish updating."
+    log 'Nearly up to date! Run "reload" to finish updating.'
   else
     log "You're up to date!"
     log "$GITHUB_REPO v$DOTFILES_VERSION is the newest version available."
   fi
 }
 
-is_update_available () {
+is_update_available() {
   latest="$(get_latest_version)"
   version="v$DOTFILES_VERSION"
   if [ "$latest" = "$version" ]; then
@@ -94,41 +106,34 @@ is_update_available () {
   fi
 }
 
-show_usage () {
+show_usage() {
   log "Usage: dotfiles [OPTION]..."
   log "Try 'dotfiles --help' for more information."
 }
 
-show_unknown_command () {
+show_unknown_command() {
   log "ERROR: unknown command \"$1\""
   log "Try 'dotfiles --help' for more information."
+  exit 1
 }
 
-show_help () {
-cat <<EOF
-
-dotfiles – utility for managing dotfiles
-
-Commands:
-  -help|-h            displays help and usage.
-  -edit               opens ``~/.bash_profile`` in your editor.
-  -upgrade            upgrade to the latest dotfiles release.
-  -backup             creates local dotfiles backup.
-EOF
+show_help() {
+  grep '^#/' < "$0" | cut -c4-
+  exit 0
 }
 
-get_commands () {
+get_commands() {
   echo "$(show_help)" | grep -o '\-[a-z]*'
 }
 
 case "$@" in
-  "--help"                 ) show_help; exit 0 ;;
+  "--help"                 ) show_help; ;;
   "-edit"                  ) edit_bash_profile ;;
-  "-listcommands"          ) get_commands; exit 0 ;;
+  "-listcommands"          ) get_commands; ;;
   "-upgrade"               ) upgrade ;;
   "-backup"                ) backup_local_dotfiles ;;
-  "-h"                     ) show_help; exit 0 ;;
-  ""                       ) show_usage; exit 0 ;;
-  *                        ) show_unknown_command "$@"; exit 1 ;;
+  "-h"                     ) show_help ;;
+  ""                       ) show_usage ;;
+  *                        ) show_unknown_command "$@" ;;
 esac
 exit 0

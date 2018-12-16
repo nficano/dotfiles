@@ -1,6 +1,9 @@
 #!/bin/sh
-set -e
-
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
 export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # shellcheck disable=SC2154
@@ -9,7 +12,7 @@ trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 BREW_PREFIX="/usr/local"
 BREW_INSTALLER="https://raw.githubusercontent.com/Homebrew/install/master/install"
 
-run_setup () {
+run_setup() {
   SECONDS=0
   request_root_privileges
   setup_xcode
@@ -17,33 +20,34 @@ run_setup () {
   install_formulaes_from_brewfile
 
   # shellcheck disable=SC2039
-  echo "✨  Done in $(($SECONDS))s."
+  echo "✨  Done in $((SECONDS))s."
   exit 0
 }
 
-log () {
-  message="$1"; shift
+log() {
+  message="$1"
+  shift
   # shellcheck disable=SC2059
   printf "$message\n" "$@"
 }
 
-get_dotfiles_path () {
+get_dotfiles_path() {
   fp="$(readlink -f ${0})"
   dir=$(dirname $fp)
   cd $dir || exit 1
   echo "$(git rev-parse --show-toplevel)"
 }
 
-get_brewfile_path () {
+get_brewfile_path() {
   echo "$(get_dotfiles_path)/Brewfile"
 }
 
-install_formulaes_from_brewfile () {
+install_formulaes_from_brewfile() {
   brew update --force
   brew bundle --file="$(get_brewfile_path)"
 }
 
-is_xcode_command_line_tools_installed () {
+is_xcode_command_line_tools_installed() {
   if xcode-select -p > /dev/null; then
     return 0
   else
@@ -51,14 +55,14 @@ is_xcode_command_line_tools_installed () {
   fi
 }
 
-install_xcode_command_line_tools () {
+install_xcode_command_line_tools() {
   xcode-select --install > /dev/null
   until xcode-select -p > /dev/null; do
     sleep 5
   done
 }
 
-is_xcode_eula_accepted () {
+is_xcode_eula_accepted() {
   if sudo xcodebuild -license status; then
     return 0
   else
@@ -66,11 +70,11 @@ is_xcode_eula_accepted () {
   fi
 }
 
-accept_xcode_eula () {
+accept_xcode_eula() {
   sudo xcodebuild -license accept
 }
 
-setup_xcode () {
+setup_xcode() {
   if ! is_xcode_command_line_tools_installed; then
     log "Installing Xcode Command Line Tools ..."
     install_xcode_command_line_tools
@@ -86,20 +90,20 @@ setup_xcode () {
   fi
 }
 
-is_brew_installed () {
-  if command -v brew >/dev/null; then
+is_brew_installed() {
+  if command -v brew > /dev/null; then
     return 0
   else
     return 1
   fi
 }
 
-install_brew () {
+install_brew() {
   curl -fsS $BREW_INSTALLER | ruby
   export PATH="/usr/local/bin:$PATH"
 }
 
-setup_brew () {
+setup_brew() {
   if [ -d "$BREW_PREFIX" ]; then
     if ! [ -r "$BREW_PREFIX" ]; then
       sudo chown -R "$LOGNAME:admin" "$BREW_PREFIX"
@@ -117,7 +121,7 @@ setup_brew () {
   fi
 }
 
-request_root_privileges () {
+request_root_privileges() {
   log "Requesting root privileges ..."
   sudo -v
 }
