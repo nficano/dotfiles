@@ -226,23 +226,25 @@ install_nmap_scripts() {
   update_vulscan
 }
 
-contains() {
-  local -r haystack="$1"
-  local -r needle="$2"
-
-  [[ $haystack == *"$needle"* ]]
-}
-
 show_help() {
   grep '^#/' < "$0" | cut -c4-
   exit 0
+}
+
+is_darwin() {
+  [[ $(uname -s) == "Darwin" ]]
+}
+
+is_linux() {
+  [[ $(uname -s) == "Linux" ]]
 }
 
 if [ ! -x "$(command -v nmap)" ] ||
    [ ! -x "$(command -v sipcalc)" ] ||
    [ ! -x "$(command -v egrep)" ]; then
   echo "Error: 'nmap', 'sipcalc', and 'egrep' must first be installed."
-  echo "To fix, try running: brew install nmap sipcalc egrep"
+  is_darwin && echo "To fix, try running:\n\tbrew install nmap sipcalc egrep"
+  is_linux && echo "To fix, try running:\n\tapt-get install nmap sipcalc egrep"
   exit 1
 fi
 
