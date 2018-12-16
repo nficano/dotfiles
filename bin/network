@@ -243,8 +243,8 @@ if [ ! -x "$(command -v nmap)" ] ||
    [ ! -x "$(command -v sipcalc)" ] ||
    [ ! -x "$(command -v egrep)" ]; then
   echo "Error: 'nmap', 'sipcalc', and 'egrep' must first be installed."
-  is_darwin && echo "To fix, try running:\n\tbrew install nmap sipcalc egrep"
-  is_linux && echo "To fix, try running:\n\tapt-get install nmap sipcalc egrep"
+  is_darwin && echo "To fix, try running: brew install nmap sipcalc egrep"
+  is_linux && echo "To fix, try running: apt-get install nmap sipcalc egrep"
   exit 1
 fi
 
