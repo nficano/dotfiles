@@ -18,6 +18,22 @@ export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 GITHUB_API_URL='https://api.github.com'
 GITHUB_REPO='nficano/dotfiles'
 
+show_usage() {
+  log "Usage: dotfiles [OPTION]..."
+  log "Try 'dotfiles --help' for more information."
+}
+
+show_unknown_command() {
+  log "ERROR: unknown command \"$1\""
+  log "Try 'dotfiles --help' for more information."
+  exit 1
+}
+
+show_help() {
+  grep '^#/' < "$0" | cut -c4-
+  exit 0
+}
+
 log() {
   # shellcheck disable=SC2059
   printf "$(tput setaf 2)%s$(tput sgr0)\n" "$@"
@@ -53,24 +69,29 @@ get_path_checksum() {
 
 backup_local_dotfiles() {
   dotfiles_prefix="$(get_dotfiles_prefix)"
-  build_prefix="${TMPDIR-/tmp}/.build"
   backup_prefix="$dotfiles_prefix/.versions/v$DOTFILES_VERSION"
+  zipfile=$(backup_directory "$(get_dotfiles_prefix)" $backup_prefix)
+  log "Backed up $GITHUB_REPO to: $zipfile"
+}
 
-  mkdir -p $backup_prefix
-  mkdir -p $build_prefix
+backup_directory() {
+  local src=$1
+  local dst=$2
+  local _dst="${TMPDIR-/tmp}/.build"
+  local filename
 
-  cp -r $dotfiles_prefix/* $build_prefix/
+  mkdir -p $_dst
+  mkdir -p $dst
+  cp -r $src/* $_dst/
+  cd $_dst
+  tar -czvf "artifact.0" .
+  mv "$_dst/artifact.0" "$dst/artifact.0"
 
-  (
-    cd $build_prefix
-    zip -ur "backup.zip" ./* -x "*.versions*"
-  )
+  filename="$dst/$(get_path_checksum "$_dst").zip"
 
-  mv "$build_prefix/backup.zip" "$backup_prefix/backup.zip"
-  checksum="$(get_path_checksum "$build_prefix")"
-  mv "$backup_prefix/backup.zip" "$backup_prefix/$checksum.zip"
-  rm -rf $build_prefix
-  log "Backed up $GITHUB_REPO to: $backup_prefix/$checksum.zip"
+  mv "$dst/artifact.0" "$filename"
+  rm -rf $_dst
+  echo $filename
 }
 
 pull_latest_changes() {
@@ -83,11 +104,14 @@ pull_latest_changes() {
 upgrade() {
   if is_update_available; then
     latest="$(get_latest_version)"
+
     log "New version available! (v$DOTFILES_VERSION → $latest)"
     log "Installing $GITHUB_REPO $(get_latest_version) ..."
+
     backup_local_dotfiles
     pull_latest_changes
     make install
+
     log "Upgrade completed successfully!"
     log 'Nearly up to date! Run "reload" to finish updating.'
   else
@@ -104,22 +128,6 @@ is_update_available() {
   else
     return 0
   fi
-}
-
-show_usage() {
-  log "Usage: dotfiles [OPTION]..."
-  log "Try 'dotfiles --help' for more information."
-}
-
-show_unknown_command() {
-  log "ERROR: unknown command \"$1\""
-  log "Try 'dotfiles --help' for more information."
-  exit 1
-}
-
-show_help() {
-  grep '^#/' < "$0" | cut -c4-
-  exit 0
 }
 
 get_commands() {
