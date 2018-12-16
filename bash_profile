@@ -159,6 +159,6 @@ is_linux || is_installed "gls" && alias ll='ls --color=auto -algX'
 is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
 is_installed "bat" && alias cat="bat --paging never"
 is_installed "network" && complete -W "$(network listcommands)" 'network'
-is_installed "dots" && complete -W "$(dots -listcommands)" 'dots'
+is_installed "dotfiles" && complete -W "$(dots -listcommands)" 'dots'
 
 setup_ssh
