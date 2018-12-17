@@ -1,0 +1,3 @@
+#!/bin/sh
+# unstages all files
+git reset
