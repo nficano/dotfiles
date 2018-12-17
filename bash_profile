@@ -104,6 +104,13 @@ export LESS_TERMCAP_so=$'\E[38;5;246m'    # begin standout-mode - info box
 export LESS_TERMCAP_ue=$'\E[0m'           # end underline
 export LESS_TERMCAP_us=$'\E[04;38;5;146m' # begin underlin
 
+# highlighting inside manpages tldr
+export TLDR_HEADER='magenta bold underline'
+export TLDR_QUOTE='italic'
+export TLDR_DESCRIPTION='green'
+export TLDR_CODE='red'
+export TLDR_PARAM='blue'
+
 export MANPAGER="less -X"               # don’t clear screen after quitting man
 export GREP_COLOR='1;32'                # make match highlight color green
 export DIRENV_LOG_FORMAT=               # stfu direnv
@@ -160,5 +167,5 @@ is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
 is_installed "bat" && alias cat="bat --paging never"
 is_installed "network" && complete -W "$(network listcommands)" 'network'
 is_installed "dotfiles" && complete -W "$(dotfiles -listcommands)" 'dotfiles'
-
+is_installed "tldr" && complete -W "$(tldr 2>/dev/null --list)" 'tldr'
 setup_ssh
