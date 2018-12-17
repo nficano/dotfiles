@@ -31,7 +31,8 @@ main() {
   fi
 
   if [ -d "$HOME/github/dotfiles" ]; then
-    printf '\033[32mSUCCESS:\033[0m Repository downloaded to ~/dotfiles\nNavigate to ~/github/dotfiles and run `make install`'
+    cd $HOME/github/dotfiles
+    make install
   else
     printf '\033[31mERROR:\033[0m dotfiles either not downloaded or not extracted successfully\n' >&2
     exit 1
