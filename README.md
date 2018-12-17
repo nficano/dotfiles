@@ -87,7 +87,7 @@ A utility for managing dotfiles.
 
 ## Installation
 
-### Method 1 (the ``git clone`` method)
+#### Method 1 (the ``git clone`` method)
 
 ```bash
 $ mkdir -p ~/github
@@ -97,13 +97,13 @@ $ cd dotfiles
 $ make install
 ```
 
-### Method 2 (the ``curl`` method)
+#### Method 2 (the ``curl`` method)
 
 ```bash
 $ curl sh.nickficano.com | sh
 ```
 
-### Method 3 (the ``wget`` method)
+#### Method 3 (the ``wget`` method)
 
 ```bash
 $ wget -qO- sh.nickficano.com | sh
