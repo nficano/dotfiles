@@ -28,6 +28,7 @@ recommend using it for reference purposes only.
 - ``bin/network`` - a utility for gathering information about your local network.
 - ``bin/dotfiles`` - a utility for managing dotfiles.
 - ``misc/lan-doctor`` - detects and repairs network issues.
+- ``misc/install`` - install dotfiles remotely.
 - ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs sync-to-dropbox hourly via launchd.
 
 ## Utilities
@@ -86,9 +87,21 @@ A utility for managing dotfiles.
 
 ## Installation
 
+### Method 1 (recommended)
+
 ```bash
 $ mkdir -p ~/github
 $ cd github
 $ git clone git@github.com:nficano/dotfiles.git
 $ cd dotfiles
 $ make install
+```
+
+### Method 2
+
+```bash
+$ curl https://raw.githubusercontent.com/nficano/dotfiles/master/misc/install | sh
+
+# or via wget
+$ wget -qO- https://raw.githubusercontent.com/nficano/dotfiles/master/misc/install | sh
+```
