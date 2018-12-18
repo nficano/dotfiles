@@ -1,37 +1,31 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [[ $- != *i* ]] ; then
   return
 fi
 
-shopt -s nocaseglob     # case-insensitive path expansion globbing
-shopt -s checkwinsize   # check the window size after each command, and
-                        # update LINES and COLUMNS if the size has changed.
-shopt -s histappend     # append history instead of rewriting it
-shopt -s hostcomplete   # tab-completion of hostnames after @
-shopt -s cdspell        # autocorrect typos in path names when using `cd`
-shopt -s cmdhist        # save multi-line commands as one command
-
-silence () {
+silence() {
   "$@" 2> /dev/null > /dev/null;
 }
 
-includeif () {
+ifshopt() {
+  is_installed "shopt" && shopt -s "$1"
+}
+
+includeif() {
   [[ -d "$1" ]] && PATH="$1:${PATH}"
 }
 
-sourceif () {
+sourceif() {
   # shellcheck source=/dev/null
   [[ -f "$1" ]] && source "$1"
 }
 
-evalif () {
-  if is_installed $1; then
-    eval "$($2)"
-  fi
+evalif() {
+  is_installed $1 && eval "$($2)"
 }
 
-setup_ssh () {
+setup_ssh() {
   # if not started, start ssh-agent.
   if ! silence pgrep 'ssh-agent'; then
     silence ssh-agent
@@ -43,24 +37,32 @@ setup_ssh () {
   fi
 }
 
-is_installed () {
+is_installed() {
   command -v "$1" > /dev/null
 }
 
-is_darwin () {
+is_darwin() {
   [[ $(uname -s) == "Darwin" ]]
 }
 
-is_linux () {
+is_linux() {
   [[ $(uname -s) == "Linux" ]]
 }
 
-findmyiphone () {
+findmyiphone() {
   curl \
     -d "{'apple_id': \"$APPLE_ID\", 'password': \"$ICLOUD_PASSWORD\"}" \
     -H "Content-Type: application/json" \
     -X POST 'https://nickficano.com/api/icloud/fmi'
 }
+
+ifshopt "nocaseglob"                # case-insensitive path expansion
+ifshopt "checkwinsize"              # update window size after each command
+ifshopt "histappend"                # append history instead of rewriting
+ifshopt "hostcomplete"              # tab-completion of hostnames
+ifshopt "cdspell"                   # autocorrect typos in path names
+ifshopt "cmdhist"                   # save multi-line commands as one command
+ifshopt "no_empty_cmd_completion";  # no tab-complete if line is empty
 
 includeif "$HOME/.bin"
 includeif "/usr/local/opt/coreutils/libexec/gnubin"
