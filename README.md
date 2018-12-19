@@ -42,34 +42,19 @@ A utility for gathering information about your local network.
 
 ```
 -getlanhosts                discover all devices on your network.
--getgatewayip               displays the address of your "network gateway",
-                            or the edge device (ie: router) that sits
-                            between you and another network (ie: the
-                            Internet).
--gethostip                  displays your host ip address
--getmodemip                 attempts to find the ip address of your modem
-                            (first hop after your router/gateway).
--getnetworkip               the common prefix of your private ip address,
-                            used to refer to your subnet as a whole.
+-getgatewayip               displays the address of your "network gateway", or the edge device (ie: router) that sits between you and another network (ie: the Internet).
+-gethostip                  displays your host ip address attempts to find the ip address of your modem (first hop after your router/gateway).
+-getnetworkip               the common prefix of your private ip address, used to refer to your subnet as a whole.
 -getprivateip               alias to "ip host"
--getpublicip                the globally unique address assigned to your
-                            network by your isp
+-getpublicip                the globally unique address assigned to your network by your isp
 -getroutingtable            display your routing table.
--getarptable                display your address resolution protocol (arp)
-                            table.
+-getarptable                display your address resolution protocol (arp) table.
 -getrouterip                alias to "ip gateway"
 -getispname                 displays the name of your isp
--probe <modem|router>       attempts to identify the operating system, open
-                            ports, and running software on your modem or
-                            router.
--exploitscan [target]       runs an advanced vulnerability scan against your
-                            current subnet (or target ip if provided).
--osscan [target]            runs an *aggressive* operating system/version
-                            detection scan against your current subnet (or
-                            target ip if provided).
--snmpscan [target]          runs a simple network management protocol (snmp)
-                            scan against your current subnet (or target ip if
-                            provided).
+-probe <modem|router>       attempts to identify the operating system, open ports, and running software on your modem or router.
+-exploitscan [target]       runs an advanced vulnerability scan against your current subnet (or target ip if provided).
+-osscan [target]            runs an *aggressive* operating system/version detection scan against your current subnet (or target ip if provided).
+-snmpscan [target]          runs a simple network management protocol (snmp) scan against your current subnet (or target ip if provided).
 -webconfig <modem|router>   opens the web config for your modem or router.
 -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
 ```
