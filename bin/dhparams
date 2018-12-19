@@ -1,0 +1,14 @@
+#!/bin/sh
+#/ dhparams: Generate ephemeral Diffie-Hellman (DHE) params
+#/ Usage: dhparams <bits>
+#/
+
+usage() {
+  status=${1:-0}
+  grep '^#/' < "$0" | cut -c4-
+  exit $status
+}
+
+[ $# -eq 0 ] || [ "$1" = "--help" ] && usage 1
+
+openssl dhparam -out dhparams.pem $1
