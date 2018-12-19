@@ -12,15 +12,51 @@ trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 
 FQDN="$(hostname).$(nvram get wan_domain)"
 MAX_RETRIES=${MAX_RETRIES:-3}
+RETRY_INTERVAL=5
+
+silence() {
+  "$@" 2> /dev/null > /dev/null;
+}
+
+is_nginx_running() {
+  ps w | grep -v grep | grep 'nginx' > /dev/null
+}
+
+force_kill_nginx() {
+  pid=$(ps w | grep -v grep | grep 'nginx' | awk '{print $1}')
+  kill $pid
+}
+
+grep_iptables() {
+  iptables -L $1 --line-numbers | grep -E "$2"
+}
+
+flush_http_rules() {
+  log "purging all iptable rules from 0.0.0.0 on ports 80 and 443"
+  rul=$(grep_iptables INPUT "tcp dpt:(www|https)" | awk '{print $1}' | sort -rg)
+  for r in $rul; do
+    log "deleted iptable rule $r"
+    iptables -D INPUT $r
+  done
+}
 
 start_nginx() {
-  /opt/etc/init.d/S80nginx start
+  log "starting nginx"
+  silence /opt/etc/init.d/S80nginx start
+  log "allowing access to tcp ports 80 and 443"
   iptables -t filter -A INPUT -p tcp --dport 80 -j ACCEPT
   iptables -t filter -A INPUT -p tcp --dport 443 -j ACCEPT
 }
 
 stop_nginx() {
-  /opt/etc/init.d/S80nginx stop
+  log "stopping nginx"
+  silence /opt/etc/init.d/S80nginx stop || true
+  sleep 5
+  if is_nginx_running; then
+    log "failed to stop nginx gracefully - terminating process"
+    force_kill_nginx
+  fi
+  log "dropping access to tcp ports 80 and 443"
   iptables -t filter -A INPUT -p tcp --dport 80 -j DROP
   iptables -t filter -A INPUT -p tcp --dport 443 -j DROP
 }
@@ -41,6 +77,7 @@ is_http_response_ok() {
       ;;
     esac
   done
+  return 1
 }
 
 log () {
@@ -61,37 +98,53 @@ err () {
   logger -p cron.err -t $script "$message"
 }
 
+cleanup() {
+  stop_nginx
+  flush_http_rules
+}
+
+copy() {
+  log "copying $1 -> $2"
+  cp $1 $2
+}
+
+renew_cert() {
+  log "renewing ssl certificate"
+  cd /opt/etc/nginx || exit 1
+  # note: add --force when debugging
+  bash ./dehydrated --domain $FQDN --cron
+
+  copy "/opt/etc/nginx/certs/$FQDN/cert.pem" /etc/cert.pem
+  copy "/opt/etc/nginx/certs/$FQDN/privkey.pem" /etc/key.pem
+  sed -i "/END CERTIFICATE/q" /etc/cert.pem
+
+  log "archiving/gzipping certs"
+  tar -C / -cf /tmp/cert.tar etc/cert.pem etc/key.pem
+  gzip -f /tmp/cert.tar
+
+  log "writing to certs to nvram"
+  https_crt_file="$(openssl enc -base64 < /tmp/cert.tar.gz | tr -d '\n')"
+  nvram set $https_crt_file
+
+  log "commiting to nvram"
+  nvram commit
+
+  log "restarting httpd"
+  service httpd restart
+}
+
 main() {
-  log "starting nginx and allowing WAN traffic on port 80/443"
+  log "renewing letsencrypt ssl certificate"
+  cleanup
   start_nginx
   if is_http_response_ok; then
-    cd /opt/etc/nginx || exit 1
-    log "renewing ssl certificate"
-    # note: add --force when debugging
-    bash ./dehydrated --domain $FQDN --cron --force
-
-    log "copying cert/key to /etc"
-    cp "/opt/etc/nginx/certs/$FQDN/cert.pem" /etc/cert.pem
-    cp "/opt/etc/nginx/certs/$FQDN/privkey.pem" /etc/key.pem
-    sed -i "/END CERTIFICATE/q" /etc/cert.pem
-
-    log "archiving/gzipping certs"
-    tar -C / -cf /tmp/cert.tar etc/cert.pem etc/key.pem
-    gzip -f /tmp/cert.tar
-
-    log "writing to certs to nvram"
-    https_crt_file="$(openssl enc -base64 < /tmp/cert.tar.gz | tr -d '\n')"
-    nvram set $https_crt_file
-    log "commiting to nvram"
-    nvram commit
-    log "restarting httpd"
-    service httpd restart
+    renew_cert
   else
     err "unable to get an http response"
+    cleanup
   fi
 }
 
-log "renewing letsencrypt ssl certificate"
 main
 
-trap stop_nginx EXIT
+trap cleanup EXIT
