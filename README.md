@@ -27,7 +27,8 @@ recommend using it for reference purposes only.
 - ``bin/sync-to-dropbox`` - syncronizes frequently updated files to dropbox.
 - ``bin/network`` - a utility for gathering information about your local network.
 - ``bin/dotfiles`` - a utility for managing dotfiles.
-- ``misc/lan-doctor`` - detects and repairs network issues.
+- ``misc/lan-doctor`` - detects and repairs network issues (runs on router via cron).
+- ``misc/renew-ssl-cert`` - automatic ssl cert renewal (runs on router via cron).
 - ``misc/install`` - install dotfiles remotely.
 - ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs sync-to-dropbox hourly via launchd.
 
