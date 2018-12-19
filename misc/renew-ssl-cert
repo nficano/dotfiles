@@ -1,0 +1,97 @@
+#!/bin/sh
+# renew-ssl-cert - Auto Renewal of Let's Encrypt SSL Certificate.
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+# shellcheck disable=SC2154
+trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
+
+FQDN="$(hostname).$(nvram get wan_domain)"
+MAX_RETRIES=${MAX_RETRIES:-3}
+
+start_nginx() {
+  /opt/etc/init.d/S80nginx start
+  iptables -t filter -A INPUT -p tcp --dport 80 -j ACCEPT
+  iptables -t filter -A INPUT -p tcp --dport 443 -j ACCEPT
+}
+
+stop_nginx() {
+  /opt/etc/init.d/S80nginx stop
+  iptables -t filter -A INPUT -p tcp --dport 80 -j DROP
+  iptables -t filter -A INPUT -p tcp --dport 443 -j DROP
+}
+
+is_http_response_ok() {
+  count=1
+  url="https://isitdown.site/api/v2/$FQDN"
+  while [ $((count)) -le $((MAX_RETRIES)) ]; do
+    case "$(curl --silent $url | jq -r '.isitdown')" in
+      false)
+      log "$FQDN appears to be up";
+      return 0
+      ;;
+      true)
+      err "$FQDN appears to be down"
+      sleep "$RETRY_INTERVAL"
+      count=$((count+1));
+      ;;
+    esac
+  done
+}
+
+log () {
+  timestamp=$(date +"%b %d %H:%M:%S")
+  script=$(basename "$0")
+  message="$1"; shift
+  # shellcheck disable=SC2059
+  printf "$timestamp ${script}[$$]: $message\\n" "$@"
+  logger -p cron.debug -t $script "$message"
+}
+
+err () {
+  timestamp=$(date +"%b %d %H:%M:%S")
+  script=$(basename "$0")
+  message="$1"; shift
+  # shellcheck disable=SC2059
+  printf "$timestamp ${script}[$$]: $message\\n" "$@"
+  logger -p cron.err -t $script "$message"
+}
+
+main() {
+  log "starting nginx and allowing WAN traffic on port 80/443"
+  start_nginx
+  if is_http_response_ok; then
+    cd /opt/etc/nginx || exit 1
+    log "renewing ssl certificate"
+    # note: add --force when debugging
+    bash ./dehydrated --domain $FQDN --cron --force
+
+    log "copying cert/key to /etc"
+    cp "/opt/etc/nginx/certs/$FQDN/cert.pem" /etc/cert.pem
+    cp "/opt/etc/nginx/certs/$FQDN/privkey.pem" /etc/key.pem
+    sed -i "/END CERTIFICATE/q" /etc/cert.pem
+
+    log "archiving/gzipping certs"
+    tar -C / -cf /tmp/cert.tar etc/cert.pem etc/key.pem
+    gzip -f /tmp/cert.tar
+
+    log "writing to certs to nvram"
+    https_crt_file="$(openssl enc -base64 < /tmp/cert.tar.gz | tr -d '\n')"
+    nvram set $https_crt_file
+    log "commiting to nvram"
+    nvram commit
+    log "restarting httpd"
+    service httpd restart
+  else
+    err "unable to get an http response"
+  fi
+}
+
+log "renewing letsencrypt ssl certificate"
+main
+
+trap stop_nginx EXIT
