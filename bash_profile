@@ -74,8 +74,8 @@ includeif "/usr/local/opt/python/libexec/bin"
 
 sourceif "/usr/local/etc/bash_completion"
 sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
-sourceif "$HOME/.fzf.bash"
-sourceif "$HOME/.nvm/nvm.sh"
+sourceif "/usr/local/opt/nvm/nvm.sh"
+sourceif "/usr/local/opt/nvm/etc/bash_completion"
 sourceif "$HOME/.bash_profile.local"
 sourceif "$HOME/.iterm2_shell_integration.bash"
 
@@ -162,7 +162,7 @@ alias map='xargs -n1'
 is_darwin && alias o='open ./'
 is_darwin && alias fixcamera='sudo killall VDCAssistant'
 is_darwin && alias finder='cd "$(eval fpwd)" || exit 0'
-is_linux || is_installed "gls" && alias ls='ls --color=auto -gXF --file-type'
+is_linux || is_installed "gls" && alias ls='ls --color=auto -gXF'
 is_linux || is_installed "gls" && alias ll='ls --color=auto -algX'
 
 is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
