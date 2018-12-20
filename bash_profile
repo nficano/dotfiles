@@ -64,13 +64,14 @@ ifshopt "cdspell"                   # autocorrect typos in path names
 ifshopt "cmdhist"                   # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion";  # no tab-complete if line is empty
 
-includeif "$HOME/.bin"
 includeif "/usr/local/opt/coreutils/libexec/gnubin"
 includeif "/usr/local/opt/gnu-tar/libexec/gnubin"
 includeif "/usr/local/opt/grep/libexec/gnubin"
 includeif "/usr/local/opt/node@8/bin"
 includeif "/usr/local/opt/openssl/bin"
 includeif "/usr/local/opt/python/libexec/bin"
+includeif "/opt/bin"
+includeif "$HOME/.bin"
 
 sourceif "/usr/local/etc/bash_completion"
 sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
