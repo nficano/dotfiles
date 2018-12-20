@@ -5,7 +5,6 @@ set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables
 set -o pipefail         # Use last non-zero exit code in a pipeline
 #set -o xtrace          # Trace the execution of the script (debug)
-export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # shellcheck disable=SC2154
 trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
@@ -18,69 +17,70 @@ silence() {
   "$@" 2> /dev/null > /dev/null;
 }
 
-is_nginx_running() {
-  ps w | grep -v grep | grep 'nginx' > /dev/null
+pgrep() {
+  ps w | grep -v grep | grep $1 > /dev/null
 }
 
-force_kill_nginx() {
-  pid=$(ps w | grep -v grep | grep 'nginx' | awk '{print $1}')
+pkill() {
+  pid=$(ps w | grep -v grep | grep $1 | awk '{print $1}')
   kill $pid
 }
 
-grep_iptables() {
+fwgrep() {
   iptables -L $1 --line-numbers | grep -E "$2"
-}
-
-flush_http_rules() {
-  log "purging all iptable rules from 0.0.0.0 on ports 80 and 443"
-  rul=$(grep_iptables INPUT "tcp dpt:(www|https)" | awk '{print $1}' | sort -rg)
-  for r in $rul; do
-    log "deleted iptable rule $r"
-    iptables -D INPUT $r
-  done
 }
 
 start_nginx() {
   log "starting nginx"
   silence /opt/etc/init.d/S80nginx start
-  log "allowing access to tcp ports 80 and 443"
+}
+
+stop_nginx() {
+  log "stopping nginx (sigterm nginx)"
+  silence /opt/etc/init.d/S80nginx stop || true
+  sleep 5
+  if pgrep "nginx"; then
+    log "stopping nginx (sigkill nginx)"
+    pkill "nginx"
+  fi
+}
+
+allow_inbound_http() {
+  log "allow incoming http/https traffic from anywhere"
   iptables -t filter -A INPUT -p tcp --dport 80 -j ACCEPT
   iptables -t filter -A INPUT -p tcp --dport 443 -j ACCEPT
 }
 
-stop_nginx() {
-  log "stopping nginx"
-  silence /opt/etc/init.d/S80nginx stop || true
-  sleep 5
-  if is_nginx_running; then
-    log "failed to stop nginx gracefully - terminating process"
-    force_kill_nginx
-  fi
-  log "dropping access to tcp ports 80 and 443"
-  iptables -t filter -A INPUT -p tcp --dport 80 -j DROP
-  iptables -t filter -A INPUT -p tcp --dport 443 -j DROP
+deny_inbound_http() {
+  log "deny incoming http/https traffic from anywhere"
+  rul=$(fwgrep INPUT "tcp dpt:(www|https)" | awk '{print $1}' | sort -rg)
+  for r in $rul; do
+    log "deleted iptable rule number $r"
+    iptables -D INPUT $r
+  done
 }
 
-is_http_response_ok() {
+is_reachable() {
   count=1
-  url="https://isitdown.site/api/v2/$FQDN"
+  url=https://isitdown.site/api/v2/$1
   while [ $((count)) -le $((MAX_RETRIES)) ]; do
     case "$(curl --silent $url | jq -r '.isitdown')" in
       false)
-      log "$FQDN appears to be up";
-      return 0
-      ;;
+        log "$1 is externally accessable"
+        return 0
+        ;;
+
       true)
-      err "$FQDN appears to be down"
-      sleep "$RETRY_INTERVAL"
-      count=$((count+1));
-      ;;
+        err "$1 is not externally accessable"
+        sleep "$RETRY_INTERVAL"
+        count=$((count+1));
+        ;;
     esac
   done
   return 1
 }
 
-log () {
+log() {
   timestamp=$(date +"%b %d %H:%M:%S")
   script=$(basename "$0")
   message="$1"; shift
@@ -89,7 +89,7 @@ log () {
   logger -p cron.debug -t $script "$message"
 }
 
-err () {
+err() {
   timestamp=$(date +"%b %d %H:%M:%S")
   script=$(basename "$0")
   message="$1"; shift
@@ -98,35 +98,27 @@ err () {
   logger -p cron.err -t $script "$message"
 }
 
-cleanup() {
+revert_to_original_state() {
+  log "restoring original service and firewall states"
   stop_nginx
-  flush_http_rules
+  # note: we do "or true" to suppress error that no active rules exist.
+  deny_inbound_http || true
 }
 
-copy() {
-  log "copying $1 -> $2"
-  cp $1 $2
-}
-
-renew_cert() {
-  log "renewing ssl certificate"
+get_new_ssl_cert() {
+  log "getting new ssl certificate"
   cd /opt/etc/nginx || exit 1
   # note: add --force when debugging
   bash ./dehydrated --domain $FQDN --cron
-
-  copy "/opt/etc/nginx/certs/$FQDN/cert.pem" /etc/cert.pem
-  copy "/opt/etc/nginx/certs/$FQDN/privkey.pem" /etc/key.pem
+  log "installing new cert"
+  cp "/opt/etc/nginx/certs/$FQDN/cert.pem" /etc/cert.pem
+  cp "/opt/etc/nginx/certs/$FQDN/privkey.pem" /etc/key.pem
   sed -i "/END CERTIFICATE/q" /etc/cert.pem
 
-  log "archiving/gzipping certs"
+  log "writing new cert to nvram"
   tar -C / -cf /tmp/cert.tar etc/cert.pem etc/key.pem
   gzip -f /tmp/cert.tar
-
-  log "writing to certs to nvram"
-  https_crt_file="$(openssl enc -base64 < /tmp/cert.tar.gz | tr -d '\n')"
-  nvram set $https_crt_file
-
-  log "commiting to nvram"
+  nvram set https_crt_file="$(openssl enc -base64 < /tmp/cert.tar.gz | tr -d '\n')"
   nvram commit
 
   log "restarting httpd"
@@ -134,17 +126,18 @@ renew_cert() {
 }
 
 main() {
-  log "renewing letsencrypt ssl certificate"
-  cleanup
+  log "starting ssl certificate renewal"
+  revert_to_original_state
   start_nginx
-  if is_http_response_ok; then
-    renew_cert
+  allow_inbound_http
+  if is_reachable "$FQDN"; then
+    get_new_ssl_cert
   else
-    err "unable to get an http response"
-    cleanup
+    err "unable to renew ssl certificate"
+    revert_to_original_state
   fi
 }
 
 main
 
-trap cleanup EXIT
+trap revert_to_original_state EXIT

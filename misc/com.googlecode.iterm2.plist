@@ -6,6 +6,8 @@
 	<true/>
 	<key>AboutToPasteTabsWithCancel_selection</key>
 	<integer>2</integer>
+	<key>AdjustWindowForFontSizeChange</key>
+	<false/>
 	<key>AppleAntiAliasingThreshold</key>
 	<integer>1</integer>
 	<key>AppleScrollAnimationEnabled</key>
@@ -50869,9 +50871,9 @@
 	<key>NSWindow Frame SessionsPreferences</key>
 	<string>230 302 606 469 0 0 1680 1027 </string>
 	<key>NSWindow Frame SharedPreferences</key>
-	<string>1281 885 796 486 0 0 3440 1417 </string>
+	<string>428 516 796 486 0 0 3440 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>873 585 1426 525 0 0 3440 1417 </string>
+	<string>423 483 1680 500 0 0 3440 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>1737 384 1330 1034 0 0 3440 1418 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
@@ -51573,6 +51575,10 @@
 	<true/>
 	<key>NoSyncInstallationId</key>
 	<string>E3FEB900-7DB4-46AC-B017-1332B84F3E22</string>
+	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
+	<true/>
+	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
+	<integer>0</integer>
 	<key>NoSyncPermissionToShowTip</key>
 	<false/>
 	<key>NoSyncReplaceProfileWarning</key>
@@ -51631,7 +51637,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2018-12-14T18:53:03Z</date>
+	<date>2018-12-18T23:46:20Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SmartPlacement</key>
