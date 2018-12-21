@@ -171,4 +171,5 @@ is_installed "bat" && alias cat="bat --paging never"
 is_installed "network" && complete -W "$(network listcommands)" 'network'
 is_installed "dotfiles" && complete -W "$(dotfiles -listcommands)" 'dotfiles'
 is_installed "tldr" && complete -W "$(tldr 2>/dev/null --list)" 'tldr'
+
 setup_ssh

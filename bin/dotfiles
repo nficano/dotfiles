@@ -36,7 +36,7 @@ show_help() {
 
 log() {
   # shellcheck disable=SC2059
-  printf "$(tput setaf 2)%s$(tput sgr0)\n" "$@"
+  printf "%s\n" "$@"
 }
 
 edit_bash_profile() {
