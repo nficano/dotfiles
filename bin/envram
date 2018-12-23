@@ -1,0 +1,57 @@
+#!/bin/sh
+#/ usage: envram [get name] [set name=value] [unset name] [show] [commit] [save] [restore] [erase] ...
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+# shellcheck disable=SC2154
+trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
+
+ENVRAM_FILENAME=${ENVRAM_FILENAME:-.npmrc}
+
+get_envram_file () {
+  path="$PWD"
+  while [ $path != / ]; do
+    find "$path" -maxdepth 1 -mindepth 1 $ENVRAM_FILENAME
+    path="$(readlink -f "$path"/..)"
+  done
+}
+
+_get () {
+  name=$1
+  return
+}
+
+_set () {
+  name=$1
+  value=$2
+}
+
+_unset () {
+  name=$1
+}
+
+show () {
+  return
+}
+
+commit () {
+  return
+}
+
+save () {
+  return
+}
+
+restore () {
+  # restore from file
+  return
+}
+
+erase () {
+  return
+}
