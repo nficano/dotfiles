@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# renew-ssl-cert - Auto Renewal of Let's Encrypt SSL Certificate.
+# route53-ddns - Automatic Route53 WAN IP address update
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables
