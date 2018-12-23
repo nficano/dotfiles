@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # renew-ssl-cert - Auto Renewal of Let's Encrypt SSL Certificate.
 
 set -o errexit          # Exit on most errors (see the manual)
