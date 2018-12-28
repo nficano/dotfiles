@@ -19,13 +19,14 @@ SUBDOMAINS=(
 run_route53_ddns_update() {
   wan_ip="$(get_wan_ip)"
   if is_dns_up_to_date; then
-    log 'dns is up-to-date!'
+    log 'your route53 dns is already up-to-date'
   else
     for subdomain in "${SUBDOMAINS[@]}"; do
-      response=$(update_record $subdomain $wan_ip)
-      log "api responded with: $response"
+      update_record $subdomain $wan_ip
+      log "$subdomain updated successfully"
     done
   fi
+  log 'finished updating route53 dns'
   exit 0
 }
 
@@ -62,9 +63,8 @@ get_record_sets() {
 }
 
 is_dns_up_to_date() {
-  log 'checking for the current wan ip address'
   wan_ip="$(get_wan_ip)"
-  log "wan ip address is: $wan_ip"
+  log "wan ip address is $wan_ip"
   records=$(get_record_sets | jq -r '.[] | .[] .ResourceRecords[0] | .Value')
   echo "$records" | grep -o -q "$wan_ip"
 }
