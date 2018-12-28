@@ -3,7 +3,7 @@ DOTFILES := $(PWD)
 install: setup
 
 bootstrap:
-	bash $(DOTFILES)/bin/bootstrap
+	bash $(DOTFILES)/misc/bootstrap
 
 setup:
 	mkdir -p ~/.virtualenvs
