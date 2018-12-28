@@ -16,8 +16,11 @@ ENVRAM_FILENAME=${ENVRAM_FILENAME:-.npmrc}
 get_envram_file () {
   path="$PWD"
   while [ $path != / ]; do
-    find "$path" -maxdepth 1 -mindepth 1 $ENVRAM_FILENAME
-    path="$(readlink -f "$path"/..)"
+    res=$(find $path -maxdepth 1 -mindepth 1 -name $ENVRAM_FILENAME)
+    if [ $res ]; then
+      path="$(readlink -f "$path"/..)"
+      echo "$path"
+    fi
   done
 }
 
@@ -29,10 +32,12 @@ _get () {
 _set () {
   name=$1
   value=$2
+  return
 }
 
 _unset () {
   name=$1
+  return
 }
 
 show () {
@@ -55,3 +60,5 @@ restore () {
 erase () {
   return
 }
+
+get_envram_file
