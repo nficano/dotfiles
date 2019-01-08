@@ -22,7 +22,7 @@ recommend using it for reference purposes only.
 - ``misc/`` - stuff that doesn't have a home.
 - ``rc.d/`` - config files that I symlink to my home directory.
 
-## Highlights
+## Reference
 
 - ``bin/+x`` - shorthand for ``chmod +x``.
 - ``bin/dotfiles`` - a utility for managing dotfiles.
