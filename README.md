@@ -24,13 +24,19 @@ recommend using it for reference purposes only.
 
 ## Highlights
 
-- ``bin/sync-to-dropbox`` - syncronizes frequently updated files to dropbox.
-- ``bin/network`` - a utility for gathering information about your local network.
+- ``bin/+x`` - shorthand for ``chmod +x``.
 - ``bin/dotfiles`` - a utility for managing dotfiles.
-- ``misc/lan-doctor`` - detects and repairs network issues (runs on router via cron).
-- ``misc/renew-ssl-cert`` - automatic ssl cert renewal (runs on router via cron).
+- ``bin/git-copy-branch-name`` - does what you'd expect.
+- ``bin/git-move-last-commit-to-branch`` - does what you'd expect.
+- ``bin/git-unstage-all`` - does what you'd expect.
+- ``bin/network`` - a utility for gathering information about your local network.
+- ``misc/bootstrap`` - setup/update my mac os environment.
 - ``misc/install`` - install dotfiles remotely.
+- ``misc/lan-doctor`` - detects and repairs network issues (runs on router via cron).
 - ``misc/org.nficano.dotfiles.DropboxSync.plist`` - runs sync-to-dropbox hourly via launchd.
+- ``misc/renew-ssl-cert`` - automatic ssl cert renewal (runs on router via cron).
+- ``misc/route53-ddns`` - script to parodically make sure a subdomain points to by public ip address.
+- ``misc/sync-to-dropbox`` - syncronizes frequently updated files to dropbox.
 
 ## Utilities
 
