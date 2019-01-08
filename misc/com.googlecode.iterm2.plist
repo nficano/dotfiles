@@ -50725,6 +50725,13 @@
 			<key>Text</key>
 			<string></string>
 		</dict>
+		<key>0x5c-0x80000</key>
+		<dict>
+			<key>Action</key>
+			<integer>11</integer>
+			<key>Text</key>
+			<string>0x1B 0x08</string>
+		</dict>
 		<key>0x61-0x80000</key>
 		<dict>
 			<key>Action</key>
@@ -50784,6 +50791,13 @@
 			<string>0x18 0x7f
 
 </string>
+		</dict>
+		<key>0x7f-0x80000</key>
+		<dict>
+			<key>Action</key>
+			<integer>11</integer>
+			<key>Text</key>
+			<string>0x1B 0x08</string>
 		</dict>
 		<key>0xf700-0x300000</key>
 		<dict>
@@ -50871,9 +50885,9 @@
 	<key>NSWindow Frame SessionsPreferences</key>
 	<string>230 302 606 469 0 0 1680 1027 </string>
 	<key>NSWindow Frame SharedPreferences</key>
-	<string>428 516 796 486 0 0 3440 1417 </string>
+	<string>420 548 958 470 0 0 3440 1417 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>423 483 1680 500 0 0 3440 1417 </string>
+	<string>1455 933 650 477 0 0 3440 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>1737 384 1330 1034 0 0 3440 1418 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
@@ -51637,7 +51651,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2018-12-18T23:46:20Z</date>
+	<date>2019-01-06T05:45:12Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SmartPlacement</key>
