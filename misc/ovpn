@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# https://www.sys-dev.cat/blog/3/
+
+get_dotfiles_prefix() {
+  fp="$(readlink -f ${0})"
+  dir=$(dirname $fp)
+  cd $dir || exit 1
+  echo "$(git rev-parse --show-toplevel)"
+}
+
+create_client() {
+  name="$1"
+  # ./easyrsa gen-req client1 nopass
+  # ./easyrsa sign-req client client1
+}
+
+render_client_config() {
+  port="$1"
+  hostname="$2"
+  ca="$3"
+  cert="$4"
+  key="$5"
+  tls_auth="$6"
+
+  fp="$(get_dotfiles_prefix)/misc/client.ovpn.j2"
+  config=$(
+    sed -e "s/{{ port }}/$port/" \
+        -e "s/{{ hostname }}/$hostname/" \
+        -e "s/{{ ca }}/$ca/" \
+        -e "s/{{ cert }}/$cert/" \
+        -e "s/{{ key }}/$key/" \
+        -e "s/{{ tls_auth }}/$tls_auth/" \
+        $fp
+  )
+  echo "$config"
+}
+
+render_client_config 1194 "router.home.nickficano.com"

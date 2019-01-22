@@ -1,0 +1,29 @@
+client
+dev tun
+proto udp
+port {{ port }}
+remote {{ hostname }} {{ port }} udp
+remote-cert-tls server
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+comp-lzo
+verb 3
+cipher AES-256-CBC
+auth SHA512
+tls-version-min 1.2
+tls-cipher TLS-DHE-RSA-WITH-AES-256-GCM-SHA384
+<ca>
+{{ ca }}
+</ca>
+<cert>
+{{ cert }}
+</cert>
+<key>
+{{ key }}
+</key>
+key-direction 1
+<tls-auth>
+{{ tls_auth }}
+</tls-auth>
