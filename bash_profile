@@ -85,6 +85,7 @@ evalif "direnv" "direnv hook bash"
 evalif "pyenv" "pyenv init -"
 evalif "rbenv" "rbenv init -"
 evalif "thefuck" "thefuck --alias"
+evalif "ntfy shell-integration"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo  # tab completions for sudo
