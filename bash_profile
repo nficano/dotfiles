@@ -166,7 +166,7 @@ alias map='xargs -n1'
 
 is_darwin && alias o='open ./'
 is_darwin && alias fixcamera='sudo killall VDCAssistant'
-is_darwin && alias finder='cd "$(eval fpwd)" || exit 0'
+is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
 is_linux || is_installed "gls" && alias ls='ls --color=auto -gXF'
 is_linux || is_installed "gls" && alias ll='ls --color=auto -algX'
 
