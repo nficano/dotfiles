@@ -3,7 +3,7 @@
 curdir="$PWD"
 
 if [ "$1" != "" ]; then
-  split-tab-and-run $curdir $1
+  split-tab-and-run $curdir "$@"
 else
   split-tab-and-focus $curdir
 fi
