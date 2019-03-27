@@ -2,10 +2,8 @@
 
 curdir="$PWD"
 
-osascript &>/dev/null <<EOF
-  tell application "iTerm2"
-    tell current session of current window
-      split horizontally with default profile
-    end tell
-  end tell
-EOF
+if [ "$1" != "" ]; then
+  split-tab-and-run $curdir $1
+else
+  split-tab-and-focus $curdir
+fi
