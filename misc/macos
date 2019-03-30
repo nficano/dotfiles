@@ -2,6 +2,7 @@
 
 # Opt Apps out of Dark Mode
 defaults write com.google.Chrome NSRequiresAquaSystemAppearance -bool yes
+defaults write com.readdle.smartemail-Mac NSRequiresAquaSystemAppearance -bool yes
 
 # Expand save panel by default
 defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
