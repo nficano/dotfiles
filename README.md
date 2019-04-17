@@ -29,6 +29,8 @@ recommend using it for reference purposes only.
 - ``bin/git-copy-branch-name`` - does what you'd expect.
 - ``bin/git-move-last-commit-to-branch`` - does what you'd expect.
 - ``bin/git-unstage-all`` - does what you'd expect.
+- ``bin/kill-by-port`` - kills a process given a port its listening on
+- ``bin/pid-by-port`` - kill-by-port's non-destructive brother
 - ``bin/network`` - a utility for gathering information about your local network.
 - ``misc/bootstrap`` - setup/update my mac os environment.
 - ``misc/install`` - install dotfiles remotely.
