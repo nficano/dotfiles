@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://s3.amazonaws.com/nf-assets/dotfiles-logo.svg" alt="dotfiles" width="360" height="112" />
+  <img src="https://assets.nickficano.com/gh-dotfiles.svg" alt="dotfiles" width="360" height="112" />
   <div align="center">
     <a href="https://travis-ci.org/nficano/dotfiles"><img src="https://travis-ci.org/nficano/dotfiles.svg?branch=master" /></a>
     <img src="https://img.shields.io/github/last-commit/nficano/dotfiles.svg" />
