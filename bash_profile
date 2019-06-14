@@ -56,6 +56,50 @@ findmyiphone() {
     -X POST 'https://nickficano.com/api/icloud/fmi'
 }
 
+export EDITOR='nano'
+export VISUAL='atom'
+
+export TERM=xterm-256color
+
+export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
+
+export DOTFILES_VERSION='2.5.0'
+
+# highlighting inside manpages and elsewhere
+export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
+export LESS_TERMCAP_md=$'\E[01;38;5;74m'  # begin bold
+export LESS_TERMCAP_me=$'\E[0m'           # end mode
+export LESS_TERMCAP_se=$'\E[0m'           # end standout-mode
+export LESS_TERMCAP_so=$'\E[38;5;246m'    # begin standout-mode - info box
+export LESS_TERMCAP_ue=$'\E[0m'           # end underline
+export LESS_TERMCAP_us=$'\E[04;38;5;146m' # begin underlin
+
+# highlighting inside manpages tldr
+export TLDR_HEADER='magenta bold underline'
+export TLDR_QUOTE='italic'
+export TLDR_DESCRIPTION='green'
+export TLDR_CODE='red'
+export TLDR_PARAM='blue'
+
+export MANPAGER="less -X"               # don’t clear screen after quitting man
+export GREP_COLOR='1;32'                # make match highlight color green
+export DIRENV_LOG_FORMAT=               # stfu direnv
+export WORKON_HOME=$HOME/.virtualenvs
+export PYTHONDONTWRITEBYTECODE=true
+
+export NVM_DIR=/usr/local/Cellar/nvm
+export NODE_REPL_HISTORY=$HOME/.node_history  # persistent node REPL history
+export NODE_REPL_HISTORY_SIZE='32768'         # allow 32³ entries
+export NODE_REPL_MODE='sloppy'                # allow non-strict mode code
+
+export HISTCONTROL=ignoredups:erasedups
+export HISTSIZE=100000
+export HISTFILESIZE=100000
+export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:[ \t]*"
+
+# Save and reload the history after each command finishes
+export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
+
 ifshopt "nocaseglob"                # case-insensitive path expansion
 ifshopt "checkwinsize"              # update window size after each command
 ifshopt "histappend"                # append history instead of rewriting
@@ -93,49 +137,6 @@ evalif "ntfy shell-integration"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo  # tab completions for sudo
-
-export EDITOR='nano'
-export VISUAL='atom'
-
-export TERM=xterm-256color
-
-export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
-
-export DOTFILES_VERSION='2.5.0'
-
-# highlighting inside manpages and elsewhere
-export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
-export LESS_TERMCAP_md=$'\E[01;38;5;74m'  # begin bold
-export LESS_TERMCAP_me=$'\E[0m'           # end mode
-export LESS_TERMCAP_se=$'\E[0m'           # end standout-mode
-export LESS_TERMCAP_so=$'\E[38;5;246m'    # begin standout-mode - info box
-export LESS_TERMCAP_ue=$'\E[0m'           # end underline
-export LESS_TERMCAP_us=$'\E[04;38;5;146m' # begin underlin
-
-# highlighting inside manpages tldr
-export TLDR_HEADER='magenta bold underline'
-export TLDR_QUOTE='italic'
-export TLDR_DESCRIPTION='green'
-export TLDR_CODE='red'
-export TLDR_PARAM='blue'
-
-export MANPAGER="less -X"               # don’t clear screen after quitting man
-export GREP_COLOR='1;32'                # make match highlight color green
-export DIRENV_LOG_FORMAT=               # stfu direnv
-export WORKON_HOME=$HOME/.virtualenvs
-export PYTHONDONTWRITEBYTECODE=true
-
-export NODE_REPL_HISTORY=$HOME/.node_history  # persistent node REPL history
-export NODE_REPL_HISTORY_SIZE='32768'         # allow 32³ entries
-export NODE_REPL_MODE='sloppy'                # allow non-strict mode code
-
-export HISTCONTROL=ignoredups:erasedups
-export HISTSIZE=100000
-export HISTFILESIZE=100000
-export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:[ \t]*"
-
-# Save and reload the history after each command finishes
-export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
 alias ..='cd ..'
 alias ...='cd ../..'
