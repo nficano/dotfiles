@@ -17,6 +17,8 @@ run_setup() {
   request_root_privileges
   setup_xcode
   setup_brew
+  setup_duti
+  setup_default_file_associations
   install_formulaes_from_brewfile
 
   # shellcheck disable=SC2039
@@ -40,6 +42,27 @@ get_dotfiles_path() {
 
 get_brewfile_path() {
   echo "$(get_dotfiles_path)/Brewfile"
+}
+
+is_duti_installed() {
+  if command -v duti > /dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+install_duti() {
+  brew install duti
+}
+
+setup_duti() {
+  if ! is_duti_installed; then
+    log "Installing Duti ..."
+    install_duti
+  else
+    log "Duti is already installed. Skipping ..."
+  fi
 }
 
 install_formulaes_from_brewfile() {
@@ -124,6 +147,44 @@ setup_brew() {
 request_root_privileges() {
   log "Requesting root privileges ..."
   sudo -v
+}
+
+setup_default_file_associations() {
+  log "Setting preferred default file associations ..."
+  duti -s com.microsoft.Excel .csv all
+
+  duti -s com.microsoft.VSCode .c all
+  duti -s com.microsoft.VSCode .cpp all
+  duti -s com.microsoft.VSCode .cs all
+  duti -s com.microsoft.VSCode .css all
+  duti -s com.microsoft.VSCode .go all
+  duti -s com.microsoft.VSCode .java all
+  duti -s com.microsoft.VSCode .js all
+  duti -s com.microsoft.VSCode .sass all
+  duti -s com.microsoft.VSCode .scss all
+  duti -s com.microsoft.VSCode .less all
+  duti -s com.microsoft.VSCode .vue all
+  duti -s com.microsoft.VSCode .cfg all
+  duti -s com.microsoft.VSCode .json all
+  duti -s com.microsoft.VSCode .jsx all
+  duti -s com.microsoft.VSCode .lua all
+  duti -s com.microsoft.VSCode .md all
+  duti -s com.microsoft.VSCode .php all
+  duti -s com.microsoft.VSCode .pl all
+  duti -s com.microsoft.VSCode .py all
+  duti -s com.microsoft.VSCode .rb all
+  duti -s com.microsoft.VSCode .rs all
+  duti -s com.microsoft.VSCode .sh all
+  duti -s com.microsoft.VSCode .swift all
+  duti -s com.microsoft.VSCode .txt all
+
+  duti -s com.microsoft.VSCode public.json all
+  duti -s com.microsoft.VSCode public.plain-text all
+  duti -s com.microsoft.VSCode public.python-script all
+  duti -s com.microsoft.VSCode public.shell-script all
+  duti -s com.microsoft.VSCode public.source-code all
+  duti -s com.microsoft.VSCode public.text all
+  duti -s com.microsoft.VSCode public.unix-executable all
 }
 
 run_setup
