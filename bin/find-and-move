@@ -1,0 +1,24 @@
+#!/bin/sh
+#/ Recursively find and move all files matching a given expression.
+#/
+#/ USAGE:
+#/    find-and-move "<filename expression>" /path/to/target/directory/
+#/
+#/ EXAMPLES:
+#/ -  Find all svg files and move to ~/vectors/
+#/    find-and-move "*.svg" ~/vectors/
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+
+usage () {
+  status=${1:-0}
+  grep '^#/' < "$0" | cut -c4-
+  exit $status
+}
+[ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 2 ] && usage
+exec find . -type f -name "$1" -exec mv {} $2 \;

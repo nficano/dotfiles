@@ -177,6 +177,7 @@ setup_default_file_associations() {
   duti -s com.microsoft.VSCode .sh all
   duti -s com.microsoft.VSCode .swift all
   duti -s com.microsoft.VSCode .txt all
+  duti -s com.microsoft.VSCode .conf all
 
   duti -s com.microsoft.VSCode public.json all
   duti -s com.microsoft.VSCode public.plain-text all
