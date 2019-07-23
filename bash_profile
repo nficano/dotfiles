@@ -57,7 +57,7 @@ findmyiphone() {
 }
 
 export EDITOR='nano'
-export VISUAL='atom'
+export VISUAL='code'
 
 export TERM=xterm-256color
 
