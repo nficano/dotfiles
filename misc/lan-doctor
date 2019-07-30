@@ -22,7 +22,9 @@ on_outage_detected () {
   err "lan/wan connectivity issue detected!"
   metric "failed" 1
   if is_reboot_permitted; then
-    reboot_modem
+    # Run this in the background in case it hangs unexpectedly.
+    reboot_modem &
+    sleep 1m
     reboot_router
   else
     metric "reboot.failure.too_soon" 1
@@ -53,7 +55,6 @@ reboot_modem () {
     -d 'RestoreWiFiNo=0x00' \
     --silent \
     http://$MODEM_IP/goform/RgFactoryDefault > /dev/null 2>&1;
-    sleep 1m
 }
 
 is_reboot_permitted () {
@@ -160,6 +161,8 @@ err () {
 }
 
 run_healthcheck () {
+  # TODO(nficano): Only run if no other instance is running
+  # TODO(nficano): If previous instance has ran longer than 2m, kill it.
   log "checking if lan is up"
   if is_lan_up; then
     log "checking if wan is up"

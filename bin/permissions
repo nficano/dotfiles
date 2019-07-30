@@ -1,0 +1,23 @@
+#!/bin/sh
+#/ Shows the permissions of a file or directory in octal form.
+#/
+#/ USAGE:
+#/    permissions /path/to/file/or/dir
+#/
+#/ EXAMPLES:
+#/    permissions /usr/bin    # drwxr-xr-x 755 /usr/bin
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+
+usage () {
+  status=${1:-0}
+  grep '^#/' < "$0" | cut -c4-
+  exit $status
+}
+
+[ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
+exec stat -c '%A %a %n' "$@"
