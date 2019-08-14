@@ -37,6 +37,11 @@ setup_ssh() {
   fi
 }
 
+abbr_pwd() {
+  cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
+  echo -n $cwd
+}
+
 is_installed() {
   command -v "$1" > /dev/null
 }
@@ -61,7 +66,7 @@ export VISUAL='code'
 
 export TERM=xterm-256color
 
-export PS1="\h \[\e[1;32m\]\w\[\e[0m\] [\A] > "
+export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
 
 export DOTFILES_VERSION='2.6.0'
 
