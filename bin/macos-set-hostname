@@ -1,0 +1,24 @@
+#!/bin/sh
+#/ Update hostname on maco
+#/
+#/ USAGE:
+#/    macos-set-hostname <new hostname> [--help]
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+
+usage () {
+  status=${1:-0}
+  grep '^#/' < "$0" | cut -c4-
+  exit $status
+}
+
+[ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
+exec sudo scutil --set HostName "$@"
+exec sudo scutil --set ComputerName "$@"
+exec sudo scutil --set LocalHostName "$@"
+exec dscacheutil -flushcache
