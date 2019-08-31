@@ -35,9 +35,6 @@ get_wan_ip() {
 }
 
 get_dotfiles_prefix() {
-  fp="$(readlink -f ${0})"
-  dir=$(dirname $fp)
-  cd $dir || exit 1
   echo "$(git rev-parse --show-toplevel)"
 }
 
