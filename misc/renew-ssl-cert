@@ -62,7 +62,7 @@ deny_inbound_http() {
 
 is_reachable() {
   count=1
-  url=https://isitdown.site/api/v2/$1
+  url=https://5hbzfbrqje.execute-api.us-east-1.amazonaws.com/prod/isitdown/$1
   while [ $((count)) -le $((MAX_RETRIES)) ]; do
     case "$(curl --silent $url | jq -r '.isitdown')" in
       false)
