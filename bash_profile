@@ -167,6 +167,7 @@ alias gd='git diff'
 alias gs='git status'
 alias reload='exec ${SHELL} -l'
 alias map='xargs -n1'
+alias hgrep='history | egrep '
 
 is_darwin && alias o='open ./'
 is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
