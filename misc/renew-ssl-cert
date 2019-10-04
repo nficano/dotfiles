@@ -9,9 +9,8 @@ set -o pipefail         # Use last non-zero exit code in a pipeline
 # shellcheck disable=SC2154
 trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 
-
 BASENAME="$(basename "$0")";
-IS_RUNNING=$(ps h -C "$BASENAME" | grep -wv $$ | wc -l);
+IS_RUNNING=$(ps | grep "$BASENAME" | grep -wv $$ | wc -l);
 [[ $IS_RUNNING > 1 ]] && exit;
 
 FQDN="$(hostname).$(nvram get wan_domain)"

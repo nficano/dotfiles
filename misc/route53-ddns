@@ -7,7 +7,7 @@ set -o pipefail         # Use last non-zero exit code in a pipeline
 #set -o xtrace          # Trace the execution of the script (debug)
 
 BASENAME="$(basename "$0")";
-IS_RUNNING=$(ps h -C "$BASENAME" | grep -wv $$ | wc -l);
+IS_RUNNING=$(ps | grep "$BASENAME" | grep -wv $$ | wc -l);
 [[ $IS_RUNNING > 1 ]] && exit;
 
 # shellcheck disable=SC2154
