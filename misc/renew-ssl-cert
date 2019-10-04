@@ -14,7 +14,7 @@ RETRY_INTERVAL=5
 
 lock_or_abort() {
     scriptname="$(basename "$0")";
-    pidfile="/var/run/${scriptname}"
+    pidfile="/var/run/${scriptname}.pid"
     exec 9>"$pidfile"
     flock -n 9 || {
         err "failed to acquire filelock"
