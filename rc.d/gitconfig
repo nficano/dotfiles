@@ -51,3 +51,6 @@
 	gpgsign = true
 [gpg]
 	program = gpg
+[rerere]
+	enabled = true
+	autoupdate = true
