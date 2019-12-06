@@ -36,12 +36,13 @@
 #/   -snmpscan [target]          runs a simple network management protocol (snmp)
 #/                               scan against your current subnet (or target ip if
 #/                               provided).
+#/   -portscan [target]          scan a target for open ports.
 #/
 #/   -webconfig <modem|router>   opens the web config for your modem or router.
 #/
 #/   -getsubnet [-o <bit|hex>]   displays your host subnet mask address ip.
 #/
-#/   -help|-h                    displays help and usage.
+#/   -help                     displays help and usage.
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o errtrace         # Make sure any error trap is inherited
@@ -62,12 +63,12 @@ get_isp_name() {
 }
 
 get_public_ip_address() {
-  echo "$(curl -s "https://api.ipify.org/")"
+  curl -s "https://api.ipify.org/"
 }
 
 get_host_ip_address() {
   ifconfig |
-    egrep 'inet\s(192|172|10)' |
+    grep -E 'inet\s(192|172|10)' |
     awk '{print $2}'
 }
 
@@ -85,7 +86,7 @@ get_network_mask() {
   sipcalc "$(get_host_ip_address)" "$(get_network_mask_hex)" |
     grep "Network mask" |
     awk '{print $4}' |
-    egrep -o '([0-9]{1,3}[.]){3}[0-9]{1,3}'
+    grep -Eo '([0-9]{1,3}[.]){3}[0-9]{1,3}'
 }
 
 get_network_mask_bits() {
@@ -96,13 +97,13 @@ get_network_mask_bits() {
 
 get_network_mask_hex() {
   ifconfig |
-    egrep 'inet\s(192|172|10)' |
+    grep -E 'inet\s(192|172|10)' |
     awk '{print $4}'
 }
 
 get_gateway_ip_address() {
   netstat -rn |
-    egrep 'default\s+(192|172|10)' |
+    grep -E 'default\s+(192|172|10)' |
     awk '{print $2}'
 }
 
@@ -117,7 +118,7 @@ get_modem_ip_address() {
   sudo nmap \
     -sS 192.168.100.1 192.168.0.1 10.0.0.1 10.1.10.1 \
     --min-parallelism 100 |
-    egrep -o '([0-9]{1,3}[.]){3}[0-9]{1,3}'
+    grep -Eo '([0-9]{1,3}[.]){3}[0-9]{1,3}'
 }
 
 open_router_config() {
@@ -149,7 +150,7 @@ exploit_scan() {
   sudo nmap \
     --script nmap-vulners,vulscan \
     --script-args vulscandb=scipvuldb.csv \
-    -sV "$(get_target "$1")"
+    -sV "$(get_target "$@")"
 }
 
 os_scan() {
@@ -157,7 +158,7 @@ os_scan() {
     --min-parallelism 100 \
     -A \
     -Pn \
-    -T4 "$(get_target "$1")"
+    -T4 "$(get_target "$@")"
 }
 
 snmp_scan() {
@@ -165,11 +166,15 @@ snmp_scan() {
     --script snmp-brute,snmp-info \
     --script-args snmplist=community.lst \
     -sU -p161 \
-    "$(get_target "$1")"
+    "$(get_target "$@")"
+}
+
+port_scan() {
+  sudo nmap -p- "$(get_target "$@")"
 }
 
 get_target() {
-  if [ -z "$1" ]; then
+  if [ $# -eq 0 ]; then
     echo "$(get_network_ip_address)/$(get_network_mask_bits)"
   else
     echo "$1"
@@ -188,7 +193,7 @@ show_unknown_command() {
 }
 
 get_commands() {
-  echo "$(show_help)" | grep -o '\-[a-z]*'
+  show_help | grep -o '\-[a-z]*'
   exit 0
 }
 
@@ -265,16 +270,17 @@ case "$@" in
   "-getsubnet"             ) get_network_mask ;;
   "-probe modem"           ) probe_modem ;;
   "-probe router"          ) probe_router ;;
-  "-exploitscan"*          ) shift; exploit_scan "$1" ;;
-  "-osscan"*               ) shift; os_scan "$1" ;;
-  "-snmpscan"*             ) shift; snmp_scan "$1" ;;
+  "-exploitscan"*          ) shift; exploit_scan "$@" ;;
+  "-osscan"*               ) shift; os_scan "$@" ;;
+  "-snmpscan"*             ) shift; snmp_scan "$@" ;;
+  "-portscan"*             ) shift; port_scan "$@" ;;
   "-updatevulscan"         ) update_vulscan ;;
   "-webconfig modem"       ) open_modem_config ;;
   "-webconfig router"      ) open_router_config ;;
   "listcommands"           ) get_commands ;;
   "--help"                 ) show_help ;;
   "-h"                     ) show_help ;;
-  ""                       ) show_usage ;;
+  ""                       ) show_help ;;
   *                        ) show_unknown_command "$@" ;;
 esac
 exit 0
