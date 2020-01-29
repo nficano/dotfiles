@@ -50890,13 +50890,13 @@
 	<key>NSWindow Frame NSFontPanel</key>
 	<string>2582 274 563 309 0 0 3440 1417 </string>
 	<key>NSWindow Frame SUUpdateAlert</key>
-	<string>530 499 620 392 0 0 1680 1027 </string>
+	<string>1410 791 620 392 0 0 3440 1417 </string>
 	<key>NSWindow Frame SessionsPreferences</key>
 	<string>-1450 250 606 469 -1680 0 1680 1027 </string>
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>-1540 328 770 429 -1680 0 1680 1027 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>1266 586 986 513 0 0 3440 1417 </string>
+	<string>1013 592 1442 657 0 0 3440 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>1737 384 1330 1034 0 0 3440 1418 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
@@ -51148,7 +51148,7 @@
 			<key>Columns</key>
 			<integer>80</integer>
 			<key>Command</key>
-			<string>/usr/local/bin/bash -l</string>
+			<string> /usr/local/bin/bash -l  </string>
 			<key>Cursor Color</key>
 			<dict>
 				<key>Blue Component</key>
@@ -51913,13 +51913,14 @@
 	<key>NoSyncAllAppVersions</key>
 	<array>
 		<string>3.3.6</string>
-		<string>3.3.4</string>
+		<string>3.3.2</string>
 		<string>3.3.1</string>
 		<string>3.3.3</string>
 		<string>3.3.5</string>
-		<string>3.2.9</string>
+		<string>3.3.7</string>
 		<string>3.3.0</string>
-		<string>3.3.2</string>
+		<string>3.2.9</string>
+		<string>3.3.4</string>
 	</array>
 	<key>NoSyncFrame_SharedPreferences</key>
 	<dict>
@@ -51935,7 +51936,7 @@
 	<key>NoSyncInstallationId</key>
 	<string>E3FEB900-7DB4-46AC-B017-1332B84F3E22</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>35</integer>
+	<integer>56</integer>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -52659,17 +52660,21 @@
 	</array>
 	<key>NoSyncSearchHistory2</key>
 	<array>
-		<string>protoc</string>
-		<string>api/server/config/index.js</string>
-		<string>logd</string>
-		<string>mod-</string>
-		<string>mod-nfct</string>
-		<string>-mod-nfct</string>
-		<string>d-mod-nfct</string>
-		<string>gd-mod-nfct</string>
-		<string>ogd-mod-nfct</string>
-		<string>logd-mod-nfct</string>
+		<string>utils.js</string>
+		<string>openssl</string>
+		<string>count</string>
+		<string>group</string>
+		<string>group b</string>
+		<string>orders.</string>
+		<string>crypt</string>
+		<string>nodej</string>
+		<string>qcq</string>
+		<string>14 </string>
 	</array>
+	<key>NoSyncSuppressBroadcastInputWarning</key>
+	<true/>
+	<key>NoSyncSuppressBroadcastInputWarning_selection</key>
+	<integer>0</integer>
 	<key>NoSyncTimeOfFirstLaunchOfVersionWithTip</key>
 	<real>534364662.83769</real>
 	<key>PMPrintingExpandedStateForPrint2</key>
@@ -52722,7 +52727,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2019-11-01T14:32:58Z</date>
+	<date>2020-01-07T00:26:45Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUUpdateRelaunchingMarker</key>
@@ -52746,7 +52751,7 @@
 	<key>findMode_iTerm</key>
 	<integer>0</integer>
 	<key>iTerm Version</key>
-	<string>3.3.6</string>
+	<string>3.3.7</string>
 	<key>kCPKSelectionViewPreferredModeKey</key>
 	<integer>0</integer>
 	<key>kCPKSelectionViewShowHSBTextFieldsKey</key>
