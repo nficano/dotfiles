@@ -5,6 +5,21 @@ install: setup
 bootstrap:
 	bash $(DOTFILES)/misc/bootstrap
 
+deploy-patch:
+	bumpversion patch
+	git push
+	git push --tags
+
+deploy-minor:
+	bumpversion minor
+	git push
+	git push --tags
+
+deploy-major:
+	bumpversion major
+	git push
+	git push --tags
+
 setup:
 	mkdir -p ~/.virtualenvs
 	mkdir -p ~/Downloads
