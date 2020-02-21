@@ -10,6 +10,8 @@
 	<false/>
 	<key>AppleAntiAliasingThreshold</key>
 	<integer>1</integer>
+	<key>ApplePressAndHoldEnabled</key>
+	<false/>
 	<key>AppleScrollAnimationEnabled</key>
 	<integer>0</integer>
 	<key>AppleSmoothFixedFontsSizeThreshold</key>
@@ -50889,6 +50891,8 @@
 	<string>0 170 224 275 0 0 1680 1027 </string>
 	<key>NSWindow Frame NSFontPanel</key>
 	<string>2582 274 563 309 0 0 3440 1417 </string>
+	<key>NSWindow Frame SUStatusFrame</key>
+	<string>640 689 400 129 0 0 3440 1417 </string>
 	<key>NSWindow Frame SUUpdateAlert</key>
 	<string>1410 791 620 392 0 0 3440 1417 </string>
 	<key>NSWindow Frame SessionsPreferences</key>
@@ -50896,7 +50900,7 @@
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>-1540 328 770 429 -1680 0 1680 1027 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>1013 592 1442 657 0 0 3440 1417 </string>
+	<string>35 120 1770 909 0 0 3440 1417 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>1737 384 1330 1034 0 0 3440 1418 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
@@ -51913,14 +51917,15 @@
 	<key>NoSyncAllAppVersions</key>
 	<array>
 		<string>3.3.6</string>
-		<string>3.3.2</string>
+		<string>3.3.4</string>
+		<string>3.3.8</string>
 		<string>3.3.1</string>
 		<string>3.3.3</string>
 		<string>3.3.5</string>
 		<string>3.3.7</string>
-		<string>3.3.0</string>
 		<string>3.2.9</string>
-		<string>3.3.4</string>
+		<string>3.3.0</string>
+		<string>3.3.2</string>
 	</array>
 	<key>NoSyncFrame_SharedPreferences</key>
 	<dict>
@@ -51936,7 +51941,7 @@
 	<key>NoSyncInstallationId</key>
 	<string>E3FEB900-7DB4-46AC-B017-1332B84F3E22</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>56</integer>
+	<integer>67</integer>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -52649,28 +52654,6 @@
 	<true/>
 	<key>NoSyncReplaceProfileWarning_selection</key>
 	<integer>0</integer>
-	<key>NoSyncSearchHistory</key>
-	<array>
-		<string>HandleURL</string>
-		<string>Calling start_app</string>
-		<string>detected hosts</string>
-		<string># file</string>
-		<string>#file</string>
-		<string>file</string>
-	</array>
-	<key>NoSyncSearchHistory2</key>
-	<array>
-		<string>utils.js</string>
-		<string>openssl</string>
-		<string>count</string>
-		<string>group</string>
-		<string>group b</string>
-		<string>orders.</string>
-		<string>crypt</string>
-		<string>nodej</string>
-		<string>qcq</string>
-		<string>14 </string>
-	</array>
 	<key>NoSyncSuppressBroadcastInputWarning</key>
 	<true/>
 	<key>NoSyncSuppressBroadcastInputWarning_selection</key>
@@ -52727,7 +52710,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-01-07T00:26:45Z</date>
+	<date>2020-02-04T20:58:17Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUUpdateRelaunchingMarker</key>
@@ -52751,7 +52734,7 @@
 	<key>findMode_iTerm</key>
 	<integer>0</integer>
 	<key>iTerm Version</key>
-	<string>3.3.7</string>
+	<string>3.3.8</string>
 	<key>kCPKSelectionViewPreferredModeKey</key>
 	<integer>0</integer>
 	<key>kCPKSelectionViewShowHSBTextFieldsKey</key>

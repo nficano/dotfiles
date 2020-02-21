@@ -1,8 +1,8 @@
 #!/bin/sh
-#/ Fix issue where audio stops working.
+#/ Fix MacOS speech synthesis.
 #/
 #/ USAGE:
-#/    macos-fix-audio [--help]
+#/    macos-fix-speech [--help]
 #/
 
 set -o errexit          # Exit on most errors (see the manual)
@@ -17,4 +17,5 @@ usage () {
   exit $status
 }
 [ $# -ne 0 ] && usage
-exec sudo killall -9 coreaudiod
+exec killall -9 com.apple.speech.speechsynthesisd
+exec killall -9 corespeechd
