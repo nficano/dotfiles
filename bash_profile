@@ -120,6 +120,8 @@ includeif "/usr/local/opt/icu4c/bin"
 includeif "/usr/local/opt/icu4c/sbin"
 includeif "/usr/local/opt/openssl/bin"
 includeif "/usr/local/opt/python/libexec/bin"
+includeif "/usr/local/opt/e2fsprogs/bin"
+includeif "/usr/local/opt/e2fsprogs/sbin"
 includeif "/opt/bin"
 includeif "$HOME/.bin"
 
