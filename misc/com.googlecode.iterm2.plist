@@ -50856,10 +50856,10 @@
 	<false/>
 	<key>NSSplitView Subview Frames NSColorPanelSplitView</key>
 	<array>
-		<string>0.000000, 0.000000, 224.000000, 258.000000, NO, NO</string>
-		<string>0.000000, 259.000000, 224.000000, 48.000000, NO, NO</string>
+		<string>0.000000, 0.000000, 224.000000, 255.000000, NO, NO</string>
+		<string>0.000000, 256.000000, 224.000000, 48.000000, NO, NO</string>
 	</array>
-	<key>NSTableView Columns v2 KeyBingingTable</key>
+	<key>NSTableView Columns v3 KeyBingingTable</key>
 	<data>
 	YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMS
 	AAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVVBcnJheYABrgsMEx4fICEiIyQqNDU2VSRu
@@ -50888,19 +50888,19 @@
 		<integer>1</integer>
 	</dict>
 	<key>NSWindow Frame NSColorPanel</key>
-	<string>0 170 224 275 0 0 1680 1027 </string>
+	<string>0 178 224 275 0 0 1680 1027 </string>
 	<key>NSWindow Frame NSFontPanel</key>
 	<string>2582 274 563 309 0 0 3440 1417 </string>
 	<key>NSWindow Frame SUStatusFrame</key>
 	<string>640 689 400 129 0 0 3440 1417 </string>
 	<key>NSWindow Frame SUUpdateAlert</key>
-	<string>1410 791 620 392 0 0 3440 1417 </string>
+	<string>1410 788 620 392 0 0 3440 1417 </string>
 	<key>NSWindow Frame SessionsPreferences</key>
 	<string>-1450 250 606 469 -1680 0 1680 1027 </string>
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>-1540 328 770 429 -1680 0 1680 1027 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>35 120 1770 909 0 0 3440 1417 </string>
+	<string>288 512 650 513 0 0 1680 1025 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>1737 384 1330 1034 0 0 3440 1418 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
@@ -51193,7 +51193,7 @@
 			<key>Custom Command</key>
 			<string>Yes</string>
 			<key>Custom Directory</key>
-			<string>Recycle</string>
+			<string>Yes</string>
 			<key>Default Bookmark</key>
 			<string>No</string>
 			<key>Description</key>
@@ -51201,6 +51201,8 @@
 			<key>Disable Smcup Rmcup</key>
 			<true/>
 			<key>Disable Window Resizing</key>
+			<true/>
+			<key>Draw Powerline Glyphs</key>
 			<true/>
 			<key>Flashing Bell</key>
 			<false/>
@@ -51527,7 +51529,7 @@
 			<key>Non-ASCII Anti Aliased</key>
 			<true/>
 			<key>Normal Font</key>
-			<string>OperatorMono-Book 15</string>
+			<string>OperatorMono-Light 15</string>
 			<key>Option Key Sends</key>
 			<integer>0</integer>
 			<key>Prompt Before Closing 2</key>
@@ -51916,23 +51918,30 @@
 	</array>
 	<key>NoSyncAllAppVersions</key>
 	<array>
-		<string>3.3.6</string>
-		<string>3.3.4</string>
-		<string>3.3.8</string>
-		<string>3.3.1</string>
-		<string>3.3.3</string>
 		<string>3.3.5</string>
-		<string>3.3.7</string>
+		<string>3.3.3</string>
+		<string>3.3.1</string>
+		<string>3.3.8</string>
+		<string>3.3.12</string>
+		<string>3.3.6</string>
+		<string>3.3.11</string>
+		<string>3.3.4</string>
+		<string>3.3.2</string>
+		<string>3.3.9</string>
 		<string>3.2.9</string>
 		<string>3.3.0</string>
-		<string>3.3.2</string>
+		<string>3.3.7</string>
+	</array>
+	<key>NoSyncBFPRecents</key>
+	<array>
+		<string>Operator Mono</string>
 	</array>
 	<key>NoSyncFrame_SharedPreferences</key>
 	<dict>
 		<key>screenFrame</key>
-		<string>{{0, 0}, {3440, 1440}}</string>
+		<string>{{0, 0}, {1680, 1050}}</string>
 		<key>topLeft</key>
-		<string>{1911, 1057}</string>
+		<string>{643, 909}</string>
 	</dict>
 	<key>NoSyncHaveRequestedFullDiskAccess</key>
 	<true/>
@@ -51941,7 +51950,7 @@
 	<key>NoSyncInstallationId</key>
 	<string>E3FEB900-7DB4-46AC-B017-1332B84F3E22</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>67</integer>
+	<integer>142</integer>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -52271,6 +52280,14 @@
 				<true/>
 				<key>name</key>
 				<string>style</string>
+				<key>nonterminalContext</key>
+				<integer>0</integer>
+			</dict>
+			<dict>
+				<key>isTerminal</key>
+				<true/>
+				<key>name</key>
+				<string>currentTab.currentSession.jobPid</string>
 				<key>nonterminalContext</key>
 				<integer>0</integer>
 			</dict>
@@ -52701,6 +52718,8 @@
 	<string>/Users/nficano/github/dotfiles/misc</string>
 	<key>Print In Black And White</key>
 	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedAlternateAppNameKey</key>
@@ -52710,9 +52729,11 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-02-04T20:58:17Z</date>
+	<date>2020-11-16T16:04:24Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
+	<key>SUUpdateGroupIdentifier</key>
+	<integer>2095337387</integer>
 	<key>SUUpdateRelaunchingMarker</key>
 	<false/>
 	<key>SmartPlacement</key>
@@ -52734,7 +52755,7 @@
 	<key>findMode_iTerm</key>
 	<integer>0</integer>
 	<key>iTerm Version</key>
-	<string>3.3.8</string>
+	<string>3.3.12</string>
 	<key>kCPKSelectionViewPreferredModeKey</key>
 	<integer>0</integer>
 	<key>kCPKSelectionViewShowHSBTextFieldsKey</key>

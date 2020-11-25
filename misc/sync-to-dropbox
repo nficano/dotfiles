@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEST_DIR="$HOME/Dropbox/$HOSTNAME Home"
+DEST_DIR="$HOME/Dropbox/Automatic Backups/$HOSTNAME Home"
 SECONDS=0
 
 info () {
@@ -12,10 +12,10 @@ info () {
 
 sync () {
   info "Synchronizing \"$1\" with \"$DEST_DIR/$2\""
-  unison $1 "$DEST_DIR/$2" \
+  unison "$1" "$DEST_DIR/$2" \
     -auto \
     -batch \
-    -prefer $1 \
+    -prefer "$1" \
     -silent
 }
 
@@ -23,7 +23,6 @@ sync "$HOME/.aws/" "aws/"
 sync "$HOME/.bash_history" "bash_history"
 sync "$HOME/.bash_profile.local" "bash_profile.local"
 sync "$HOME/.ssh/" "ssh/"
-sync "$HOME/.gnupg/" "gnupg/"
 sync "$HOME/Desktop/" "Desktop/"
 sync "$HOME/Library/Fonts/" "Fonts/"
 sync "$HOME/Library/Keychains/" "Library/Keychains/"
@@ -38,7 +37,7 @@ info "Generating Brew Installs List ..."
 brew list > "$DEST_DIR/brew_installs.txt"
 
 info "Generating Brew Cask Installs List ..."
-brew cask list > "$DEST_DIR/brewcask_installs.txt"
+brew list --cask > "$DEST_DIR/brewcask_installs.txt"
 
 info "Generating MacOS App Installs List ..."
 find /Applications \
@@ -92,5 +91,5 @@ find /Applications \
   > "$DEST_DIR/osx_installs.txt"
 
 rm "$HOME/unison.log"
-info "Quick Back-Up Completed in $(($SECONDS))s"
+info "Quick Back-Up Completed in ${SECONDS}s"
 exit 0
