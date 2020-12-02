@@ -1,60 +1,61 @@
 #!/usr/bin/env bash
 
 if [[ $- != *i* ]] ; then
-  return
+    return
 fi
 
 silence() {
-  "$@" 2> /dev/null > /dev/null;
+    "$@" 2> /dev/null > /dev/null;
 }
 
 ifshopt() {
-  is_installed "shopt" && shopt -s "$1"
+    is_installed "shopt" && shopt -s "$1"
 }
 
 includeif() {
-  [[ -d "$1" ]] && PATH="$1:${PATH}"
+    [[ -d "$1" ]] && PATH="$1:${PATH}"
 }
 
 sourceif() {
-  # shellcheck source=/dev/null
-  [[ -f "$1" ]] && source "$1"
+    # shellcheck source=/dev/null
+    [[ -f "$1" ]] && source "$1"
 }
 
 evalif() {
-  is_installed "$1" && eval "$($2)"
+    is_installed "$1" && eval "$($2)"
 }
 
 setup_ssh() {
-  # if not started, start ssh-agent.
-  if ! silence pgrep 'ssh-agent'; then
-    silence ssh-agent
-  fi
-
-  # add keys if ssh directory exists.
-  if [ -d "$HOME/.ssh" ]; then
-    find "$HOME/.ssh" -name '*\.pem' | silence xargs ssh-add
-  fi
+    # if not started, start ssh-agent.
+    if ! silence pgrep 'ssh-agent'; then
+        silence ssh-agent
+    fi
+    
+    # add keys if ssh directory exists.
+    if [ -d "$HOME/.ssh" ]; then
+        find "$HOME/.ssh" -name '*\.pem' | silence xargs ssh-add
+    fi
 }
 
 abbr_pwd() {
-  cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
-  echo -n "$cwd"
+    cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
+    echo -n "$cwd"
 }
 
 is_installed() {
-  command -v "$1" > /dev/null
+    command -v "$1" > /dev/null
 }
 
 is_darwin() {
-  [[ $(uname -s) == "Darwin" ]]
+    [[ $(uname -s) == "Darwin" ]]
 }
 
 is_linux() {
-  [[ $(uname -s) == "Linux" ]]
+    [[ $(uname -s) == "Linux" ]]
 }
-export EDITOR='nano'
-export VISUAL='code'
+
+export VISUAL="code --wait"
+export EDITOR="$VISUAL"
 
 export TERM=xterm-256color
 
@@ -113,11 +114,13 @@ includeif "/usr/local/opt/grep/libexec/gnubin"
 includeif "/usr/local/opt/icu4c/bin"
 includeif "/usr/local/opt/icu4c/sbin"
 includeif "/usr/local/opt/openssl/bin"
+includeif "/usr/local/opt/openjdk/bin"
 includeif "/usr/local/opt/e2fsprogs/bin"
 includeif "/usr/local/opt/e2fsprogs/sbin"
 includeif "$HOME/.bin"  # local scripts untracked by source control
 
 sourceif "/usr/local/opt/nvm/nvm.sh"
+sourceif "/usr/local/opt/git-extras/share/git-extras/git-extras-completion.sh"
 sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
 sourceif "/usr/local/etc/bash_completion"
 sourceif "$HOME/.bash_profile.local"
