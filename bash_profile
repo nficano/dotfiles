@@ -60,7 +60,7 @@ export TERM=xterm-256color
 
 export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
 
-export DOTFILES_VERSION='2.8.0'
+export DOTFILES_VERSION='3.0.0'
 
 # highlighting inside manpages and elsewhere
 export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
