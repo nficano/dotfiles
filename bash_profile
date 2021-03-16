@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-if [[ $- != *i* ]] ; then
+if [[ $- != *i* ]]; then
     return
 fi
 
 silence() {
-    "$@" 2> /dev/null > /dev/null;
+    "$@" 2>/dev/null >/dev/null
 }
 
 ifshopt() {
@@ -30,7 +30,7 @@ setup_ssh() {
     if ! silence pgrep 'ssh-agent'; then
         silence ssh-agent
     fi
-    
+
     # add keys if ssh directory exists.
     if [ -d "$HOME/.ssh" ]; then
         find "$HOME/.ssh" -name '*\.pem' | silence xargs ssh-add
@@ -43,7 +43,7 @@ abbr_pwd() {
 }
 
 is_installed() {
-    command -v "$1" > /dev/null
+    command -v "$1" >/dev/null
 }
 
 is_darwin() {
@@ -79,34 +79,34 @@ export TLDR_DESCRIPTION='green'
 export TLDR_CODE='red'
 export TLDR_PARAM='blue'
 
-export MANPAGER="less -X"               # don’t clear screen after quitting man
-export GREP_COLOR='1;32'                # make match highlight color green
-export DIRENV_LOG_FORMAT=               # stfu direnv
+export MANPAGER="less -X" # don’t clear screen after quitting man
+export GREP_COLOR='1;32'  # make match highlight color green
+export DIRENV_LOG_FORMAT= # stfu direnv
 export WORKON_HOME=$HOME/.virtualenvs
 export PYTHONDONTWRITEBYTECODE=true
 export PYENV_ROOT="$HOME/.pyenv"
+export POETRY_VIRTUALENVS_PATH=$HOME/.virtualenvs
 
 export NVM_DIR=/usr/local/Cellar/nvm
-export NODE_REPL_HISTORY=$HOME/.node_history  # persistent node REPL history
-export NODE_REPL_HISTORY_SIZE='32768'         # allow 32³ entries
-export NODE_REPL_MODE='sloppy'                # allow non-strict mode code
+export NODE_REPL_HISTORY=$HOME/.node_history # persistent node REPL history
+export NODE_REPL_HISTORY_SIZE='32768'        # allow 32³ entries
+export NODE_REPL_MODE='sloppy'               # allow non-strict mode code
 
 export HISTCONTROL=ignoredups:erasedups:ignoreboth
 export HISTFILESIZE=10000000
 export HISTSIZE=100000
-export HISTIGNORE="&:ls:[bf]g:exit:pwd:clear:c:[ \t]*"
 
 # Save and reload the history after each command finishes
 export SHELL_SESSION_HISTORY=0
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
-ifshopt "nocaseglob"                # case-insensitive path expansion
-ifshopt "checkwinsize"              # update window size after each command
-ifshopt "histappend"                # append history instead of rewriting
-ifshopt "hostcomplete"              # tab-completion of hostnames
-ifshopt "cdspell"                   # autocorrect typos in path names
-ifshopt "cmdhist"                   # save multi-line commands as one command
-ifshopt "no_empty_cmd_completion"   # no tab-complete if line is empty
+ifshopt "nocaseglob"              # case-insensitive path expansion
+ifshopt "checkwinsize"            # update window size after each command
+ifshopt "histappend"              # append history instead of rewriting
+ifshopt "hostcomplete"            # tab-completion of hostnames
+ifshopt "cdspell"                 # autocorrect typos in path names
+ifshopt "cmdhist"                 # save multi-line commands as one command
+ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
 includeif "/usr/local/opt/coreutils/libexec/gnubin"
 includeif "/usr/local/opt/gnu-tar/libexec/gnubin"
@@ -117,7 +117,7 @@ includeif "/usr/local/opt/openssl/bin"
 includeif "/usr/local/opt/openjdk/bin"
 includeif "/usr/local/opt/e2fsprogs/bin"
 includeif "/usr/local/opt/e2fsprogs/sbin"
-includeif "$HOME/.bin"  # local scripts untracked by source control
+includeif "$HOME/.bin" # local scripts untracked by source control
 
 sourceif "/usr/local/opt/nvm/nvm.sh"
 sourceif "/usr/local/opt/git-extras/share/git-extras/git-extras-completion.sh"
@@ -133,7 +133,7 @@ evalif "thefuck" "thefuck --alias fu"
 evalif "ntfy shell-integration"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
-complete -cf sudo  # tab completions for sudo
+complete -cf sudo # tab completions for sudo
 
 alias ..='cd ..'
 alias ...='cd ../..'

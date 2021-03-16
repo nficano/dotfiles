@@ -30,13 +30,14 @@ setup:
 	rm -f ${HOME}/.inputrc
 	rm -f ${HOME}/.bin
 	ln -fsn $(DOTFILES)/bash_profile ${HOME}/.bash_profile
-	ln -fsn $(DOTFILES)/rc.d/agrc ${HOME}/.agrc
-	ln -fsn $(DOTFILES)/rc.d/dircolors ${HOME}/.dircolors
-	ln -fsn $(DOTFILES)/rc.d/gitignore ${HOME}/.gitignore
-	ln -fsn $(DOTFILES)/rc.d/gitmessage ${HOME}/.gitmessage
-	ln -fsn $(DOTFILES)/rc.d/hushlogin ${HOME}/.hushlogin
-	ln -fsn $(DOTFILES)/rc.d/inputrc ${HOME}/.inputrc
-	ln -fsn $(DOTFILES)/rc.d/nanorc ${HOME}/.nanorc
-	ln -fsn $(DOTFILES)/rc.d/pip.conf ${HOME}/.pip/pip.conf
-	ln -fsn $(DOTFILES)/rc.d/tmux.conf ${HOME}/.tmux.conf
+	ln -fsn $(DOTFILES)/home/agrc ${HOME}/.agrc
+	ln -fsn $(DOTFILES)/home/dircolors ${HOME}/.dircolors
+	ln -fsn $(DOTFILES)/home/gitignore ${HOME}/.gitignore
+	ln -fsn $(DOTFILES)/home/gitmessage ${HOME}/.gitmessage
+	ln -fsn $(DOTFILES)/home/hushlogin ${HOME}/.hushlogin
+	ln -fsn $(DOTFILES)/home/inputrc ${HOME}/.inputrc
+	ln -fsn $(DOTFILES)/home/nanorc ${HOME}/.nanorc
+	ln -fsn $(DOTFILES)/home/pip.conf ${HOME}/.pip/pip.conf
+	ln -fsn $(DOTFILES)/home/tmux.conf ${HOME}/.tmux.conf
+	ln -fsn $(DOTFILES)/home/direnvrc ${HOME}/.direnvrc
 	ln -s $(DOTFILES)/bin ${HOME}/.bin

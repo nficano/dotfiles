@@ -20,7 +20,7 @@ recommend using it for reference purposes only.
 
 - ``bin/`` - all of my custom executable scripts.
 - ``misc/`` - stuff that doesn't have a home.
-- ``rc.d/`` - config files that I symlink to my home directory.
+- ``home/`` - config files that I symlink to my home directory.
 
 ## Reference
 

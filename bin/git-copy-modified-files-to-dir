@@ -1,0 +1,20 @@
+#!/bin/sh
+#/ Copy modified files (git status) to a specified directory.
+#/
+#/ USAGE:
+#/    git-copy-modified-files-to-dir <path/to/dir> [--help]
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 1
+}
+
+[ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
+#cp --parents $(git ls-files --modified) /Users/nficano/Desktop/invmap-changed

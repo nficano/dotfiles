@@ -1,9 +1,0 @@
-#!/bin/bash
-
-curdir="$PWD"
-
-if [ "$1" != "" ]; then
-  split-tab-and-run $curdir "$@"
-else
-  split-tab-and-focus $curdir
-fi

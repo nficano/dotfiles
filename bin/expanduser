@@ -1,0 +1,21 @@
+#!/bin/bash
+#/ expanduser: Expand the tilde (~) user home shorthand in the specified path.
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o errtrace         # Make sure any error trap is inherited
+set -o nounset          # Disallow expansion of unset variables
+set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 1
+}
+
+[ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
+
+_safe_path=''
+printf -v _safe_path "%q" "$1"
+eval "ln -sf ${_safe_path#\\} /tmp/realpath.$$"
+readlink /tmp/realpath.$$
+rm -f /tmp/realpath.$$
