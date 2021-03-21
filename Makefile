@@ -32,6 +32,8 @@ setup:
 	ln -fsn $(DOTFILES)/bash_profile ${HOME}/.bash_profile
 	ln -fsn $(DOTFILES)/home/agrc ${HOME}/.agrc
 	ln -fsn $(DOTFILES)/home/dircolors ${HOME}/.dircolors
+	ln -fsn $(DOTFILES)/home/direnvrc ${HOME}/.direnvrc
+	ln -fsn $(DOTFILES)/home/gitconfig ${HOME}/.gitconfig
 	ln -fsn $(DOTFILES)/home/gitignore ${HOME}/.gitignore
 	ln -fsn $(DOTFILES)/home/gitmessage ${HOME}/.gitmessage
 	ln -fsn $(DOTFILES)/home/hushlogin ${HOME}/.hushlogin
@@ -39,5 +41,4 @@ setup:
 	ln -fsn $(DOTFILES)/home/nanorc ${HOME}/.nanorc
 	ln -fsn $(DOTFILES)/home/pip.conf ${HOME}/.pip/pip.conf
 	ln -fsn $(DOTFILES)/home/tmux.conf ${HOME}/.tmux.conf
-	ln -fsn $(DOTFILES)/home/direnvrc ${HOME}/.direnvrc
 	ln -s $(DOTFILES)/bin ${HOME}/.bin
