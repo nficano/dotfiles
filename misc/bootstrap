@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -o errexit          # Exit on most errors (see the manual)
 set -o errtrace         # Make sure any error trap is inherited
 set -o nounset          # Disallow expansion of unset variables
@@ -34,10 +34,10 @@ log() {
 }
 
 get_dotfiles_path() {
-  fp="$(readlink -f ${0})"
-  dir=$(dirname $fp)
-  cd $dir || exit 1
-  echo "$(git rev-parse --show-toplevel)"
+  fp=$(readlink -f "${0}")
+  dir=$(dirname "$fp")
+  cd "$dir" || exit 1
+  git rev-parse --show-toplevel
 }
 
 get_brewfile_path() {
