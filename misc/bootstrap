@@ -180,6 +180,8 @@ setup_default_file_associations() {
   duti -s com.microsoft.VSCode .conf all
   duti -s com.microsoft.VSCode .yaml all
   duti -s com.microsoft.VSCode .yml all
+  duti -s com.microsoft.VSCode .toml all
+
 
   duti -s com.microsoft.VSCode public.json all
   duti -s com.microsoft.VSCode public.plain-text all
@@ -188,6 +190,8 @@ setup_default_file_associations() {
   duti -s com.microsoft.VSCode public.source-code all
   duti -s com.microsoft.VSCode public.text all
   duti -s com.microsoft.VSCode public.unix-executable all
+  duti -s com.apple.QuickTimePlayerX .m4a all
+  duti -s com.apple.QuickTimePlayerX .mp3 all
 }
 
 run_setup

@@ -93,8 +93,8 @@ export NODE_REPL_HISTORY_SIZE='32768'        # allow 32³ entries
 export NODE_REPL_MODE='sloppy'               # allow non-strict mode code
 
 export HISTCONTROL=ignoredups:erasedups:ignoreboth
-export HISTFILESIZE=10000000
-export HISTSIZE=100000
+export HISTFILESIZE=-1
+export HISTSIZE=-1
 
 # Save and reload the history after each command finishes
 export SHELL_SESSION_HISTORY=0
