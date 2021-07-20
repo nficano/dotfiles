@@ -181,6 +181,7 @@ setup_default_file_associations() {
   duti -s com.microsoft.VSCode .yaml all
   duti -s com.microsoft.VSCode .yml all
   duti -s com.microsoft.VSCode .toml all
+  duti -s com.microsoft.VSCode .jsonl all
 
 
   duti -s com.microsoft.VSCode public.json all
@@ -190,8 +191,24 @@ setup_default_file_associations() {
   duti -s com.microsoft.VSCode public.source-code all
   duti -s com.microsoft.VSCode public.text all
   duti -s com.microsoft.VSCode public.unix-executable all
+
+  duti -s com.apple.QuickTimePlayerX .avi all
+  duti -s com.apple.QuickTimePlayerX .drc all
+  duti -s com.apple.QuickTimePlayerX .flv all
+  duti -s com.apple.QuickTimePlayerX .m4v all
+  duti -s com.apple.QuickTimePlayerX .mkv all
+  duti -s com.apple.QuickTimePlayerX .mov all
   duti -s com.apple.QuickTimePlayerX .m4a all
+  duti -s com.apple.QuickTimePlayerX .mp2 all
   duti -s com.apple.QuickTimePlayerX .mp3 all
+  duti -s com.apple.QuickTimePlayerX .mpe all
+  duti -s com.apple.QuickTimePlayerX .mpeg all
+  duti -s com.apple.QuickTimePlayerX .mpg all
+  duti -s com.apple.QuickTimePlayerX .mpv all
+  duti -s com.apple.QuickTimePlayerX .rm all
+  duti -s com.apple.QuickTimePlayerX .rmvb all
+  duti -s com.apple.QuickTimePlayerX .vob all
+  duti -s com.apple.QuickTimePlayerX .wmv all
 }
 
 run_setup
