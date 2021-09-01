@@ -71,7 +71,7 @@ export GPG_TTY="$(tty)"
 
 export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
 
-export DOTFILES_VERSION='3.7.0'
+export DOTFILES_VERSION='3.7.1'
 
 export BASH_SILENCE_DEPRECATION_WARNING=true
 
