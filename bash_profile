@@ -81,7 +81,7 @@ export TERM=xterm-256color
 # shellcheck disable=SC2155
 export GPG_TTY="$(tty)"
 export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
-export DOTFILES_VERSION='3.7.1'
+export DOTFILES_VERSION='3.7.2'
 export BASH_SILENCE_DEPRECATION_WARNING=true
 
 # highlighting inside manpages and elsewhere
