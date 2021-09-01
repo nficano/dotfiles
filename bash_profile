@@ -25,8 +25,12 @@ evalif() {
     is_installed "$1" && eval "$($2)"
 }
 
+is_ssh_agent_running() {
+    pgrep -u "$USER" ssh-agent
+}
+
 setup_ssh() {
-    if ! pgrep -u "$USER" ssh-agent > /dev/null; then
+    if ! is_ssh_agent_running > /dev/null; then
         ssh-agent > "$HOME/.ssh-agent"
     fi
 
@@ -57,6 +61,7 @@ is_linux() {
     [[ $(uname -s) == "Linux" ]]
 }
 
+
 export VISUAL="code --wait"
 export EDITOR="$VISUAL"
 
@@ -69,12 +74,16 @@ export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
 export DOTFILES_VERSION='3.7.0'
 
 export BASH_SILENCE_DEPRECATION_WARNING=true
-export HOMEBREW_PREFIX="/opt/homebrew"
-export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
-export HOMEBREW_REPOSITORY="/opt/homebrew"
-export HOMEBREW_SHELLENV_PREFIX="/opt/homebrew"
-export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
-export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
+
+export HOMEBREW_PREFIX=""
+
+# shellcheck disable=SC2155
+is_installed "brew" && export HOMEBREW_PREFIX="$(brew --prefix)"
+export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
+export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";
+export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX";
+export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:";
+export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}";
 
 # highlighting inside manpages and elsewhere
 export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
@@ -97,10 +106,10 @@ export GREP_COLOR='1;32'  # make match highlight color green
 export DIRENV_LOG_FORMAT= # stfu direnv
 export WORKON_HOME=$HOME/.virtualenvs
 export PYTHONDONTWRITEBYTECODE=true
-export PYENV_ROOT="$HOME/.pyenv"
+export PYENV_ROOT=$HOME/.pyenv
 export POETRY_VIRTUALENVS_PATH=$HOME/.virtualenvs
 
-export NVM_DIR=/usr/local/Cellar/nvm
+export NVM_DIR=$HOMEBREW_PREFIX/Cellar/nvm
 export NODE_REPL_HISTORY=$HOME/.node_history # persistent node REPL history
 export NODE_REPL_HISTORY_SIZE='32768'        # allow 32³ entries
 export NODE_REPL_MODE='sloppy'               # allow non-strict mode code
@@ -121,24 +130,24 @@ ifshopt "cdspell"                 # autocorrect typos in path names
 ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
-includeif "/opt/homebrew/opt/coreutils/libexec/gnubin"
-includeif "/opt/homebrew/opt/gnu-tar/libexec/gnubin"
-includeif "/opt/homebrew/opt/grep/libexec/gnubin"
-includeif "/opt/homebrew/opt/icu4c/bin"
-includeif "/opt/homebrew/opt/icu4c/sbin"
-includeif "/opt/homebrew/opt/openssl/bin"
-includeif "/opt/homebrew/opt/openjdk/bin"
-includeif "/opt/homebrew/opt/e2fsprogs/bin"
-includeif "/opt/homebrew/opt/e2fsprogs/sbin"
-includeif "/opt/homebrew/bin"
-includeif "/opt/homebrew/sbin"
+includeif "$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/grep/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/icu4c/bin"
+includeif "$HOMEBREW_PREFIX/opt/icu4c/sbin"
+includeif "$HOMEBREW_PREFIX/opt/openssl/bin"
+includeif "$HOMEBREW_PREFIX/opt/openjdk/bin"
+includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
+includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
+includeif "$HOMEBREW_PREFIX/bin"
+includeif "$HOMEBREW_PREFIX/sbin"
 includeif "$HOME/.bin" # local scripts untracked by source control
 
-sourceif "/opt/homebrew/etc/bash_completion.d"
-sourceif "/opt/homebrew/opt/git-extras/share/git-extras/git-extras-completion.sh"
-sourceif "/opt/homebrew/opt/nvm/nvm.sh"
-sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
-sourceif "/usr/local/etc/bash_completion"
+sourceif "$HOMEBREW_PREFIX/etc/bash_completion.d"
+sourceif "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+sourceif "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+sourceif "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+sourceif "$HOMEBREW_PREFIX/etc/bash_completion"
 sourceif "$HOME/.bash_profile.local"
 
 evalif "aws" "complete -C aws_completer aws"
