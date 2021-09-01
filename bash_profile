@@ -26,14 +26,17 @@ evalif() {
 }
 
 setup_ssh() {
-    # if not started, start ssh-agent.
-    if ! silence pgrep 'ssh-agent'; then
-        silence ssh-agent
+    if ! pgrep -u "$USER" ssh-agent > /dev/null; then
+        ssh-agent > "$HOME/.ssh-agent"
     fi
 
-    # add keys if ssh directory exists.
-    if [ -d "$HOME/.ssh" ]; then
-        find "$HOME/.ssh" -name '*\.pem' | silence xargs ssh-add
+    if [[ "$SSH_AGENT_PID" == "" ]]; then
+        eval "$(<"$HOME"/.ssh-agent)" > /dev/null
+    fi
+
+    # if empty keylist, add keys permanently
+    if ! ssh-add -l > /dev/null; then
+        ssh-add -k
     fi
 }
 
@@ -43,7 +46,7 @@ abbr_pwd() {
 }
 
 is_installed() {
-    command -v "$1" >/dev/null
+    command -v "$1" > /dev/null
 }
 
 is_darwin() {
@@ -58,10 +61,20 @@ export VISUAL="code --wait"
 export EDITOR="$VISUAL"
 
 export TERM=xterm-256color
+# shellcheck disable=SC2155
+export GPG_TTY="$(tty)"
 
 export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
 
 export DOTFILES_VERSION='3.6.0'
+
+export BASH_SILENCE_DEPRECATION_WARNING=true
+export HOMEBREW_PREFIX="/opt/homebrew"
+export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
+export HOMEBREW_REPOSITORY="/opt/homebrew"
+export HOMEBREW_SHELLENV_PREFIX="/opt/homebrew"
+export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
+export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
 
 # highlighting inside manpages and elsewhere
 export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
@@ -108,19 +121,22 @@ ifshopt "cdspell"                 # autocorrect typos in path names
 ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
-includeif "/usr/local/opt/coreutils/libexec/gnubin"
-includeif "/usr/local/opt/gnu-tar/libexec/gnubin"
-includeif "/usr/local/opt/grep/libexec/gnubin"
-includeif "/usr/local/opt/icu4c/bin"
-includeif "/usr/local/opt/icu4c/sbin"
-includeif "/usr/local/opt/openssl/bin"
-includeif "/usr/local/opt/openjdk/bin"
-includeif "/usr/local/opt/e2fsprogs/bin"
-includeif "/usr/local/opt/e2fsprogs/sbin"
+includeif "/opt/homebrew/opt/coreutils/libexec/gnubin"
+includeif "/opt/homebrew/opt/gnu-tar/libexec/gnubin"
+includeif "/opt/homebrew/opt/grep/libexec/gnubin"
+includeif "/opt/homebrew/opt/icu4c/bin"
+includeif "/opt/homebrew/opt/icu4c/sbin"
+includeif "/opt/homebrew/opt/openssl/bin"
+includeif "/opt/homebrew/opt/openjdk/bin"
+includeif "/opt/homebrew/opt/e2fsprogs/bin"
+includeif "/opt/homebrew/opt/e2fsprogs/sbin"
+includeif "/opt/homebrew/bin"
+includeif "/opt/homebrew/sbin"
 includeif "$HOME/.bin" # local scripts untracked by source control
 
-sourceif "/usr/local/opt/nvm/nvm.sh"
-sourceif "/usr/local/opt/git-extras/share/git-extras/git-extras-completion.sh"
+sourceif "/opt/homebrew/etc/bash_completion.d"
+sourceif "/opt/homebrew/opt/git-extras/share/git-extras/git-extras-completion.sh"
+sourceif "/opt/homebrew/opt/nvm/nvm.sh"
 sourceif "/usr/local/bin/virtualenvwrapper_lazy.sh"
 sourceif "/usr/local/etc/bash_completion"
 sourceif "$HOME/.bash_profile.local"
