@@ -61,29 +61,28 @@ is_linux() {
     [[ $(uname -s) == "Linux" ]]
 }
 
+setup_homebrew() {
+    # TODO: Create a brew "shim"
+    includeif "$HOMEBREW_PREFIX/opt/homebrew/bin"
+    includeif "$HOMEBREW_PREFIX/usr/local/bin"
+    export HOMEBREW_PREFIX=""
 
+    # shellcheck disable=SC2155
+    is_installed "brew" && export HOMEBREW_PREFIX="$(brew --prefix)"
+    export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
+    export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";
+    export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX";
+    export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:";
+    export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}";
+}
 export VISUAL="code --wait"
 export EDITOR="$VISUAL"
-
 export TERM=xterm-256color
 # shellcheck disable=SC2155
 export GPG_TTY="$(tty)"
-
 export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
-
 export DOTFILES_VERSION='3.7.1'
-
 export BASH_SILENCE_DEPRECATION_WARNING=true
-
-export HOMEBREW_PREFIX=""
-
-# shellcheck disable=SC2155
-is_installed "brew" && export HOMEBREW_PREFIX="$(brew --prefix)"
-export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
-export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";
-export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX";
-export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:";
-export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}";
 
 # highlighting inside manpages and elsewhere
 export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
@@ -129,6 +128,8 @@ ifshopt "hostcomplete"            # tab-completion of hostnames
 ifshopt "cdspell"                 # autocorrect typos in path names
 ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
+
+setup_homebrew
 
 includeif "$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin"
 includeif "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
