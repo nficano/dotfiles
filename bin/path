@@ -1,0 +1,25 @@
+#!/bin/sh
+#/ NAME
+#/      {{ basename }} -- show pretty system path.
+#/ 
+#/ SYNOPSIS
+#/      {{ basename }} [-h][--help]
+#/ 
+#/ DESCRIPTION
+#/      Show a pretty-print of the PATH environment variable.
+#/ 
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/ ' < "$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
+    exit 1
+}
+
+[ $# -ne 0 ] && usage
+
+echo "$PATH" | tr ':' "\n"
