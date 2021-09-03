@@ -1,15 +1,12 @@
 #!/bin/bash
 #/ NAME
-#/      {{ basename }} -- setup homebrew
-#/ 
-#/ SYNOPSIS
-#/      {{ basename }} <arguments> ...
+#/      {{ basename }} -- initialize Homebrew session environment
+#/
 #/ 
 #/ DESCRIPTION
-#/      
-#/ 
-#/ USAGE
-#/      Demonstration of the usecases described in the description.
+#/      Offload Homebrew session setup (not to be confused with
+#/      Homebrew installation).
+#/
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables
