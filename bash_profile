@@ -66,15 +66,33 @@ setup_homebrew() {
     includeif "$HOMEBREW_PREFIX/opt/homebrew/bin"
     includeif "$HOMEBREW_PREFIX/usr/local/bin"
     export HOMEBREW_PREFIX=""
-
     # shellcheck disable=SC2155
-    is_installed "brew" && export HOMEBREW_PREFIX="$(brew --prefix)"
+    export HOMEBREW_PREFIX="$(brew --prefix)"
     export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
     export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";
     export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX";
     export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:";
     export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}";
+
+    includeif "$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin"
+    includeif "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
+    includeif "$HOMEBREW_PREFIX/opt/grep/libexec/gnubin"
+    includeif "$HOMEBREW_PREFIX/opt/icu4c/bin"
+    includeif "$HOMEBREW_PREFIX/opt/icu4c/sbin"
+    includeif "$HOMEBREW_PREFIX/opt/openssl/bin"
+    includeif "$HOMEBREW_PREFIX/opt/openjdk/bin"
+    includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
+    includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
+    includeif "$HOMEBREW_PREFIX/bin"
+    includeif "$HOMEBREW_PREFIX/sbin"
+    
+    sourceif "$HOMEBREW_PREFIX/etc/bash_completion.d"
+    sourceif "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+    sourceif "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+    sourceif "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+    sourceif "$HOMEBREW_PREFIX/etc/bash_completion"
 }
+
 export VISUAL="code --wait"
 export EDITOR="$VISUAL"
 export TERM=xterm-256color
@@ -129,26 +147,10 @@ ifshopt "cdspell"                 # autocorrect typos in path names
 ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
-setup_homebrew
+is_installed "brew" && setup_homebrew
 
-includeif "$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin"
-includeif "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
-includeif "$HOMEBREW_PREFIX/opt/grep/libexec/gnubin"
-includeif "$HOMEBREW_PREFIX/opt/icu4c/bin"
-includeif "$HOMEBREW_PREFIX/opt/icu4c/sbin"
-includeif "$HOMEBREW_PREFIX/opt/openssl/bin"
-includeif "$HOMEBREW_PREFIX/opt/openjdk/bin"
-includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
-includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
-includeif "$HOMEBREW_PREFIX/bin"
-includeif "$HOMEBREW_PREFIX/sbin"
+
 includeif "$HOME/.bin" # local scripts untracked by source control
-
-sourceif "$HOMEBREW_PREFIX/etc/bash_completion.d"
-sourceif "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-sourceif "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
-sourceif "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
-sourceif "$HOMEBREW_PREFIX/etc/bash_completion"
 sourceif "$HOME/.bash_profile.local"
 
 evalif "aws" "complete -C aws_completer aws"
