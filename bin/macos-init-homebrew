@@ -34,12 +34,8 @@ sourceif() {
     [[ -f "$1" ]] && source "$1"
 }
 
-export HOMEBREW_PREFIX=""
 # shellcheck disable=SC2155
 export HOMEBREW_PREFIX="$(brew --prefix)"
-
-includeif "$HOMEBREW_PREFIX/opt/homebrew/bin"
-includeif "$HOMEBREW_PREFIX/usr/local/bin"
 
 export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
 export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";

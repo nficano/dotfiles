@@ -109,6 +109,8 @@ ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
 includeif "$HOME/.bin"
+includeif "/opt/homebrew/bin"
+includeif "/usr/local/bin"
 sourceif "$HOME/.bash_profile.local"
 
 is_installed "brew" && macos-init-homebrew
@@ -117,7 +119,6 @@ evalif "aws" "complete -C aws_completer aws"
 evalif "direnv" "direnv hook bash"
 evalif "pyenv" "pyenv init -"
 evalif "rbenv" "rbenv init -"
-evalif "ntfy shell-integration"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo # tab completions for sudo
