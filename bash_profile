@@ -79,13 +79,6 @@ export LESS_TERMCAP_so=$'\E[38;5;246m'    # begin standout-mode - info box
 export LESS_TERMCAP_ue=$'\E[0m'           # end underline
 export LESS_TERMCAP_us=$'\E[04;38;5;146m' # begin underlin
 
-# highlighting inside manpages tldr
-export TLDR_HEADER='magenta bold underline'
-export TLDR_QUOTE='italic'
-export TLDR_DESCRIPTION='green'
-export TLDR_CODE='red'
-export TLDR_PARAM='blue'
-
 export MANPAGER="less -X" # don’t clear screen after quitting man
 export GREP_COLOR='1;32'  # make match highlight color green
 export DIRENV_LOG_FORMAT= # stfu direnv
@@ -96,8 +89,8 @@ export POETRY_VIRTUALENVS_PATH=$HOME/.virtualenvs
 
 export NVM_DIR=$HOMEBREW_PREFIX/Cellar/nvm
 export NODE_REPL_HISTORY=$HOME/.node_history # persistent node REPL history
-export NODE_REPL_HISTORY_SIZE='32768'        # allow 32³ entries
-export NODE_REPL_MODE='sloppy'               # allow non-strict mode code
+export NODE_REPL_HISTORY_SIZE=32768        # allow 32³ entries
+export NODE_REPL_MODE=sloppy               # allow non-strict mode code
 
 export HISTCONTROL=ignoredups:erasedups:ignoreboth
 export HISTFILESIZE=-1
@@ -124,7 +117,6 @@ evalif "aws" "complete -C aws_completer aws"
 evalif "direnv" "direnv hook bash"
 evalif "pyenv" "pyenv init -"
 evalif "rbenv" "rbenv init -"
-evalif "thefuck" "thefuck --alias fu"
 evalif "ntfy shell-integration"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
@@ -152,20 +144,18 @@ alias sudo='sudo '
 alias ga='git add'
 alias gd='git diff'
 alias gs='git status'
-alias reload='exec ${SHELL} -l'
 alias map='xargs -n1'
 alias hgrep='history | egrep '
 
 is_darwin && alias o='open ./'
 is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
 is_darwin && sourceif "$HOME/.iterm2_shell_integration.bash"
-is_darwin || is_installed "code" && includeif "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
-is_linux || is_installed "gls" && alias ls='ls --color=auto -gXF'
-is_linux || is_installed "gls" && alias ll='ls --color=auto -algX'
+is_darwin || is_installed 'code' && includeif "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
+is_linux || is_installed 'gls' && alias ls='ls --color=auto -gXF'
+is_linux || is_installed 'gls' && alias ll='ls --color=auto -algX'
 
 is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
-is_installed "bat" && alias cat="bat --style=\"plain\" --paging never"
-is_installed "network" && complete -W "$(network listcommands)" 'network'
-is_installed "dotfiles" && complete -W "$(dotfiles -listcommands)" 'dotfiles'
-is_installed "tldr" && complete -W "$(tldr 2>/dev/null --list)" 'tldr'
+is_installed 'bat' && alias cat="bat --style=\"plain\" --paging never"
+is_installed 'network' && complete -W "$(network listcommands)" 'network'
+is_installed 'dotfiles' && complete -W "$(dotfiles -listcommands)" 'dotfiles'
 setup_ssh
