@@ -25,6 +25,27 @@ evalif() {
     is_installed "$1" && eval "$($2)"
 }
 
+abbr_pwd() {
+    cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
+    echo -n "$cwd"
+}
+
+is_installed() {
+    command -v "$1" > /dev/null
+}
+
+is_darwin() {
+    [[ $(uname -s) == "Darwin" ]]
+}
+
+is_linux() {
+    [[ $(uname -s) == "Linux" ]]
+}
+
+exists() {
+    [[ -f "$1" ]]
+}
+
 is_ssh_agent_running() {
     pgrep -u "$USER" ssh-agent
 }
@@ -44,21 +65,12 @@ setup_ssh() {
     fi
 }
 
-abbr_pwd() {
-    cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
-    echo -n "$cwd"
-}
-
-is_installed() {
-    command -v "$1" > /dev/null
-}
-
-is_darwin() {
-    [[ $(uname -s) == "Darwin" ]]
-}
-
-is_linux() {
-    [[ $(uname -s) == "Linux" ]]
+homebrew_prefix() {
+    if exists "/opt/homebrew/bin/brew"; then
+        echo "/opt/homebrew"
+    elif exists "/usr/local/bin/brew"; then
+        echo "/usr/local"
+    fi
 }
 
 export VISUAL="code --wait"
@@ -82,19 +94,30 @@ export LESS_TERMCAP_us=$'\E[04;38;5;146m' # begin underlin
 export MANPAGER="less -X" # don’t clear screen after quitting man
 export GREP_COLOR='1;32'  # make match highlight color green
 export DIRENV_LOG_FORMAT= # stfu direnv
+
+# Python Devlopment Environment
 export WORKON_HOME=$HOME/.virtualenvs
 export PYTHONDONTWRITEBYTECODE=true
 export PYENV_ROOT=$HOME/.pyenv
 export POETRY_VIRTUALENVS_PATH=$HOME/.virtualenvs
 
+export HISTCONTROL=ignoredups:erasedups:ignoreboth
+export HISTFILESIZE=-1
+export HISTSIZE=-1
+
+# shellcheck disable=SC2155
+export HOMEBREW_PREFIX="$(homebrew_prefix)"
+
+export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
+export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";
+export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX";
+export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:";
+export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}";
+
 export NVM_DIR=$HOMEBREW_PREFIX/Cellar/nvm
 export NODE_REPL_HISTORY=$HOME/.node_history # persistent node REPL history
 export NODE_REPL_HISTORY_SIZE=32768        # allow 32³ entries
 export NODE_REPL_MODE=sloppy               # allow non-strict mode code
-
-export HISTCONTROL=ignoredups:erasedups:ignoreboth
-export HISTFILESIZE=-1
-export HISTSIZE=-1
 
 # Save and reload the history after each command finishes
 export SHELL_SESSION_HISTORY=0
@@ -109,11 +132,32 @@ ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
 includeif "$HOME/.bin"
-includeif "/opt/homebrew/bin"
-includeif "/usr/local/bin"
-sourceif "$HOME/.bash_profile.local"
 
-is_installed "brew" && macos-init-homebrew
+# Prefer GNU Utilities instead of FeeeBSD When Available
+includeif "$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/findutils/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/gnu-getopt/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/gnu-time/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/gnu-which/libexec/gnubin"
+includeif "$HOMEBREW_PREFIX/opt/grep/libexec/gnubin"
+
+includeif "$HOMEBREW_PREFIX/opt/icu4c/bin"
+includeif "$HOMEBREW_PREFIX/opt/icu4c/sbin"
+includeif "$HOMEBREW_PREFIX/opt/openssl/bin"
+includeif "$HOMEBREW_PREFIX/opt/openjdk/bin"
+includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
+includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
+includeif "$HOMEBREW_PREFIX/bin"
+includeif "$HOMEBREW_PREFIX/sbin"
+
+sourceif "$HOME/.bash_profile.local"
+sourceif "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+sourceif "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
+sourceif "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+sourceif "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+
 
 evalif "aws" "complete -C aws_completer aws"
 evalif "direnv" "direnv hook bash"
