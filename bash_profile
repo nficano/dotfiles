@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-if [[ $- != *i* ]]; then
-    return
-fi
+# Abort loading profile unless session is running interactively.
+case $- in *i*) ;; *) return;; esac
 
 silence() {
     "$@" 2>/dev/null >/dev/null
@@ -25,6 +24,15 @@ evalif() {
     is_installed "$1" && eval "$($2)"
 }
 
+exportif() {
+    if is_installed "$1"; then
+        export "$2"="$3"
+    elif [[ -n $4 ]]; then
+        # Optional: set an alternate value if the command does not exist.
+        export "$2"="$4"
+    fi
+}
+
 abbr_pwd() {
     cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
     echo -n "$cwd"
@@ -42,30 +50,37 @@ is_linux() {
     [[ $(uname -s) == "Linux" ]]
 }
 
+is_gnu() {
+    silence "$1" --version | grep GNU
+}
+
 exists() {
     [[ -f "$1" ]]
 }
 
-is_ssh_agent_running() {
+_is_ssh_agent_running() {
     pgrep -u "$USER" ssh-agent
 }
 
-setup_ssh() {
-    if ! is_ssh_agent_running > /dev/null; then
-        ssh-agent > "$HOME/.ssh-agent"
+_setup_ssh_agent_env() {
+    ssh_agent_env="$1"
+    touch "$ssh_agent_env"
+
+    if ! silence _is_ssh_agent_running; then
+        ssh-agent > "$ssh_agent_env"
     fi
 
     if [[ "$SSH_AGENT_PID" == "" ]]; then
-        eval "$(<"$HOME"/.ssh-agent)" > /dev/null
+        silence eval "$(<"$ssh_agent_env")"
     fi
 
     # if empty keylist, add keys permanently
-    if ! ssh-add -l > /dev/null; then
+    if ! silence ssh-add -l; then
         ssh-add -k
     fi
 }
 
-homebrew_prefix() {
+_homebrew_prefix() {
     if exists "/opt/homebrew/bin/brew"; then
         echo "/opt/homebrew"
     elif exists "/usr/local/bin/brew"; then
@@ -73,54 +88,44 @@ homebrew_prefix() {
     fi
 }
 
-export VISUAL="code --wait"
-export EDITOR="$VISUAL"
 export TERM=xterm-256color
 # shellcheck disable=SC2155
 export GPG_TTY="$(tty)"
+
 export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
+
 export DOTFILES_VERSION='3.11.0'
 export BASH_SILENCE_DEPRECATION_WARNING=true
 
-# highlighting inside manpages and elsewhere
-export LESS_TERMCAP_mb=$'\E[01;31m'       # begin blinking
-export LESS_TERMCAP_md=$'\E[01;38;5;74m'  # begin bold
-export LESS_TERMCAP_me=$'\E[0m'           # end mode
-export LESS_TERMCAP_se=$'\E[0m'           # end standout-mode
-export LESS_TERMCAP_so=$'\E[38;5;246m'    # begin standout-mode - info box
-export LESS_TERMCAP_ue=$'\E[0m'           # end underline
-export LESS_TERMCAP_us=$'\E[04;38;5;146m' # begin underlin
-
-export MANPAGER="less -X" # don’t clear screen after quitting man
 export GREP_COLOR='1;32'  # make match highlight color green
 export DIRENV_LOG_FORMAT= # stfu direnv
 
-# Python Devlopment Environment
+# Python Shell Environment
 export WORKON_HOME=$HOME/.virtualenvs
 export PYTHONDONTWRITEBYTECODE=true
 export PYENV_ROOT=$HOME/.pyenv
 export POETRY_VIRTUALENVS_PATH=$HOME/.virtualenvs
 
-export HISTCONTROL=ignoredups:erasedups:ignoreboth
-export HISTFILESIZE=-1
-export HISTSIZE=-1
-
+# Homebrew Shell Environment
 # shellcheck disable=SC2155
-export HOMEBREW_PREFIX="$(homebrew_prefix)"
-
+export HOMEBREW_PREFIX="$(_homebrew_prefix)"
 export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar";
 export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew";
 export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX";
 export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:";
 export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}";
 
-export NVM_DIR=$HOMEBREW_PREFIX/Cellar/nvm
+# Node.js Environment
 export NODE_REPL_HISTORY=$HOME/.node_history # persistent node REPL history
-export NODE_REPL_HISTORY_SIZE=32768        # allow 32³ entries
-export NODE_REPL_MODE=sloppy               # allow non-strict mode code
+export NODE_REPL_HISTORY_SIZE=32768          # allow 32³ entries
+export NODE_REPL_MODE=sloppy                 # allow non-strict mode code
 
-# Save and reload the history after each command finishes
-export SHELL_SESSION_HISTORY=0
+# Shell Session Command History
+export HISTCONTROL=ignoredups:erasedups:ignoreboth
+export HISTFILESIZE=-1
+export HISTSIZE=-1
+
+export SHELL_SESSION_HISTORY=0 # Save & reload history after each command
 export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
 ifshopt "nocaseglob"              # case-insensitive path expansion
@@ -131,6 +136,7 @@ ifshopt "cdspell"                 # autocorrect typos in path names
 ifshopt "cmdhist"                 # save multi-line commands as one command
 ifshopt "no_empty_cmd_completion" # no tab-complete if line is empty
 
+# Untracked Shell Scripts - must be at the top, do not sort.
 includeif "$HOME/.bin"
 
 # Prefer GNU Utilities instead of FeeeBSD When Available
@@ -151,13 +157,23 @@ includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
 includeif "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
 includeif "$HOMEBREW_PREFIX/bin"
 includeif "$HOMEBREW_PREFIX/sbin"
+includeif "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 
-sourceif "$HOME/.bash_profile.local"
 sourceif "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 sourceif "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
 sourceif "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
 sourceif "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+sourceif "$HOME/.iterm2_shell_integration.bash"
 
+# Untracked Private Overrides - must be at the last, do not sort.
+sourceif "$HOME/.bash_profile.local"
+
+# Use "most" for Manpages when available, otherwise use "less".
+exportif "most" "MANPAGER" "most" "less"
+
+# Use "vscode" for text editing when available, otherwise use "nano".
+exportif "code" "VISUAL" "code --wait" "nano"
+exportif "code" "EDITOR" "code --wait" "nano"
 
 evalif "aws" "complete -C aws_completer aws"
 evalif "direnv" "direnv hook bash"
@@ -165,7 +181,7 @@ evalif "pyenv" "pyenv init -"
 evalif "rbenv" "rbenv init -"
 silence evalif "dircolors" "dircolors -b $HOME/.dircolors"
 
-complete -cf sudo # tab completions for sudo
+complete -cf sudo # enable sudo tab-complete
 
 alias ..='cd ..'
 alias ...='cd ../..'
@@ -192,10 +208,11 @@ alias gs='git status'
 alias map='xargs -n1'
 alias hgrep='history | egrep '
 
+# Create alias to open cwd in Finder.
 is_darwin && alias o='open ./'
+
+# Create alias to cd to current working Finder directory.
 is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
-is_darwin && sourceif "$HOME/.iterm2_shell_integration.bash"
-is_darwin || is_installed 'code' && includeif "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 is_linux || is_installed 'gls' && alias ls='ls --color=auto -gXF'
 is_linux || is_installed 'gls' && alias ll='ls --color=auto -algX'
 
@@ -203,4 +220,6 @@ is_installed 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
 is_installed 'bat' && alias cat="bat --style=\"plain\" --paging never"
 is_installed 'network' && complete -W "$(network listcommands)" 'network'
 is_installed 'dotfiles' && complete -W "$(dotfiles -listcommands)" 'dotfiles'
-setup_ssh
+
+# Setup SSH Agent Environment
+_setup_ssh_agent_env "$HOME/.ssh-agent"
