@@ -42,12 +42,21 @@ shell.eval() {
     eval "$($1)"
 }
 
-sys.path.abbrev() {
+sys.path.squish() {
     IFS=' '
-    path="$($1 | tr "/" " " | xargs)"
-    read -ra strarr <<< "$path"
-    echo "${strarr[1]}"
-} 
+    ret='/'
+    read -ra path <<< "$(pwd | tr "/" " " | xargs)"
+    working_dir=$(( ${#path[*]} - 1 ))
+
+    for dirname in "${path[@]}"; do
+        if [[ $dirname != "${path[$working_dir]}" ]]; then
+            ret+="${dirname:0:1}/"
+        else
+            ret+="${dirname}"
+        fi 
+    done
+    echo -n "$ret"
+}
 
 sys.path.prepend() {
     [[ -d "$1" ]] && PATH="$1:${PATH}"
@@ -59,11 +68,6 @@ sys.path.search() {
 
 sys.platform() {
     uname -s | tr '[:upper:]' '[:lower:]'
-}
-
-abbr_pwd() {
-    cwd=$(pwd | perl -F/ -ane 'print join( "/", map { $i++ < @F - 1 ?  substr $_,0,1 : $_ } @F)')
-    echo -n "$cwd"
 }
 
 ssh_agent.active_sessions() {
@@ -107,7 +111,7 @@ export TERM=xterm-256color
 # shellcheck disable=SC2155
 export GPG_TTY="$(tty)"
 
-export PS1="\h \[\e[1;32m\]\$(abbr_pwd)\[\e[0m\] [\A] > "
+export PS1="\h \[\e[1;32m\]\$(sys.path.squish)\[\e[0m\] [\A] > "
 
 export DOTFILES_VERSION='4.0.1'
 
