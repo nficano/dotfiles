@@ -10,7 +10,7 @@ os.devnull() {
 }
 
 os.setenv() {
-    export "$2"="$3"
+    export "${1}"="${2}"
 }
 
 os.getenv() {
@@ -42,6 +42,13 @@ shell.eval() {
     eval "$($1)"
 }
 
+sys.path.abbrev() {
+    IFS=' '
+    path="$($1 | tr "/" " " | xargs)"
+    read -ra strarr <<< "$path"
+    echo "${strarr[1]}"
+} 
+
 sys.path.prepend() {
     [[ -d "$1" ]] && PATH="$1:${PATH}"
 }
@@ -63,8 +70,9 @@ ssh_agent.active_sessions() {
     pgrep -u "$USER" ssh-agent
 }
 
-
 ssh_agent.start() {
+    # Start new ssh-agent daemon and write environment variables to an env 
+    # file to allow sharing a single instance between terminal sessions.
     os.devnull rm "$1"
     ssh-agent | sed 's/^echo/#echo/' >"$1"
     chmod 600 "$1"
@@ -87,7 +95,7 @@ ssh_agent.init() {
 }
 
 brew.prefix() {
-    # The Brew installer Apple Silicon 
+    # Resolve the Homebrew path on both Apple Silicon and Intel.
     if os.path.exists "/opt/homebrew/bin/brew"; then
         echo "/opt/homebrew"
     elif os.path.exists "/usr/local/bin/brew"; then
