@@ -113,7 +113,7 @@ export GPG_TTY="$(tty)"
 
 export PS1="\h \[\e[1;32m\]\$(sys.path.squish)\[\e[0m\] [\A] > "
 
-export DOTFILES_VERSION='4.0.1'
+export DOTFILES_VERSION='4.0.2'
 
 export GREP_COLOR='1;32' # make match highlight color green
 export DIRENV_LOG_FORMAT=
