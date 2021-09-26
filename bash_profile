@@ -30,7 +30,7 @@ os.path.exists() {
 }
 
 shell.setopt() {
-    sys.path.search "shopt" && shopt -s "$1"
+    sys.path.contains "shopt" && shopt -s "$1"
 }
 
 shell.import() {
@@ -42,27 +42,31 @@ shell.eval() {
     eval "$($1)"
 }
 
+shell.setup_prompt() {
+    os.setenv "PS1" "\h \[\e[1;32m\]\$(sys.path.squish)\[\e[0m\] [\A] > "
+}
+
 sys.path.squish() {
     IFS=' '
-    ret='/'
+    buffer='/'
     read -ra path <<< "$(pwd | tr "/" " " | xargs)"
     working_dir=$(( ${#path[*]} - 1 ))
 
     for dirname in "${path[@]}"; do
         if [[ $dirname != "${path[$working_dir]}" ]]; then
-            ret+="${dirname:0:1}/"
+            buffer+="${dirname:0:1}/"
         else
-            ret+="${dirname}"
+            buffer+="${dirname}"
         fi 
     done
-    echo -n "$ret"
+    echo -n "$buffer"
 }
 
 sys.path.prepend() {
     [[ -d "$1" ]] && PATH="$1:${PATH}"
 }
 
-sys.path.search() {
+sys.path.contains() {
     os.devnull command -v "$1"
 }
 
@@ -75,7 +79,7 @@ ssh_agent.active_sessions() {
 }
 
 ssh_agent.start() {
-    # Start new ssh-agent daemon and write environment variables to an env 
+    # Start ssh-agent daemon and write environment variables to an env 
     # file to allow sharing a single instance between terminal sessions.
     os.devnull rm "$1"
     ssh-agent | sed 's/^echo/#echo/' >"$1"
@@ -107,48 +111,42 @@ brew.prefix() {
     fi
 }
 
-export TERM=xterm-256color
-# shellcheck disable=SC2155
-export GPG_TTY="$(tty)"
-
-export PS1="\h \[\e[1;32m\]\$(sys.path.squish)\[\e[0m\] [\A] > "
-
-export DOTFILES_VERSION='4.0.2'
-
-export GREP_COLOR='1;32' # make match highlight color green
-export DIRENV_LOG_FORMAT=
+os.setenv "TERM" "xterm-256color"
+os.setenv "GPG_TTY" "$(tty)"
+os.setenv "DOTFILES_VERSION" "4.0.2"
+os.setenv "GREP_COLOR" "1;32" # make match highlight color green
+os.setenv "DIRENV_LOG_FORMAT" ""
 
 # Python Shell Environment
-export POETRY_VIRTUALENVS_PATH=$HOME/.virtualenvs
-export PYENV_ROOT=$HOME/.pyenv
-export PYTHONDONTWRITEBYTECODE=true
-export WORKON_HOME=$HOME/.virtualenvs
+os.setenv "POETRY_VIRTUALENVS_PATH" "$HOME/.virtualenvs"
+os.setenv "PYENV_ROOT" "$HOME/.pyenv"
+os.setenv "PYTHONDONTWRITEBYTECODE" true
+os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
 
 # Homebrew Shell Environment
-# shellcheck disable=SC2155
-export HOMEBREW_PREFIX="$(brew.prefix)"
-export HOMEBREW_CELLAR="$HOMEBREW_PREFIX/Cellar"
-export HOMEBREW_REPOSITORY="$HOMEBREW_PREFIX/Homebrew"
-export HOMEBREW_SHELLENV_PREFIX="$HOMEBREW_PREFIX"
-export MANPATH="$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
-export INFOPATH="$HOMEBREW_PREFIX/share/info:${INFOPATH:-}"
+os.setenv "HOMEBREW_PREFIX" "$(brew.prefix)"
+os.setenv "HOMEBREW_CELLAR" "$HOMEBREW_PREFIX/Cellar"
+os.setenv "HOMEBREW_REPOSITORY" "$HOMEBREW_PREFIX/Homebrew"
+os.setenv "HOMEBREW_SHELLENV_PREFIX" "$HOMEBREW_PREFIX"
+os.setenv "MANPATH" "$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
+os.setenv "INFOPATH" "$HOMEBREW_PREFIX/share/info:${INFOPATH:-}"
 
 # Node.js Environment
-export NODE_REPL_HISTORY=$HOME/.node_history # persistent node REPL history
-export NODE_REPL_HISTORY_SIZE=32768          # allow 32³ entries
-export NODE_REPL_MODE=sloppy                 # allow non-strict mode code
+os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
+os.setenv "NODE_REPL_HISTORY_SIZE" 32768            # allow 32³ entries
+os.setenv "NODE_REPL_MODE" "sloppy"                 # use non-strict mode code
 
 # Shell Session Command History
-export HISTCONTROL=ignoredups:erasedups:ignoreboth
-export HISTFILESIZE=-1
-export HISTSIZE=-1
+os.setenv "HISTCONTROL" "ignoredups:erasedups:ignoreboth"
+os.setenv "HISTFILESIZE" -1
+os.setenv "HISTSIZE" -1
 
-export SHELL_SESSION_HISTORY=0 # Save & reload history after each command
-export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
+os.setenv "SHELL_SESSION_HISTORY" 0 # Save & reload history after each command
+os.setenv "PROMPT_COMMAND" "history -a; history -c; history -r; $PROMPT_COMMAND"
 
-export MANPAGER="less"
-export VISUAL="nano"
-export EDITOR="nano"
+os.setenv "MANPAGER" "less"
+os.setenv "VISUAL" "nano"
+os.setenv "EDITOR" "nano"
 
 # Set various Bash options.
 shell.setopt "nocaseglob"              # case-insensitive path expansion
@@ -193,17 +191,17 @@ shell.import "$HOME/.iterm2_shell_integration.bash"
 shell.import "$HOME/.bash_profile.local"
 
 # Use "most" for Manpages when available, otherwise use "less".
-sys.path.search "most" && os.setenv "MANPAGER" "most"
+sys.path.contains "most" && os.setenv "MANPAGER" "most"
 
 # Use "vscode" for text editing when available, otherwise use "nano".
-sys.path.search "code" && os.setenv "VISUAL" "code"
-sys.path.search "code" && os.setenv "EDITOR" "code"
+sys.path.contains "code" && os.setenv "VISUAL" "code"
+sys.path.contains "code" && os.setenv "EDITOR" "code"
 
-sys.path.search "aws" && shell.eval "complete -C aws_completer aws"
-sys.path.search "direnv" && shell.eval "direnv hook bash"
-sys.path.search "pyenv" && shell.eval "pyenv init -"
-sys.path.search "rbenv" && shell.eval "rbenv init -"
-sys.path.search "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
+sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
+sys.path.contains "direnv" && shell.eval "direnv hook bash"
+sys.path.contains "pyenv" && shell.eval "pyenv init -"
+sys.path.contains "rbenv" && shell.eval "rbenv init -"
+sys.path.contains "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo # enable sudo tab-complete
 
@@ -237,13 +235,14 @@ os.platform.is_darwin && alias o='open ./'
 
 # Create alias to cd to current working Finder directory.
 os.platform.is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
-os.platform.is_linux || sys.path.search 'gls' && alias ls='ls --color=auto -gXF'
-os.platform.is_linux || sys.path.search 'gls' && alias ll='ls --color=auto -algX'
+os.platform.is_linux || sys.path.contains 'gls' && alias ls='ls --color=auto -gXF'
+os.platform.is_linux || sys.path.contains 'gls' && alias ll='ls --color=auto -algX'
 
-sys.path.search 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
-sys.path.search 'bat' && alias cat="bat --style=\"plain\" --paging never"
-sys.path.search 'network' && complete -W "$(network listcommands)" 'network'
-sys.path.search 'dotfiles' && complete -W "$(dotfiles -listcommands)" 'dotfiles'
+sys.path.contains 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
+sys.path.contains 'bat' && alias cat="bat --style=\"plain\" --paging never"
+sys.path.contains 'network' && complete -W "$(network listcommands)" 'network'
+sys.path.contains 'dotfiles' && complete -W "$(dotfiles -listcommands)" 'dotfiles'
 
-# Setup SSH Agent Environment
+
+shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
