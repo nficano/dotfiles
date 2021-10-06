@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 
-# Terminate non-interactive sessions.
+# Terminate for non-interactive sessions.
 case $- in
 *i*) ;;
 *) return ;; esac
+
+text.substr() {
+    echo "${1:$2:$3}"
+}
 
 os.devnull() {
     "$@" 2>/dev/null >/dev/null
@@ -43,22 +47,27 @@ shell.eval() {
 }
 
 shell.setup_prompt() {
-    os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_cwd)\[\e[0m\] [\A] > "
+    os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_path)\[\e[0m\] [\A] > "
 }
 
-shell.iterm2_style_cwd() {
-    IFS="/" read -ra path <<< "$(dirs +0)"
-    buffer=""
-    working_dir=$(( ${#path[*]} - 1 ))
+shell.iterm2_style_path() {
+    # Mimic iTerm2 status bar current directory path, i.e., the path 
+    # "/usr/local/bin" translates to "/u/l/bin".
 
-    for dirname in "${path[@]}"; do
-        if [[ $dirname != "${path[$working_dir]}" ]]; then
-            buffer+="${dirname:0:1}/"
-        else
-            buffer+="${dirname}"
-        fi 
+    IFS="/"
+    # Split path into list of directories (e.g.,: ["usr", "local", "bin"]).
+    read -ra relpath <<<"$(dirs +0)"
+    buffer=""
+    dirname=$((${#relpath[*]} - 1)) # The current directory (e.g., "bin").
+
+    # Append the first character of each directory name in relpath to buffer.
+    for folder_name in "${relpath[@]}"; do
+        # We do not want to abbreviate the top-most directory.
+        if [[ $folder_name != "${relpath[$dirname]}" ]]; then
+            buffer+="$(text.substr "$folder_name" 0 1)/"
+        fi
     done
-    echo -n "$buffer"
+    echo -n "$buffer${folder_name}"
 }
 
 sys.path.prepend() {
@@ -78,7 +87,7 @@ ssh_agent.active_sessions() {
 }
 
 ssh_agent.start() {
-    # Start ssh-agent daemon and write environment variables to an env 
+    # Start ssh-agent daemon and write environment variables to an env
     # file to allow sharing a single instance between terminal sessions.
     os.devnull rm "$1"
     ssh-agent | sed "s/^echo/#echo/" >"$1"
@@ -89,7 +98,7 @@ ssh_agent.start() {
 ssh_agent.init() {
     env="$1"
     touch "$env"
-    
+
     if ! os.devnull ssh_agent.active_sessions; then
         ssh_agent.start "$env"
     else
@@ -241,7 +250,6 @@ sys.path.contains "rlwrap" && alias node="env NODE_NO_READLINE=1 rlwrap node"
 sys.path.contains "bat" && alias cat="bat --style=\"plain\" --paging never"
 sys.path.contains "network" && complete -W "$(network listcommands)" "network"
 sys.path.contains "dotfiles" && complete -W "$(dotfiles -listcommands)" "dotfiles"
-
 
 shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
