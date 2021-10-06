@@ -112,7 +112,7 @@ brew.prefix() {
 
 os.setenv "TERM" "xterm-256color"
 os.setenv "GPG_TTY" "$(tty)"
-os.setenv "DOTFILES_VERSION" "4.0.2"
+os.setenv "DOTFILES_VERSION" "4.1.0"
 os.setenv "GREP_COLOR" "1;32" # make match highlight color green
 os.setenv "DIRENV_LOG_FORMAT" ""
 
