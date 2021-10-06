@@ -18,11 +18,11 @@ os.getenv() {
 }
 
 os.platform.is_darwin() {
-    [[ $(sys.platform) == "darwin" ]]
+    [[ $(sys.platform) == darwin ]]
 }
 
 os.platform.is_linux() {
-    [[ $(sys.platform) == "linux" ]]
+    [[ $(sys.platform) == linux ]]
 }
 
 os.path.exists() {
@@ -43,13 +43,12 @@ shell.eval() {
 }
 
 shell.setup_prompt() {
-    os.setenv "PS1" "\h \[\e[1;32m\]\$(sys.path.squish)\[\e[0m\] [\A] > "
+    os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_cwd)\[\e[0m\] [\A] > "
 }
 
-sys.path.squish() {
-    IFS=' '
-    buffer='/'
-    read -ra path <<< "$(pwd | tr "/" " " | xargs)"
+shell.iterm2_style_cwd() {
+    IFS="/" read -ra path <<< "$(dirs +0)"
+    buffer=""
     working_dir=$(( ${#path[*]} - 1 ))
 
     for dirname in "${path[@]}"; do
@@ -71,7 +70,7 @@ sys.path.contains() {
 }
 
 sys.platform() {
-    uname -s | tr '[:upper:]' '[:lower:]'
+    uname -s | tr "[:upper:]" "[:lower:]"
 }
 
 ssh_agent.active_sessions() {
@@ -82,7 +81,7 @@ ssh_agent.start() {
     # Start ssh-agent daemon and write environment variables to an env 
     # file to allow sharing a single instance between terminal sessions.
     os.devnull rm "$1"
-    ssh-agent | sed 's/^echo/#echo/' >"$1"
+    ssh-agent | sed "s/^echo/#echo/" >"$1"
     chmod 600 "$1"
     shell.import "$1"
 }
@@ -104,10 +103,10 @@ ssh_agent.init() {
 
 brew.prefix() {
     # Resolve the Homebrew path on both Apple Silicon and Intel.
-    if os.path.exists "/opt/homebrew/bin/brew"; then
-        echo "/opt/homebrew"
-    elif os.path.exists "/usr/local/bin/brew"; then
-        echo "/usr/local"
+    if os.path.exists /opt/homebrew/bin/brew; then
+        echo /opt/homebrew
+    elif os.path.exists /usr/local/bin/brew; then
+        echo /usr/local
     fi
 }
 
@@ -205,43 +204,43 @@ sys.path.contains "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
 
 complete -cf sudo # enable sudo tab-complete
 
-alias ..='cd ..'
-alias ...='cd ../..'
-alias ....='cd ../../..'
-alias .....='cd ../../../..'
-alias ~='cd ~'
-alias -- -='cd -'
-alias d='cd ~/Desktop'
-alias r='cd ~/Repos'
-alias c='clear'
-alias g='git'
-alias cp='cp -i'
-alias l='ls'
-alias sl='ls'
-alias la='ll -la'
-alias grep='grep --color=auto'
-alias fgrep='fgrep --color=auto'
-alias egrep='egrep --color=auto'
-alias rsync='rsync -v -P'
-alias sudo='sudo '
-alias ga='git add'
-alias gd='git diff'
-alias gs='git status'
-alias map='xargs -n1'
-alias hgrep='history | egrep '
+alias ..="cd .."
+alias ...="cd ../.."
+alias ....="cd ../../.."
+alias .....="cd ../../../.."
+alias ~="cd ~"
+alias -- -="cd -"
+alias d="cd ~/Desktop"
+alias r="cd ~/Repos"
+alias c="clear"
+alias g="git"
+alias cp="cp -i"
+alias l="ls"
+alias sl="ls"
+alias la="ll -la"
+alias grep="grep --color=auto"
+alias fgrep="fgrep --color=auto"
+alias egrep="egrep --color=auto"
+alias rsync="rsync -v -P"
+alias sudo="sudo "
+alias ga="git add"
+alias gd="git diff"
+alias gs="git status"
+alias map="xargs -n1"
+alias hgrep="history | egrep "
 
 # Create alias to open cwd in Finder.
-os.platform.is_darwin && alias o='open ./'
+os.platform.is_darwin && alias o="open ./"
 
 # Create alias to cd to current working Finder directory.
 os.platform.is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
-os.platform.is_linux || sys.path.contains 'gls' && alias ls='ls --color=auto -gXF'
-os.platform.is_linux || sys.path.contains 'gls' && alias ll='ls --color=auto -algX'
+os.platform.is_linux || sys.path.contains "gls" && alias ls="ls --color=auto -gXF"
+os.platform.is_linux || sys.path.contains "gls" && alias ll="ls --color=auto -algX"
 
-sys.path.contains 'rlwrap' && alias node="env NODE_NO_READLINE=1 rlwrap node"
-sys.path.contains 'bat' && alias cat="bat --style=\"plain\" --paging never"
-sys.path.contains 'network' && complete -W "$(network listcommands)" 'network'
-sys.path.contains 'dotfiles' && complete -W "$(dotfiles -listcommands)" 'dotfiles'
+sys.path.contains "rlwrap" && alias node="env NODE_NO_READLINE=1 rlwrap node"
+sys.path.contains "bat" && alias cat="bat --style=\"plain\" --paging never"
+sys.path.contains "network" && complete -W "$(network listcommands)" "network"
+sys.path.contains "dotfiles" && complete -W "$(dotfiles -listcommands)" "dotfiles"
 
 
 shell.setup_prompt
