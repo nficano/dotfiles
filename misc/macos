@@ -91,6 +91,15 @@ defaults write com.apple.NetworkBrowser BrowseAllInterfaces -bool true
 # Show ~/Library folder
 chflags nohidden "$(realpath ~/Library)"
 
+# Hide unused app directories
+chflags hidden /Users/nficano/Creative\ Cloud\ Files
+chflags hidden /Users/nficano/Music
+chflags hidden /Users/nficano/Movies
+chflags hidden /Users/nficano/Pictures
+chflags hidden /Users/nficano/Applications
+chflags hidden /Users/nficano/Public
+
+
 for app in "Activity Monitor" \
   "Address Book" \
   "Calendar" \
