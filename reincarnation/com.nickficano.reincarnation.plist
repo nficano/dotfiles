@@ -10,26 +10,26 @@
 		<string>/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
 	</dict>
 	<key>Label</key>
-	<string>org.nficano.dotfiles.DropboxSync.plist</string>
+	<string>com.nickficano.reincarnation.plist</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/usr/local/bin/bash</string>
-		<string>sync-to-dropbox</string>
+		<string>reincarnation</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StandardErrorPath</key>
-	<string>/tmp/org.nficano.dotfiles.DropboxSync.plist.err</string>
+	<string>$HOME/Library/Logs/com.nickficano.reincarnation.log</string>
 	<key>StandardOutPath</key>
-	<string>/tmp/org.nficano.dotfiles.DropboxSync.plist.out</string>
+	<string>$HOME/Library/Logs/com.nickficano.reincarnation.log</string>
 	<key>StartCalendarInterval</key>
 	<array>
 		<dict>
-			<key>Minute</key>
+			<key>Hour</key>
 			<integer>0</integer>
 		</dict>
 	</array>
 	<key>WorkingDirectory</key>
-	<string>/Users/nficano/github/dotfiles/misc</string>
+	<string>$HOME/Library/com.nickficano/reincarnation</string>
 </dict>
 </plist>
