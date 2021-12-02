@@ -157,14 +157,19 @@ os.setenv "VISUAL" "nano"
 os.setenv "EDITOR" "nano"
 
 # Set various Bash options.
-shell.setopt "nocaseglob"              # case-insensitive path expansion
-shell.setopt "checkwinsize"            # update window size after each command
-shell.setopt "histappend"              # append history instead of rewriting
-shell.setopt "hostcomplete"            # tab-completion of hostnames
-shell.setopt "cdspell"                 # autocorrect typos in path names
-shell.setopt "cmdhist"                 # save multi-line commands as one command
-shell.setopt "no_empty_cmd_completion" # no tab-complete if line is empty
-shell.setopt "cdspell"                 # auto-correct mistyped directory names
+shell.setopt "cdspell"                 # directory name auto-correct during cd.
+shell.setopt "checkwinsize"            # Update window size after each command.
+shell.setopt "cmdhist"                 # Save multi-line commands as one.
+shell.setopt "histappend"              # Append command history instead of 
+                                       # clobbering.
+shell.setopt "hostcomplete"            # tab-complete hostnames.
+shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands 
+                                       # during tab completion.
+shell.setopt "nocaseglob"              # Case-insensitive path expansion.
+shell.setopt "dirspell"                # Automatic spell-correct during 
+                                       # tab completion.
+shell.setopt "autocd"                  # Change directory without typing cd. 
+shell.setopt "histverify"              # !$ does not execute automatically.
 
 # Untracked Shell Scripts (DO NOT SORT)
 sys.path.prepend "$HOME/.bin"
