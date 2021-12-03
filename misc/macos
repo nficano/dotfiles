@@ -7,7 +7,7 @@ osascript -e 'tell application "System Preferences" to quit'
 osascript -e "
 tell application \"System Events\" 
     tell every desktop
-        set picture to \"$HOME/github/dotfiles/Firewatch Mountains.heic\"
+        set picture to \"$HOME/github/dotfiles/wallpaper/The Cliffs.heic\"
     end tell
 end tell"
 
@@ -103,7 +103,6 @@ chflags hidden /Users/nficano/Movies
 chflags hidden /Users/nficano/Pictures
 chflags hidden /Users/nficano/Applications
 chflags hidden /Users/nficano/Public
-
 
 for app in "Activity Monitor" \
   "Address Book" \
