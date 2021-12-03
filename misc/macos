@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 
-# Quit System Preferences to avoid overriding preferences
+# Quit System Preferences to avoid overriding
 osascript -e 'tell application "System Preferences" to quit'
+
+# Set Wallpaper
+osascript -e "
+tell application \"System Events\" 
+    tell every desktop
+        set picture to \"$HOME/github/dotfiles/Firewatch Mountains.heic\"
+    end tell
+end tell"
 
 # Cache the sudo credentials
 sudo -v
@@ -15,9 +23,6 @@ done 2>/dev/null &
 
 # Check for software updates daily, not just once per week
 defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1
-
-# Disable the boot sound
-sudo nvram SystemAudioVolume=" "
 
 # Always show expanded save panel
 defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
