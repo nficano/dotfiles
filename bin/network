@@ -45,10 +45,10 @@
 #/   -help                     displays help and usage.
 
 set -o errexit          # Exit on most errors (see the manual)
-set -o errtrace         # Make sure any error trap is inherited
 set -o nounset          # Disallow expansion of unset variables
-set -o pipefail         # Use last non-zero exit code in a pipeline
-#set -o xtrace          # Trace the execution of the script (debug)
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 get_arp_table() {

@@ -25,9 +25,8 @@ set -e
 
 # show usage message and exit
 usage () {
-  status=${1:-0}
-  grep '^#/' < "$0" | cut -c4-
-  exit $status
+    grep '^#/' < "$0" | cut -c4-
+    exit 1
 }
 [ $# -eq 0 ] || [ "$1" = "--help" ] && usage
 

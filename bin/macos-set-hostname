@@ -19,5 +19,6 @@ usage () {
 [ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
 new_hostname="$*"
 for key in LocalHostName ComputerName HostName; do sudo scutil --set $key "$new_hostname"; done
-exec dscacheutil -flushcache
-echo "$new_hostname"
+sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string "$new_hostname"
+dscacheutil -flushcache
+echo "Your hostname is now: $new_hostname"

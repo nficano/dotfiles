@@ -16,4 +16,4 @@ usage () {
     exit 1
 }
 [ $# -ne 0 ] && usage
-exec killall NotificationCenter
+killall NotificationCenter

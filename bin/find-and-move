@@ -10,15 +10,14 @@
 #/
 
 set -o errexit          # Exit on most errors (see the manual)
-set -o errtrace         # Make sure any error trap is inherited
 set -o nounset          # Disallow expansion of unset variables
-set -o pipefail         # Use last non-zero exit code in a pipeline
-#set -o xtrace          # Trace the execution of the script (debug)
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
 usage () {
-  status=${1:-0}
-  grep '^#/' < "$0" | cut -c4-
-  exit $status
+    grep '^#/' < "$0" | cut -c4-
+    exit 1
 }
 [ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 2 ] && usage
 exec find . -type f -name "$1" -exec mv {} $2 \;
