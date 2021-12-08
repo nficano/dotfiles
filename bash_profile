@@ -212,7 +212,7 @@ sys.path.contains "code" && os.setenv "EDITOR" "code"
 
 sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
 sys.path.contains "direnv" && shell.eval "direnv hook bash"
-sys.path.contains "pyenv" && shell.eval "pyenv init -"
+sys.path.contains "pyenv" && shell.eval "pyenv init --path"
 sys.path.contains "rbenv" && shell.eval "rbenv init -"
 sys.path.contains "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
 

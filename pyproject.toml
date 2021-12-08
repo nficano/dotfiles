@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "dotfiles"
+version = "4.2.0"
+description = "💻   .files for MacOS & Linux"
+authors = ["Nick Ficano"]
+license = "Unlicense"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+ansible = "^5.0.1"
+bumpversion = "^0.6.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

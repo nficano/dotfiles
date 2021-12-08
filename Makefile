@@ -1,7 +1,5 @@
 DOTFILES := $(PWD)
 
-install: setup
-
 bootstrap:
 	bash $(DOTFILES)/bootstrap
 
@@ -20,12 +18,12 @@ deploy-major:
 	git push
 	git push --tags
 
-setup:
-	mkdir -p ~/.virtualenvs
-	mkdir -p ~/Downloads
-	mkdir -p ~/github
-	mkdir -p ~/Repos
-	mkdir -p ~/.pip
+setup-tree:
+	mkdir -p ${HOME}/.virtualenvs
+	mkdir -p ${HOME}/Downloads
+	mkdir -p ${HOME}/github
+	mkdir -p ${HOME}/Repos
+	mkdir -p ${HOME}/.pip
 	rm -f ${HOME}/.bash_profile
 	rm -f ${HOME}/.inputrc
 	rm -f ${HOME}/.bin
