@@ -230,7 +230,7 @@ set_wallpaper() {
   osascript -e "
 tell application \"System Events\" 
     tell every desktop
-        set picture to \"$HOME/github/dotfiles/wallpaper/The Cliffs.heic\"
+        set picture to \"$HOME/github/dotfiles/os/darwin/wallpaper/The Cliffs.heic\"
     end tell
 end tell"
 }
