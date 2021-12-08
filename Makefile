@@ -3,7 +3,7 @@ DOTFILES := $(PWD)
 install: setup
 
 bootstrap:
-	bash $(DOTFILES)/misc/bootstrap
+	bash $(DOTFILES)/bootstrap
 
 deploy-patch:
 	bumpversion patch

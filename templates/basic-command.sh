@@ -3,15 +3,12 @@
 #/      {{ basename }} -- ~60 character imperative summary of the script.
 #/ 
 #/ SYNOPSIS
-#/      {{ basename }} <arguments> ...
+#/      {{ basename }}... [ARGUMENT]...  [ARGUMENT]...
 #/ 
 #/ DESCRIPTION
 #/      The command description is an extended explainer that answers 
 #/      "what the command does", "what are the usecases", and "what are the 
 #/      "arguments"
-#/ 
-#/ USAGE
-#/      Demonstration of the usecases described in the description.
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables
