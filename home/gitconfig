@@ -54,5 +54,3 @@
 [rerere]
 	enabled = true
 	autoupdate = true
-[user]
-	signingkey = 16D0F3F7BBE823B0
