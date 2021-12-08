@@ -19,12 +19,12 @@ install_package() {
 }
 
 install_launchagent() {
-    sed "s|\$HOME|${HOME}|g" com.nickficano.carbon.plist > "$HOME/Library/LaunchAgents/com.nickficano.carbon.plist"
+    sed "s|\$HOME|${HOME}|g" recoverabl.plist > "$HOME/Library/LaunchAgents/recoverabl.plist"
 }
 
 install_script() {
-    mkdir -p "$HOME/Library/com.nickficano"
-    ln -fsn "$PWD/carbon.agent" "$HOME/Library/com.nickficano/carbon.agent"
+    mkdir -p "$HOME/Library/recoverabl/bin"
+    ln -fsn "$PWD/recoverabl.agent" "$HOME/Library/recoverabl/bin/recoverabl.agent"
 }
 
 log() {
@@ -40,14 +40,14 @@ run_setup() {
     install_package "unison"
   fi
 
-  log "Installing carbon ..."
+  log "Installing recoverabl ..."
   install_script
 
-  log "Installing carbon LaunchAgent ..."
+  log "Installing recoverabl LaunchAgent ..."
   install_launchagent
 
   log "carbon Installed Successfully! 🍻"
-  log "Logfile: $HOME/Library/Logs/com.nickficano.carbon.log"
+  log "Logfile: $HOME/Library/Logs/recoverabl.log"
 }
 
 run_setup

@@ -10,18 +10,18 @@
       <string>/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>Label</key>
-    <string>com.nickficano.carbon.plist</string>
+    <string>recoverabl.plist</string>
     <key>ProgramArguments</key>
     <array>
       <string>/usr/local/bin/bash</string>
-      <string>carbon</string>
+      <string>recoverabl</string>
     </array>
     <key>RunAtLoad</key>
     <true />
     <key>StandardErrorPath</key>
-    <string>$HOME/Library/Logs/com.nickficano.carbon.log</string>
+    <string>$HOME/Library/Logs/recoverabl.log</string>
     <key>StandardOutPath</key>
-    <string>$HOME/Library/Logs/com.nickficano.carbon.log</string>
+    <string>$HOME/Library/Logs/recoverabl.log</string>
     <key>StartCalendarInterval</key>
     <array>
       <dict>
@@ -30,6 +30,6 @@
       </dict>
     </array>
     <key>WorkingDirectory</key>
-    <string>$HOME/Library/com.nickficano/carbon</string>
+    <string>$HOME/Library/recoverabl/bin</string>
   </dict>
 </plist>
