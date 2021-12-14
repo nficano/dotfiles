@@ -51,18 +51,18 @@ shell.setup_prompt() {
 }
 
 shell.iterm2_style_path() {
-    # Mimic iTerm2 status bar current directory path, i.e., the path 
-    # "/usr/local/bin" translates to "/u/l/bin".
+    # Mimic iTerm2's absolute path abbreviation. For example, 
+    # "/usr/local/bin" abbreviates to "/u/l/bin".
 
     IFS="/"
-    # Split path into list of directories (e.g.,: ["usr", "local", "bin"]).
+    # Split path into array of directories. For example, ["usr", "local", "bin"].
     read -ra relpath <<<"$(dirs +0)"
     buffer=""
-    dirname=$((${#relpath[*]} - 1)) # The current directory (e.g., "bin").
+    dirname=$((${#relpath[*]} - 1)) # The working directory (e.g., "bin").
 
-    # Append the first character of each directory name in relpath to buffer.
+    # Append the first character of each directory name in `relpath` to buffer.
     for folder_name in "${relpath[@]}"; do
-        # We do not want to abbreviate the top-most directory.
+        # Do not abbreviate the working directory in the path.
         if [[ $folder_name != "${relpath[$dirname]}" ]]; then
             buffer+="$(text.substr "$folder_name" 0 1)/"
         fi
