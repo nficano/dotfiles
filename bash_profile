@@ -140,6 +140,7 @@ os.setenv "HOMEBREW_SHELLENV_PREFIX" "$HOMEBREW_PREFIX"
 os.setenv "MANPATH" "$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
 os.setenv "INFOPATH" "$HOMEBREW_PREFIX/share/info:${INFOPATH:-}"
 os.setenv "HOMEBREW_NO_ENV_HINTS" 1
+os.setenv "ARCHFLAGS" "-arch $(uname --machine)"
 
 # Node.js Environment
 os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
@@ -185,7 +186,7 @@ sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-time/libexec/gnubin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-which/libexec/gnubin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/grep/libexec/gnubin"
-
+sys.path.prepend "$HOMEBREW_PREFIX/opt/whois/bin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/icu4c/bin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/icu4c/sbin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/openssl/bin"
@@ -245,7 +246,6 @@ alias ga="git add"
 alias gd="git diff"
 alias gs="git status"
 alias map="xargs -n1"
-alias hgrep="history | egrep "
 
 # Create alias to open cwd in Finder.
 os.platform.is_darwin && alias o="open ./"
