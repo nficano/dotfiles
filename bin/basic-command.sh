@@ -3,7 +3,9 @@
 #/      {{ basename }} -- ~60 character imperative summary of the script.
 #/ 
 #/ SYNOPSIS
-#/      {{ basename }}... [ARGUMENT]...  [ARGUMENT]...
+#/      {{ basename }} [-h] [--help]
+#/      {{ basename }} [operand]
+#/      See: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
 #/ 
 #/ DESCRIPTION
 #/      The command description is an extended explainer that answers 
