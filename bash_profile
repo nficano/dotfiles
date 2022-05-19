@@ -140,7 +140,7 @@ os.setenv "HOMEBREW_SHELLENV_PREFIX" "$HOMEBREW_PREFIX"
 os.setenv "MANPATH" "$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
 os.setenv "INFOPATH" "$HOMEBREW_PREFIX/share/info:${INFOPATH:-}"
 os.setenv "HOMEBREW_NO_ENV_HINTS" 1
-os.setenv "ARCHFLAGS" "-arch $(uname --machine)"
+os.setenv "ARCHFLAGS" "-arch $(uname -m)"
 
 # Node.js Environment
 os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
