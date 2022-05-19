@@ -133,11 +133,13 @@ os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
 
 # Homebrew Shell Environment
 os.setenv "HOMEBREW_PREFIX" "$(brew.prefix)"
+os.setenv "HOMEBREW_CASKROOM" "$HOMEBREW_PREFIX/Caskroom"
 os.setenv "HOMEBREW_CELLAR" "$HOMEBREW_PREFIX/Cellar"
 os.setenv "HOMEBREW_REPOSITORY" "$HOMEBREW_PREFIX/Homebrew"
 os.setenv "HOMEBREW_SHELLENV_PREFIX" "$HOMEBREW_PREFIX"
 os.setenv "MANPATH" "$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
 os.setenv "INFOPATH" "$HOMEBREW_PREFIX/share/info:${INFOPATH:-}"
+os.setenv "HOMEBREW_NO_ENV_HINTS" 1
 
 # Node.js Environment
 os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
@@ -193,12 +195,14 @@ sys.path.prepend "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
 sys.path.prepend "$HOMEBREW_PREFIX/bin"
 sys.path.prepend "$HOMEBREW_PREFIX/sbin"
 sys.path.prepend "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
+sys.path.prepend "$HOME/.local/bin"
 
 shell.import "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
 shell.import "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
 shell.import "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
 shell.import "$HOME/.iterm2_shell_integration.bash"
+shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
 
 # Untracked Private Overrides (DO NOT SORT)
 shell.import "$HOME/.bash_profile.local"
