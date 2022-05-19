@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #/ Brutally remove everything Docker related
 #/
 #/ USAGE:
@@ -17,13 +17,21 @@ usage () {
 }
 [ $# -ne 0 ] && usage
 
-read -p "Are you sure dog? [y/n] " -n 1 -r
-echo    # (optional) move to a new line
-if [[ $REPLY =~ ^[Yy]$ ]]
-then
+start_docker_purge () {    
     docker-remove-containers > /dev/null 2>&1
     docker network prune -f > /dev/null 2>&1
-    docker rmi -f $(docker images --filter dangling=true -qa) > /dev/null 2>&1
-    docker volume rm $(docker volume ls --filter dangling=true -q) > /dev/null 2>&1
-    docker rmi -f $(docker images -qa) > /dev/null 2>&1
-fi
+    docker rmi -f "$(docker images --filter dangling=true -qa)" > /dev/null 2>&1
+    docker volume rm "$(docker volume ls --filter dangling=true -q)" > /dev/null 2>&1
+    docker rmi -f "$(docker images -qa)" > /dev/null 2>&1
+}
+
+while true; do
+    echo -n "Do you want to clean/purge Docker data? y(es), n(o), or q(uit): "
+    read -r yn
+    case $yn in
+        y) start_docker_purge; break;;
+        n) break;;
+        q) exit;;        
+        *) echo "Please answer y(es), n(o), or q(uit)";;
+    esac
+done
