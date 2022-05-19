@@ -19,12 +19,12 @@ install_package() {
 }
 
 install_launchagent() {
-    sed "s|\$HOME|${HOME}|g" recoverabl.plist > "$HOME/Library/LaunchAgents/recoverabl.plist"
+    sed "s|\$HOME|${HOME}|g" sync-to-dropbox.plist > "$HOME/Library/LaunchAgents/sync-to-dropbox.plist"
 }
 
 install_script() {
-    mkdir -p "$HOME/Library/recoverabl/bin"
-    ln -fsn "$PWD/recoverabl.agent" "$HOME/Library/recoverabl/bin/recoverabl.agent"
+    mkdir -p "$HOME/Library/sync-to-dropbox/bin"
+    ln -fsn "$PWD/sync-to-dropbox.agent" "$HOME/Library/sync-to-dropbox/bin/sync-to-dropbox.agent"
 }
 
 log() {
@@ -40,14 +40,14 @@ run_setup() {
     install_package "unison"
   fi
 
-  log "Installing recoverabl ..."
+  log "Installing sync-to-dropbox ..."
   install_script
 
-  log "Installing recoverabl LaunchAgent ..."
+  log "Installing sync-to-dropbox LaunchAgent ..."
   install_launchagent
 
   log "carbon Installed Successfully! 🍻"
-  log "Logfile: $HOME/Library/Logs/recoverabl.log"
+  log "Logfile: $HOME/Library/Logs/sync-to-dropbox.log"
 }
 
 run_setup

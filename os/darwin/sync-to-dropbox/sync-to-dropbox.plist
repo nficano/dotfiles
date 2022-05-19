@@ -10,18 +10,18 @@
       <string>/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>Label</key>
-    <string>recoverabl.plist</string>
+    <string>sync-to-dropbox.plist</string>
     <key>ProgramArguments</key>
     <array>
       <string>/usr/local/bin/bash</string>
-      <string>recoverabl</string>
+      <string>sync-to-dropbox</string>
     </array>
     <key>RunAtLoad</key>
     <true />
     <key>StandardErrorPath</key>
-    <string>$HOME/Library/Logs/recoverabl.log</string>
+    <string>$HOME/Library/Logs/sync-to-dropbox.log</string>
     <key>StandardOutPath</key>
-    <string>$HOME/Library/Logs/recoverabl.log</string>
+    <string>$HOME/Library/Logs/sync-to-dropbox.log</string>
     <key>StartCalendarInterval</key>
     <array>
       <dict>
@@ -30,6 +30,6 @@
       </dict>
     </array>
     <key>WorkingDirectory</key>
-    <string>$HOME/Library/recoverabl/bin</string>
+    <string>$HOME/Library/sync-to-dropbox/bin</string>
   </dict>
 </plist>
