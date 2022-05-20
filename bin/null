@@ -1,9 +1,6 @@
 #!/bin/sh
-#/ Remove Docker Containers
-#/
-#/ USAGE:
-#/    docker-remove-containers [--help]
-#/
+#/ NAME
+#/      {{ basename }} -- Ignore output of this script
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables
@@ -12,10 +9,9 @@ set -o nounset          # Disallow expansion of unset variables
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
 usage () {
-    grep '^#/' < "$0" | cut -c4-
+    grep '^#/ ' < "$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
     exit 1
 }
-[ $# -ne 0 ] && usage
 
-docker stop $(docker ps -aq)
-docker rm $(docker ps -aq)
+[ $# -eq 0 ] || [ "$1" = "--help" ] && usage
+"$@" >/dev/null 2>&1

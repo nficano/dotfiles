@@ -15,23 +15,65 @@ usage () {
     grep '^#/' < "$0" | cut -c4-
     exit 1
 }
-[ $# -ne 0 ] && usage
 
-start_docker_purge () {    
-    docker-remove-containers > /dev/null 2>&1
-    docker network prune -f > /dev/null 2>&1
-    docker rmi -f "$(docker images --filter dangling=true -qa)" > /dev/null 2>&1
-    docker volume rm "$(docker volume ls --filter dangling=true -q)" > /dev/null 2>&1
-    docker rmi -f "$(docker images -qa)" > /dev/null 2>&1
+remove_all_containers () {
+    docker stop "$(docker ps --all --quiet)"
+    docker rm "$(docker ps --quiet)"
 }
 
-while true; do
-    echo -n "Do you want to clean/purge Docker data? y(es), n(o), or q(uit): "
-    read -r yn
-    case $yn in
-        y) start_docker_purge; break;;
-        n) break;;
-        q) exit;;        
-        *) echo "Please answer y(es), n(o), or q(uit)";;
-    esac
-done
+remove_all_networks () {
+    docker network rm -f "$(docker network ls)"
+}
+
+remove_all_dangling_images () {
+    docker rmi --force "$(docker images --filter "dangling=true")"
+}
+
+remove_all_volumes () {
+    docker volume rm -f "$(docker volume ls)"
+}
+
+remove_all_images () {
+    docker rmi -f "$(docker images)"
+}
+
+purge () {
+    printf "Removing all containers ........ "
+    null remove_all_containers || true
+    printf "Done\n"
+
+    printf "Removing all networks .......... "
+    null remove_all_networks || true
+    printf "Done\n"
+
+    printf "Removing dangling images ....... "
+    null remove_all_dangling_images || true
+    printf "Done\n"
+
+    printf "Removing all volumns ........... "
+    null remove_all_volumes || true
+    printf "Done\n"
+
+    printf "Removing all images ............ "
+    null remove_all_images || true
+    printf "Done\n"
+}
+
+function confirmation_prompt () {
+    while true; do
+        echo -n "Do you want to clean/purge Docker data? y(es), n(o), or q(uit): "
+        read -r yn
+        case $yn in
+            y) purge; break;;
+            n) break;;
+            q) exit;;        
+            *) echo "Please answer y(es), n(o), or q(uit)";;
+        esac
+    done
+}
+
+case "${1:-''}" in
+    -h|--help) usage;;
+    -y|--yes) purge; exit;;
+    *) confirmation_prompt;;
+esac
