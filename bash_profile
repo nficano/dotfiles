@@ -197,6 +197,7 @@ sys.path.prepend "$HOMEBREW_PREFIX/bin"
 sys.path.prepend "$HOMEBREW_PREFIX/sbin"
 sys.path.prepend "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 sys.path.prepend "$HOME/.local/bin"
+sys.path.prepend "$HOME/.docker/bin"
 
 shell.import "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
@@ -220,6 +221,7 @@ sys.path.contains "direnv" && shell.eval "direnv hook bash"
 sys.path.contains "pyenv" && shell.eval "pyenv init --path"
 sys.path.contains "rbenv" && shell.eval "rbenv init -"
 sys.path.contains "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
+# sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 
 complete -cf sudo # enable sudo tab-complete
 

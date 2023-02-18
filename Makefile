@@ -24,6 +24,7 @@ setup-tree:
 	mkdir -p ${HOME}/github
 	mkdir -p ${HOME}/Repos
 	mkdir -p ${HOME}/.pip
+	mkdir -p ${HOME}/.environment
 	rm -f ${HOME}/.bash_profile
 	rm -f ${HOME}/.inputrc
 	rm -f ${HOME}/.bin

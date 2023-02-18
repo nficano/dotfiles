@@ -11,7 +11,6 @@ trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 
 BREW_PREFIX="/usr/local"
 BREW_INSTALLER="https://raw.githubusercontent.com/Homebrew/install/master/install"
-
 run_setup() {
   SECONDS=0
   request_root_privileges
@@ -20,6 +19,7 @@ run_setup() {
   setup_duti
   setup_default_file_associations
   install_formulaes_from_brewfile
+  install_paywall_bypass
   quit_system_preferences
   set_wallpaper
   disable_keypress_itunes
@@ -227,12 +227,12 @@ setup_default_file_associations() {
 
 set_wallpaper() {
   log "Setting wallpaper ..."
-  osascript -e "
-tell application \"System Events\" 
-    tell every desktop
-        set picture to \"$HOME/github/dotfiles/os/darwin/wallpaper/The Cliffs.heic\"
-    end tell
-end tell"
+#   osascript -e "
+# tell application \"System Events\" 
+#     tell every desktop
+#         set picture to \"$HOME/github/dotfiles/os/darwin/wallpaper/The Cliffs.heic\"
+#     end tell
+# end tell"
 }
 
 quit_system_preferences() {
