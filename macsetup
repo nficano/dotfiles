@@ -19,17 +19,14 @@ run_setup() {
   setup_duti
   setup_default_file_associations
   install_formulaes_from_brewfile
-  install_paywall_bypass
   quit_system_preferences
-  set_wallpaper
-  disable_keypress_itunes
   setup_user_defaults
   hide_vendor_directories
   show_library_folder
-  restart_all_apps
   install_pyenv
   install_pipx
-
+  restart_all_apps
+  
   # shellcheck disable=SC2039
   echo "✨  Done in $((SECONDS))s."
   exit 0
