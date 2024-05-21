@@ -133,11 +133,14 @@ install_brew() {
 }
 
 install_pyenv() {
+  log "Installing pyenv ..."
+  rm -rf "$HOME/.pyenv"
   # shellcheck disable=SC2317
   curl -fsS "https://pyenv.run" | bash
 }
 
 install_pipx() {
+  log "Installing pipx ..."
   # shellcheck disable=SC2317
   brew install pipx
   pipx ensurepath
