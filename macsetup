@@ -25,7 +25,6 @@ run_setup() {
   show_library_folder
   install_pyenv
   install_pipx
-  restart_all_apps
   
   # shellcheck disable=SC2039
   echo "✨  Done in $((SECONDS))s."
@@ -342,24 +341,6 @@ hide_vendor_directories() {
 
 show_library_folder() {
   chflags nohidden "$(realpath "$HOME/Library")"
-}
-
-restart_all_apps() {
-  log "Restarting affected apps ..."
-  for app in "Activity Monitor" \
-    "Address Book" \
-    "Calendar" \
-    "cfprefsd" \
-    "Contacts" \
-    "Dock" \
-    "Finder" \
-    "Google Chrome Canary" \
-    "Google Chrome" \
-    "Safari" \
-    "Spectacle" \
-    "SystemUIServer"; do
-    killall "${app}" &>/dev/null
-  done
 }
 
 run_setup
