@@ -34,7 +34,7 @@ os.path.exists() {
 }
 
 shell.setopt() {
-    sys.path.contains "shopt" && shopt -s "$1"
+    sys.path.contains "shopt" && shopt -s "$1" 
 }
 
 shell.import() {
@@ -169,9 +169,8 @@ shell.setopt "hostcomplete"            # tab-complete hostnames.
 shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands
 # during tab completion.
 shell.setopt "nocaseglob" # Case-insensitive path expansion.
-shell.setopt "dirspell"   # Automatic spell-correct during
+shell.setopt "cdspell"   # Automatic spell-correct during
 # tab completion.
-shell.setopt "autocd"     # Change directory without typing cd.
 shell.setopt "histverify" # !$ does not execute automatically.
 
 # Untracked Shell Scripts (DO NOT SORT)
