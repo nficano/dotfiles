@@ -334,7 +334,6 @@ hide_vendor_directories() {
   chflags hidden "$HOME/Music"
   chflags hidden "$HOME/Movies"
   chflags hidden "$HOME/Pictures"
-  chflags hidden "$HOME/Applications"
   chflags hidden "$HOME/Public"
 }
 
