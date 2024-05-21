@@ -27,6 +27,8 @@ run_setup() {
   hide_vendor_directories
   show_library_folder
   restart_all_apps
+  install_pyenv
+  install_pipx
 
   # shellcheck disable=SC2039
   echo "✨  Done in $((SECONDS))s."
@@ -130,8 +132,7 @@ is_brew_installed() {
 
 install_brew() {
   curl -fsSL "$BREW_INSTALLER" | bash
-  eval "(/opt/homebrew/bin/brew shellenv)"
-  export PATH="/usr/local/bin:$PATH"
+  export PATH="/opt/homebrew/bin:$PATH"
 }
 
 install_pyenv() {
