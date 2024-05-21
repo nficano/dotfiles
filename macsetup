@@ -23,7 +23,6 @@ run_setup() {
   setup_user_defaults
   hide_vendor_directories
   show_library_folder
-  install_pyenv
   install_pipx
   
   # shellcheck disable=SC2039

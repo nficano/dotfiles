@@ -130,6 +130,7 @@ brew "fnm"
 brew "openslide"
 brew "openssh"
 brew "parallel"
+brew "pyenv"
 brew "pipenv"
 brew "pipx"
 brew "postgresql@14", restart_service: true

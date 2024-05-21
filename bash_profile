@@ -269,5 +269,3 @@ sys.path.contains "dotfiles" && complete -W "$(dotfiles -listcommands)" "dotfile
 
 shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
-
-source /Users/nficano/.docker/init-bash.sh || true # Added by Docker Desktop
