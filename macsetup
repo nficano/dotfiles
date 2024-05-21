@@ -331,7 +331,6 @@ hide_vendor_directories() {
   chflags nohidden "$(realpath ~/Library)"
 
   # Hide unused app directories
-  chflags hidden "$HOME/Creative\ Cloud\ Files"
   chflags hidden "$HOME/Music"
   chflags hidden "$HOME/Movies"
   chflags hidden "$HOME/Pictures"
