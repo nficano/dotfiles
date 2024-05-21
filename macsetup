@@ -130,6 +130,7 @@ is_brew_installed() {
 
 install_brew() {
   curl -fsSL "$BREW_INSTALLER" | bash
+  eval "(/opt/homebrew/bin/brew shellenv)"
   export PATH="/usr/local/bin:$PATH"
 }
 
