@@ -1,13 +1,9 @@
 #!/bin/sh
 #/ NAME
-#/      {{ basename }} -- grep for shell history.
+#/      {{ basename }} -- Start postgresql service via brew
 #/
 #/ SYNOPSIS
 #/      {{ basename }} [-h] [--help]
-#/      {{ basename }} pattern
-#/
-#/ DESCRIPTION
-#/      {{ basename }} regex search your bash history.
 
 set -o errexit # Exit on most errors (see the manual)
 set -o nounset # Disallow expansion of unset variables
@@ -19,7 +15,7 @@ usage() {
     grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
     exit 1
 }
-export GREP_COLOR='1;32'
-[ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
-bash_history="$(cat "$HOME"/.bash_history)"
-echo "$bash_history" | grep -a --color=always -E "$*" | awk '!x[$0]++'
+
+[ $# -ne 0 ] && usage
+
+brew services start postgresql

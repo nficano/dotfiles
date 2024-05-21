@@ -133,6 +133,19 @@ install_brew() {
   export PATH="/usr/local/bin:$PATH"
 }
 
+install_pyenv() {
+  # shellcheck disable=SC2317
+  curl -fsS "https://pyenv.run" | bash
+}
+
+install_pipx() {
+  # shellcheck disable=SC2317
+  brew install pipx
+  pipx ensurepath
+  sudo pipx ensurepath --global
+  pipx completions
+}
+
 setup_brew() {
   if [ -d "$BREW_PREFIX" ]; then
     if ! [ -r "$BREW_PREFIX" ]; then

@@ -51,7 +51,7 @@ shell.setup_prompt() {
 }
 
 shell.iterm2_style_path() {
-    # Mimic iTerm2's absolute path abbreviation. For example, 
+    # Mimic iTerm2's absolute path abbreviation. For example,
     # "/usr/local/bin" abbreviates to "/u/l/bin".
 
     IFS="/"
@@ -122,7 +122,6 @@ brew.prefix() {
 os.setenv "TERM" "xterm-256color"
 os.setenv "GPG_TTY" "$(tty)"
 os.setenv "DOTFILES_VERSION" "4.2.0"
-os.setenv "GREP_COLOR" "1;32" # make match highlight color green
 os.setenv "DIRENV_LOG_FORMAT" ""
 
 # Python Shell Environment
@@ -160,19 +159,19 @@ os.setenv "VISUAL" "nano"
 os.setenv "EDITOR" "nano"
 
 # Set various Bash options.
-shell.setopt "cdspell"                 # directory name auto-correct during cd.
-shell.setopt "checkwinsize"            # Update window size after each command.
-shell.setopt "cmdhist"                 # Save multi-line commands as one.
-shell.setopt "histappend"              # Append command history instead of 
-                                       # clobbering.
+shell.setopt "cdspell"      # directory name auto-correct during cd.
+shell.setopt "checkwinsize" # Update window size after each command.
+shell.setopt "cmdhist"      # Save multi-line commands as one.
+shell.setopt "histappend"   # Append command history instead of
+# clobbering.
 shell.setopt "hostcomplete"            # tab-complete hostnames.
-shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands 
-                                       # during tab completion.
-shell.setopt "nocaseglob"              # Case-insensitive path expansion.
-shell.setopt "dirspell"                # Automatic spell-correct during 
-                                       # tab completion.
-shell.setopt "autocd"                  # Change directory without typing cd. 
-shell.setopt "histverify"              # !$ does not execute automatically.
+shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands
+# during tab completion.
+shell.setopt "nocaseglob" # Case-insensitive path expansion.
+shell.setopt "dirspell"   # Automatic spell-correct during
+# tab completion.
+shell.setopt "autocd"     # Change directory without typing cd.
+shell.setopt "histverify" # !$ does not execute automatically.
 
 # Untracked Shell Scripts (DO NOT SORT)
 sys.path.prepend "$HOME/.bin"
@@ -195,17 +194,21 @@ sys.path.prepend "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
 sys.path.prepend "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
 sys.path.prepend "$HOMEBREW_PREFIX/bin"
 sys.path.prepend "$HOMEBREW_PREFIX/sbin"
+sys.path.prepend "$HOMEBREW_PREFIX/share/google-cloud-sdk/path.bash.inc"
 sys.path.prepend "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 sys.path.prepend "$HOME/.local/bin"
 sys.path.prepend "$HOME/.docker/bin"
 
 shell.import "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+shell.import "$HOME/.config/op/plugins.sh"
 shell.import "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
+shell.import "$HOMEBREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
 shell.import "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
 shell.import "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
 shell.import "$HOME/.iterm2_shell_integration.bash"
 shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
-
+shell.import "$HOME/.docker/init-bash.sh"
+shell.import "$HOME/.pyenv/bin"
 # Untracked Private Overrides (DO NOT SORT)
 shell.import "$HOME/.bash_profile.local"
 
@@ -215,10 +218,11 @@ sys.path.contains "most" && os.setenv "MANPAGER" "most"
 # Use "vscode" for text editing when available, otherwise use "nano".
 sys.path.contains "code" && os.setenv "VISUAL" "code"
 sys.path.contains "code" && os.setenv "EDITOR" "code"
-
+sys.path.contains "ngrok" && shell.eval "ngrok completion"
 sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
 sys.path.contains "direnv" && shell.eval "direnv hook bash"
-sys.path.contains "pyenv" && shell.eval "pyenv init --path"
+sys.path.contains "pyenv" && shell.eval "pyenv init -"
+sys.path.contains "pyenv" && shell.eval "pyenv virtualenv-init -"
 sys.path.contains "rbenv" && shell.eval "rbenv init -"
 sys.path.contains "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
 # sys.path.contains "conda" && shell.eval "conda shell.bash hook"
@@ -229,11 +233,12 @@ alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
 alias .....="cd ../../../.."
-alias ~="cd ~"
+alias ~="cd ~/Desktop"
+alias ~~="cd ~/"
 alias -- -="cd -"
-alias d="cd ~/Desktop"
 alias r="cd ~/Repos"
 alias c="clear"
+alias code="code-insiders"
 alias g="git"
 alias cp="cp -i"
 alias l="ls"
@@ -264,3 +269,5 @@ sys.path.contains "dotfiles" && complete -W "$(dotfiles -listcommands)" "dotfile
 
 shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
+
+source /Users/nficano/.docker/init-bash.sh || true # Added by Docker Desktop

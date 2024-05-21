@@ -1,0 +1,5 @@
+#! /usr/bin/env bash
+
+find . \( -iname \*.jpg -o -iname \*.jpeg -o -iname \*.png \) -print0 | while read -r -d $'\0' file; do
+  cwebp -q 100 "$file" -o "${file%.*}.webp" >/dev/null 2>&1
+done

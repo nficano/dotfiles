@@ -1,58 +1,62 @@
 [include]
-	path = ~/.gitconfig.local
+path = ~/.gitconfig.local
 [apply]
-	whitespace = nowarn
+whitespace = nowarn
 [color]
-	diff = auto
-	status = auto
-	branch = auto
-	interactive = auto
-	ui = true
-	pager = true
+diff = auto
+status = auto
+branch = auto
+interactive = auto
+ui = true
+pager = true
 [merge]
-	summary = true
-	ff = false
+summary = true
+ff = false
 [diff]
-  tool = difftool
+tool = difftool
 [difftool "difftool"]
-  cmd = code --wait --diff $LOCAL $REMOTE
+cmd = code --wait --diff $LOCAL $REMOTE
 [merge]
-	tool = vscode
+tool = vscode
 [mergetool "vscode"]
-	cmd = code --wait $MERGED
+cmd = code --wait $MERGED
 [core]
-	excludesfile = ~/.gitignore
-	autocrlf = input
-	pager = diff-so-fancy | less --tabs=4 -RFX
-	editor = code --wait
+excludesfile = ~/.gitignore
+autocrlf = input
+pager = diff-so-fancy | less --tabs=4 -RFX
+editor = code-insiders --wait
 [push]
-	default = simple
+default = simple
 [filter "lfs"]
-	clean = git-lfs clean -- %f
-	smudge = git-lfs smudge -- %f
-	required = true
-	process = git-lfs filter-process
+clean = git-lfs clean -- %f
+smudge = git-lfs smudge -- %f
+required = true
+process = git-lfs filter-process
 [color "diff-highlight"]
-	oldNormal = red bold
-	oldHighlight = red bold 52
-	newNormal = green bold
-	newHighlight = green bold 22
+oldNormal = red bold
+oldHighlight = red bold 52
+newNormal = green bold
+newHighlight = green bold 22
 [color "diff"]
-	meta = yellow
-	frag = magenta bold
-	commit = yellow bold
-	old = red bold
-	new = green bold
-	whitespace = red reverse
+meta = yellow
+frag = magenta bold
+commit = yellow bold
+old = red bold
+new = green bold
+whitespace = red reverse
 [pull]
-	rebase = true
+rebase = true
 [commit]
-  template = ~/.gitmessage
-	gpgsign = true
+template = ~/.gitmessage
+gpgsign = true
 [gpg]
-	program = gpg
+format = ssh
 [rerere]
-	enabled = true
-	autoupdate = true
+enabled = true
+autoupdate = true
 [init]
-	defaultBranch = main
+defaultBranch = main
+[user]
+signingkey = ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCp0aXM/CSef/193Yf91xOA3bo7aoZaotleBjxrFolw0L2Ovig2Usos3mZPKf9uFgY2NsNUofxg48qfyjYu/1iPwzkpi4rG/2azaYvS2OQ0OvWW0AAPhl1H6RtK4fQavzi882vgVpzmL2CXsi16j2foqmho3yPR1pY6Oe9HBXjUL/4WvaBuQCvCmNSHuvKOmrPCbco78iNAX2h4Kl4t4lTnGC9n6kPNZFSQBsVAopJwYgEnkrwu9pSArHjt+0iZGmMbmZkp4lH/Mcf2I9l14Rm/u8D2iFkcdCvw1PnD134fIIqrnvvpn6RWssWhTyqYR7rAniHSkhmFWzJD24J2lu3lD79tR0pgUqQyq098PS8hMYGU4ZcHTY7ZPeYu06wEmzbMJDSpzjfJq2UkDLNOZO4CE/HLCQOKOqE5CK3pYcRzk62hDkUbkfeck4WBuy8qq4x6HKOYQuFo+xxeBcOWszLgkh7AjPzypBVaBxBRLN5BkmtX8p2WrXULHWXFjtNtrPH1U3XLa6q0FZE0kouv8UaVLzeW7WHZZjgsxMV3a1PBQzn7tKDOo5ROaFfmIF7+mHqsrKWdZUD1YmjLslCItEBVTori9fR/BgTAo5NJ0yqAioY3FTEypCY4nopvBYclQHIms0t3WueU/oYAX88fOsZxOWJYl1qU4e0xFPX+gZijEw==
+[gpg "ssh"]
+program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"

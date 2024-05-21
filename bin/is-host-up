@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Function to check the HTTP response code of a URL
+check_url_response() {
+  url="$1"
+  response_code=$(curl --max-time 2 -L -s -o /dev/null -w "%{http_code}" "$url")
+  if [ "$response_code" -eq 200 ]; then
+    echo "$url"
+  fi
+}
+
+# Check if a file containing URLs is provided as an argument
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 url_list.txt"
+  exit 1
+fi
+
+url_file="$1"
+
+# Check if the file exists
+if [ ! -f "$url_file" ]; then
+  echo "File $url_file not found."
+  exit 1
+fi
+
+# Read each URL from the file and check its response code
+while read -r url; do
+  check_url_response "$url"
+done <"$url_file"

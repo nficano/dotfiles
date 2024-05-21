@@ -1,7 +1,7 @@
 DOTFILES := $(PWD)
 
-bootstrap:
-	bash $(DOTFILES)/bootstrap
+install:
+	bash $(DOTFILES)/macsetup
 
 deploy-patch:
 	bumpversion patch
@@ -18,10 +18,13 @@ deploy-major:
 	git push
 	git push --tags
 
+create-brewfile:
+	brew bundle dump --force
+
 setup-tree:
 	mkdir -p ${HOME}/.virtualenvs
 	mkdir -p ${HOME}/Downloads
-	mkdir -p ${HOME}/github
+	mkdir -p ${HOME}/code
 	mkdir -p ${HOME}/Repos
 	mkdir -p ${HOME}/.pip
 	mkdir -p ${HOME}/.environment

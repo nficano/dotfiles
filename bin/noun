@@ -1,0 +1,27 @@
+#! /usr/bin/env python3
+
+import xml.etree.ElementTree as ET
+import subprocess
+import sys
+
+XPATH = ".//{http://www.w3.org/2000/svg}text"
+
+def svgo(file):
+    subprocess.run(["/opt/homebrew/bin/svgo", " --multipass", "-i", file])
+
+def find_attribution(root):
+    for elem in root.findall(XPATH):
+        yield elem
+
+def rewrite(path):
+    tree = ET.parse(path)
+    root = tree.getroot()
+    for elem in find_attribution(root):
+        root.remove(elem)
+    tree.write(path)
+
+
+if __name__ == "__main__":
+    for path in sys.argv[1:]:
+        rewrite(path)
+        svgo(path)
