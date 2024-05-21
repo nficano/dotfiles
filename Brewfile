@@ -135,7 +135,6 @@ brew "parallel"
 brew "pipenv"
 brew "pipx"
 brew "postgresql@14", restart_service: true
-brew "pyenv"
 brew "python-lsp-server"
 brew "redis"
 brew "rename"

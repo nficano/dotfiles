@@ -10,7 +10,7 @@ export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 
 BREW_PREFIX="/usr/local"
-BREW_INSTALLER="https://raw.githubusercontent.com/Homebrew/install/master/install"
+BREW_INSTALLER="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 run_setup() {
   SECONDS=0
   request_root_privileges
@@ -129,7 +129,7 @@ is_brew_installed() {
 }
 
 install_brew() {
-  curl -fsS $BREW_INSTALLER | ruby
+  curl -fsSL "$BREW_INSTALLER" | bash
   export PATH="/usr/local/bin:$PATH"
 }
 

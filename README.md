@@ -25,8 +25,8 @@ recommend using it for reference purposes only.
 ## Installation
 
 ```bash
-$ mkdir -p ~/github
-$ cd github
+$ mkdir -p ~/code
+$ cd code
 $ git clone git@github.com:nficano/dotfiles.git
 $ cd dotfiles
 $ make install
