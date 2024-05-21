@@ -207,6 +207,7 @@ cask "webpquicklook"
 cask "webtorrent"
 cask "zoom"
 cask "adobe-creative-cloud"
+cask "iterm2"
 mas "Amphetamine", id: 937984704
 mas "Drop", id: 1173932628
 mas "Spark", id: 1176895641
