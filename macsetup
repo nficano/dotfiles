@@ -141,7 +141,7 @@ install_pipx() {
   # shellcheck disable=SC2317
   brew install pipx
   pipx ensurepath
-  sudo pipx ensurepath --global
+  sudo pipx --global ensurepath
   pipx completions
 }
 
