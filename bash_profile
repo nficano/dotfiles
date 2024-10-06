@@ -34,7 +34,7 @@ os.path.exists() {
 }
 
 shell.setopt() {
-    sys.path.contains "shopt" && shopt -s "$1" 
+    sys.path.contains "shopt" && shopt -s "$1"
 }
 
 shell.import() {
@@ -131,13 +131,13 @@ os.setenv "PYTHONDONTWRITEBYTECODE" true
 os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
 
 # Homebrew Shell Environment
-os.setenv "HOMEBREW_PREFIX" "$(brew.prefix)"
-os.setenv "HOMEBREW_CASKROOM" "$HOMEBREW_PREFIX/Caskroom"
-os.setenv "HOMEBREW_CELLAR" "$HOMEBREW_PREFIX/Cellar"
-os.setenv "HOMEBREW_REPOSITORY" "$HOMEBREW_PREFIX/Homebrew"
-os.setenv "HOMEBREW_SHELLENV_PREFIX" "$HOMEBREW_PREFIX"
-os.setenv "MANPATH" "$HOMEBREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
-os.setenv "INFOPATH" "$HOMEBREW_PREFIX/share/info:${INFOPATH:-}"
+os.setenv "BREW_PREFIX" "$(brew.prefix)"
+os.setenv "HOMEBREW_CASKROOM" "$BREW_PREFIX/Caskroom"
+os.setenv "HOMEBREW_CELLAR" "$BREW_PREFIX/Cellar"
+os.setenv "HOMEBREW_REPOSITORY" "$BREW_PREFIX/Homebrew"
+os.setenv "HOMEBREW_SHELLENV_PREFIX" "$BREW_PREFIX"
+os.setenv "MANPATH" "$BREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
+os.setenv "INFOPATH" "$BREW_PREFIX/share/info:${INFOPATH:-}"
 os.setenv "HOMEBREW_NO_ENV_HINTS" 1
 os.setenv "ARCHFLAGS" "-arch $(uname -m)"
 os.setenv "BASH_SILENCE_DEPRECATION_WARNING" 1
@@ -169,7 +169,7 @@ shell.setopt "hostcomplete"            # tab-complete hostnames.
 shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands
 # during tab completion.
 shell.setopt "nocaseglob" # Case-insensitive path expansion.
-shell.setopt "cdspell"   # Automatic spell-correct during
+shell.setopt "cdspell"    # Automatic spell-correct during
 # tab completion.
 shell.setopt "histverify" # !$ does not execute automatically.
 
@@ -177,34 +177,34 @@ shell.setopt "histverify" # !$ does not execute automatically.
 sys.path.prepend "$HOME/.bin"
 
 # Prefer GNU Utilities instead of FeeeBSD When Available
-sys.path.prepend "$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/findutils/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-getopt/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-tar/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-time/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/gnu-which/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/grep/libexec/gnubin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/whois/bin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/icu4c/bin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/icu4c/sbin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/openssl/bin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/openjdk/bin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/e2fsprogs/bin"
-sys.path.prepend "$HOMEBREW_PREFIX/opt/e2fsprogs/sbin"
-sys.path.prepend "$HOMEBREW_PREFIX/bin"
-sys.path.prepend "$HOMEBREW_PREFIX/sbin"
-sys.path.prepend "$HOMEBREW_PREFIX/share/google-cloud-sdk/path.bash.inc"
+sys.path.prepend "$BREW_PREFIX/opt/coreutils/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/findutils/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/gnu-getopt/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/gnu-sed/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/gnu-tar/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/gnu-time/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/gnu-which/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/grep/libexec/gnubin"
+sys.path.prepend "$BREW_PREFIX/opt/whois/bin"
+sys.path.prepend "$BREW_PREFIX/opt/icu4c/bin"
+sys.path.prepend "$BREW_PREFIX/opt/icu4c/sbin"
+sys.path.prepend "$BREW_PREFIX/opt/openssl/bin"
+sys.path.prepend "$BREW_PREFIX/opt/openjdk/bin"
+sys.path.prepend "$BREW_PREFIX/opt/e2fsprogs/bin"
+sys.path.prepend "$BREW_PREFIX/opt/e2fsprogs/sbin"
+sys.path.prepend "$BREW_PREFIX/bin"
+sys.path.prepend "$BREW_PREFIX/sbin"
+sys.path.prepend "$BREW_PREFIX/share/google-cloud-sdk/path.bash.inc"
 sys.path.prepend "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 sys.path.prepend "$HOME/.local/bin"
 sys.path.prepend "$HOME/.docker/bin"
 
-shell.import "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$HOME/.config/op/plugins.sh"
-shell.import "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
-shell.import "$HOMEBREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-shell.import "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-shell.import "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
+shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
 shell.import "$HOME/.iterm2_shell_integration.bash"
 shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
 shell.import "$HOME/.docker/init-bash.sh"
