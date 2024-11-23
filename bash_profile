@@ -146,6 +146,7 @@ os.setenv "BASH_SILENCE_DEPRECATION_WARNING" 1
 os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
 os.setenv "NODE_REPL_HISTORY_SIZE" 32768            # allow 32³ entries
 os.setenv "NODE_REPL_MODE" "sloppy"                 # use non-strict mode code
+os.setenv "NVM_DIR" "$HOME/.nvm"
 
 # Shell Session Command History
 os.setenv "HISTCONTROL" "ignoredups:erasedups:ignoreboth"
@@ -198,17 +199,18 @@ sys.path.prepend "$BREW_PREFIX/share/google-cloud-sdk/path.bash.inc"
 sys.path.prepend "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 sys.path.prepend "$HOME/.local/bin"
 sys.path.prepend "$HOME/.docker/bin"
+sys.path.prepend "$HOME/.pyenv/bin"
 
-shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+shell.import "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$HOME/.config/op/plugins.sh"
-shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
-shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
+shell.import "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
+shell.import "$HOMEBREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+shell.import "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+shell.import "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
 shell.import "$HOME/.iterm2_shell_integration.bash"
 shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
 shell.import "$HOME/.docker/init-bash.sh"
-shell.import "$HOME/.pyenv/bin"
+shell.import "$HOME/.config/op/plugins.sh"
 # Untracked Private Overrides (DO NOT SORT)
 shell.import "$HOME/.bash_profile.local"
 
@@ -221,6 +223,7 @@ sys.path.contains "code" && os.setenv "EDITOR" "code"
 sys.path.contains "ngrok" && shell.eval "ngrok completion"
 sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
 sys.path.contains "direnv" && shell.eval "direnv hook bash"
+sys.path.contains "pyenv" && shell.eval "pyenv init --path"
 sys.path.contains "pyenv" && shell.eval "pyenv init -"
 sys.path.contains "pyenv" && shell.eval "pyenv virtualenv-init -"
 sys.path.contains "rbenv" && shell.eval "rbenv init -"

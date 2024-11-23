@@ -176,66 +176,9 @@ request_root_privileges() {
 
 setup_default_file_associations() {
   log "Setting preferred default file associations ..."
-  duti -s com.microsoft.Excel .csv all
-
-  duti -s com.microsoft.VSCode .c all
-  duti -s com.microsoft.VSCode .cpp all
-  duti -s com.microsoft.VSCode .cs all
-  duti -s com.microsoft.VSCode .css all
-  duti -s com.microsoft.VSCode .go all
-  duti -s com.microsoft.VSCode .java all
-  duti -s com.microsoft.VSCode .js all
-  duti -s com.microsoft.VSCode .sass all
-  duti -s com.microsoft.VSCode .scss all
-  duti -s com.microsoft.VSCode .less all
-  duti -s com.microsoft.VSCode .vue all
-  duti -s com.microsoft.VSCode .cfg all
-  duti -s com.microsoft.VSCode .json all
-  duti -s com.microsoft.VSCode .jsx all
-  duti -s com.microsoft.VSCode .lua all
-  duti -s com.microsoft.VSCode .md all
-  duti -s com.microsoft.VSCode .php all
-  duti -s com.microsoft.VSCode .pl all
-  duti -s com.microsoft.VSCode .py all
-  duti -s com.microsoft.VSCode .rb all
-  duti -s com.microsoft.VSCode .rs all
-  duti -s com.microsoft.VSCode .sh all
-  duti -s com.microsoft.VSCode .swift all
-  duti -s com.microsoft.VSCode .txt all
-  duti -s com.microsoft.VSCode .conf all
-  duti -s com.microsoft.VSCode .yaml all
-  duti -s com.microsoft.VSCode .yml all
-  duti -s com.microsoft.VSCode .toml all
-  duti -s com.microsoft.VSCode .jsonl all
-  duti -s com.microsoft.VSCode .plist all
-  duti -s com.microsoft.VSCode .scpt all
-  duti -s com.microsoft.VSCode Makefile all
-
-  duti -s com.microsoft.VSCode public.json all
-  duti -s com.microsoft.VSCode public.plain-text all
-  duti -s com.microsoft.VSCode public.python-script all
-  duti -s com.microsoft.VSCode public.shell-script all
-  duti -s com.microsoft.VSCode public.source-code all
-  duti -s com.microsoft.VSCode public.text all
-  duti -s com.microsoft.VSCode public.unix-executable all
-
-  duti -s com.apple.QuickTimePlayerX .avi all
-  duti -s com.apple.QuickTimePlayerX .drc all
-  duti -s com.apple.QuickTimePlayerX .flv all
-  duti -s com.apple.QuickTimePlayerX .m4v all
-  duti -s com.apple.QuickTimePlayerX .mkv all
-  duti -s com.apple.QuickTimePlayerX .mov all
-  duti -s com.apple.QuickTimePlayerX .m4a all
-  duti -s com.apple.QuickTimePlayerX .mp2 all
-  duti -s com.apple.QuickTimePlayerX .mp3 all
-  duti -s com.apple.QuickTimePlayerX .mpe all
-  duti -s com.apple.QuickTimePlayerX .mpeg all
-  duti -s com.apple.QuickTimePlayerX .mpg all
-  duti -s com.apple.QuickTimePlayerX .mpv all
-  duti -s com.apple.QuickTimePlayerX .rm all
-  duti -s com.apple.QuickTimePlayerX .rmvb all
-  duti -s com.apple.QuickTimePlayerX .vob all
-  duti -s com.apple.QuickTimePlayerX .wmv all
+  curl "https://raw.githubusercontent.com/github/linguist/master/lib/linguist/languages.yml" \
+  | yq e "to_entries | (map(.value.extensions) | flatten) - [null] | unique | .[]" \
+  | xargs -L 1 -I "{}" duti -s com.todesktop.230313mzl4w4u92 {} all
 }
 
 set_wallpaper() {

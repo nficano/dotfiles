@@ -1,4 +1,5 @@
 set meta-flag on
+set editing-mode emacs
 
 # Allow UTF-8 input and output, instead of showing stuff like $'\0123\0456'
 set input-meta on
@@ -23,8 +24,10 @@ set skip-completed-text on
 # Use Alt/Meta + Delete to delete the preceding word
 "\e[3;3~": kill-word
 
-
 # Use the text that has already been typed as the prefix for searching through
 # commands (basically more intelligent Up/Down behavior)
 "\e[A": history-search-backward
 "\e[B": history-search-forward
+
+"\e\e[D": backward-word # alt + left
+"\e\e[C": forward-word  # alt + right

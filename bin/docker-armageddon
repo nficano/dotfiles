@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Docker Armageddon - Nuclear option for Docker cleanup
+# WARNING: This script will stop and remove ALL Docker resources
+
+print_warning() {
+    echo "⚠️  WARNING: This will destroy ALL Docker resources:"
+    echo "   - All running and stopped containers"
+    echo "   - All images (including cached layers)"
+    echo "   - All volumes"
+    echo "   - All networks (except default ones)"
+    echo "   - All build cache"
+    echo
+    echo "This action is irreversible!"
+}
+
+confirm() {
+    read -p "Are you absolutely sure you want to proceed? (type 'yes' to confirm): " response
+    if [[ "$response" != "yes" ]]; then
+        echo "Operation cancelled."
+        exit 1
+    fi
+}
+
+cleanup() {
+    echo "🛑 Stopping all running containers..."
+    docker stop $(docker ps -q) 2>/dev/null || true
+
+    echo "🗑️  Removing all containers..."
+    docker rm -f $(docker ps -a -q) 2>/dev/null || true
+
+    echo "🧹 Removing all images..."
+    docker rmi -f $(docker images -q) 2>/dev/null || true
+
+    echo "📦 Removing all volumes..."
+    docker volume rm $(docker volume ls -q) 2>/dev/null || true
+
+    echo "🌐 Removing all networks..."
+    docker network rm $(docker network ls -q) 2>/dev/null || true
+
+    echo "🧼 Cleaning up build cache..."
+    docker builder prune -f 2>/dev/null || true
+
+    echo "✨ Docker system prune (force)..."
+    docker system prune -af --volumes
+}
+
+main() {
+    print_warning
+    confirm
+    cleanup
+    echo "☢️  Docker Armageddon complete - all Docker resources have been destroyed"
+}
+
+main 

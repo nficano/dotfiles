@@ -1,0 +1,117 @@
+#!/bin/sh
+#/ Move files/directories to macOS Trash instead of permanent deletion
+#/
+#/ USAGE:
+#/    t [OPTION]... [FILE]...
+#/
+#/ OPTIONS:
+#/    -f, --force           ignore nonexistent files and arguments, never prompt
+#/    -i                    prompt before every removal
+#/    -I                    prompt once before removing more than three files
+#/    -r, -R, --recursive   remove directories and their contents recursively
+#/    -d, --dir            remove empty directories
+#/    -v, --verbose        explain what is being done
+#/    --help               display this help and exit
+#/
+#/ EXAMPLES:
+#/    t old_file.txt
+#/    t -r project_directory
+#/    t -rf temp_files/
+
+set -o errexit
+set -o nounset
+
+usage() {
+    grep '^#/' < "$0" | cut -c4-
+    exit 1
+}
+
+FORCE=0
+INTERACTIVE=0
+INTERACTIVE_ONCE=0
+RECURSIVE=0
+VERBOSE=0
+
+# Parse options
+while getopts "firRdvI-:" opt; do
+    case $opt in
+        f) FORCE=1 ;;
+        i) INTERACTIVE=1 ;;
+        I) INTERACTIVE_ONCE=1 ;;
+        r|R) RECURSIVE=1 ;;
+        v) VERBOSE=1 ;;
+        d) ;; # Allow -d but do nothing special
+        -)
+            case "${OPTARG}" in
+                force) FORCE=1 ;;
+                recursive) RECURSIVE=1 ;;
+                verbose) VERBOSE=1 ;;
+                dir) ;; # Allow --dir but do nothing special
+                help) usage ;;
+                *) echo "Invalid option: --${OPTARG}" >&2; exit 1 ;;
+            esac
+            ;;
+        ?) usage ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ $# -eq 0 ] && usage
+
+# Function to confirm removal
+confirm() {
+    local target="$1"
+    printf "trash: remove '%s'? " "$target"
+    read -r answer
+    case "$answer" in
+        [Yy]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Function to move item to trash
+move_to_trash() {
+    local target="$1"
+    
+    # Check if target exists
+    if [ ! -e "$target" ] && [ $FORCE -eq 0 ]; then
+        echo "t: cannot remove '$target': No such file or directory" >&2
+        return 1
+    fi
+
+    # Check for directory without recursive flag
+    if [ -d "$target" ] && [ $RECURSIVE -eq 0 ]; then
+        echo "t: cannot remove '$target': Is a directory" >&2
+        return 1
+    fi
+
+    # Interactive prompts
+    if [ $INTERACTIVE -eq 1 ]; then
+        confirm "$target" || return 0
+    fi
+
+    if [ $VERBOSE -eq 1 ]; then
+        echo "Moving '$target' to trash"
+    fi
+
+    # Use osascript to move item to Trash
+    osascript -e "tell application \"Finder\" to delete POSIX file \"$(cd "$(dirname "$target")" && pwd)/$(basename "$target")\"" > /dev/null 2>&1
+
+    if [ $? -ne 0 ]; then
+        echo "t: failed to move '$target' to trash" >&2
+        return 1
+    fi
+}
+
+# Handle interactive once mode for multiple files
+if [ $INTERACTIVE_ONCE -eq 1 ] && [ $# -gt 3 ]; then
+    echo "t: remove $# arguments?"
+    confirm "proceed?" || exit 0
+fi
+
+# Process all arguments
+for target in "$@"; do
+    move_to_trash "$target"
+done
+
