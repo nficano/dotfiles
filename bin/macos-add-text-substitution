@@ -1,0 +1,60 @@
+#!/bin/sh
+#/ NAME
+#/      add-text-subsitution -- Add a text replacement to macOS global preferences.
+#/ 
+#/ SYNOPSIS
+#/      add-text-subsitution [-h] [--help]
+#/      add-text-subsitution <shortcut> <replacement>
+#/      See: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
+#/ 
+#/ DESCRIPTION
+#/      This script allows you to add a text replacement shortcut to macOS global 
+#/      text substitution settings. It modifies the `NSUserDictionaryReplacementItems`
+#/      preference using the `defaults` command.
+#/ 
+#/      ARGUMENTS
+#/          <shortcut>      The text to be replaced (e.g., "omw").
+#/          <replacement>   The text to replace the shortcut (e.g., "On my way!").
+#/ 
+#/      OPTIONS
+#/          -h, --help      Show usage information and exit.
+#/ 
+#/      USAGE EXAMPLES
+#/          Add a new text replacement:
+#/              ./add-text-subsitution "omw" "On my way!"
+#/ 
+#/      NOTE
+#/          You may need to log out or restart applications for the changes to 
+#/          take effect.
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/ ' < "$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
+    exit 1
+}
+
+# Check for help or incorrect usage
+[ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ] && usage
+[ $# -ne 2 ] && usage
+
+SHORTCUT="$1"
+REPLACEMENT="$2"
+
+# Get current text replacements
+CURRENT_REPLACEMENTS=$(defaults read -g NSUserDictionaryReplacementItems 2>/dev/null || echo "[]")
+
+# Add the new replacement to the list
+NEW_REPLACEMENTS=$(echo "$CURRENT_REPLACEMENTS" | \
+    sed 's/^(/(\
+      { on = 1; replace = "'$SHORTCUT'"; with = "'$REPLACEMENT'"; }, /')
+
+# Apply the updated replacements
+defaults write -g NSUserDictionaryReplacementItems "$NEW_REPLACEMENTS"
+
+echo "Text replacement added: '$SHORTCUT' → '$REPLACEMENT'"
+echo "You may need to restart some applications to see the change."

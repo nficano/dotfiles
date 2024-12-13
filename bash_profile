@@ -5,6 +5,9 @@ case $- in
 *i*) ;;
 *) return ;; esac
 
+#
+# Core Utility Functions
+#
 text.substr() {
     echo "${1:$2:$3}"
 }
@@ -21,6 +24,13 @@ os.getenv() {
     env | grep "^$1=" | cut -d'=' -f2
 }
 
+#
+# System Detection & Path Management
+#
+sys.platform() {
+    uname -s | tr "[:upper:]" "[:lower:]"
+}
+
 os.platform.is_darwin() {
     [[ $(sys.platform) == darwin ]]
 }
@@ -33,6 +43,17 @@ os.path.exists() {
     [[ -f "$1" ]]
 }
 
+sys.path.contains() {
+    os.devnull command -v "$1"
+}
+
+sys.path.prepend() {
+    [[ -d "$1" ]] && PATH="$1:${PATH}"
+}
+
+#
+# Shell Management Functions
+#
 shell.setopt() {
     sys.path.contains "shopt" && shopt -s "$1"
 }
@@ -53,16 +74,12 @@ shell.setup_prompt() {
 shell.iterm2_style_path() {
     # Mimic iTerm2's absolute path abbreviation. For example,
     # "/usr/local/bin" abbreviates to "/u/l/bin".
-
     IFS="/"
-    # Split path into array of directories. For example, ["usr", "local", "bin"].
     read -ra relpath <<<"$(dirs +0)"
     buffer=""
-    dirname=$((${#relpath[*]} - 1)) # The working directory (e.g., "bin").
+    dirname=$((${#relpath[*]} - 1))
 
-    # Append the first character of each directory name in `relpath` to buffer.
     for folder_name in "${relpath[@]}"; do
-        # Do not abbreviate the working directory in the path.
         if [[ $folder_name != "${relpath[$dirname]}" ]]; then
             buffer+="$(text.substr "$folder_name" 0 1)/"
         fi
@@ -70,25 +87,15 @@ shell.iterm2_style_path() {
     echo -n "$buffer${folder_name}"
 }
 
-sys.path.prepend() {
-    [[ -d "$1" ]] && PATH="$1:${PATH}"
-}
-
-sys.path.contains() {
-    os.devnull command -v "$1"
-}
-
-sys.platform() {
-    uname -s | tr "[:upper:]" "[:lower:]"
-}
-
+#
+# SSH Agent Management
+#
 ssh_agent.active_sessions() {
     pgrep -u "$USER" ssh-agent
 }
 
 ssh_agent.start() {
-    # Start ssh-agent daemon and write environment variables to an env
-    # file to allow sharing a single instance between terminal sessions.
+    [[ -z "$1" ]] && return 1
     os.devnull rm "$1"
     ssh-agent | sed "s/^echo/#echo/" >"$1"
     chmod 600 "$1"
@@ -96,9 +103,10 @@ ssh_agent.start() {
 }
 
 ssh_agent.init() {
-    env="$1"
+    local env="$1"
+    [[ -z "$env" ]] && return 1
+    
     touch "$env"
-
     if ! os.devnull ssh_agent.active_sessions; then
         ssh_agent.start "$env"
     else
@@ -110,8 +118,10 @@ ssh_agent.init() {
     fi
 }
 
+#
+# Homebrew Functions
+#
 brew.prefix() {
-    # Resolve the Homebrew path on both Apple Silicon and Intel.
     if os.path.exists /opt/homebrew/bin/brew; then
         echo /opt/homebrew
     elif os.path.exists /usr/local/bin/brew; then
@@ -141,6 +151,7 @@ os.setenv "INFOPATH" "$BREW_PREFIX/share/info:${INFOPATH:-}"
 os.setenv "HOMEBREW_NO_ENV_HINTS" 1
 os.setenv "ARCHFLAGS" "-arch $(uname -m)"
 os.setenv "BASH_SILENCE_DEPRECATION_WARNING" 1
+os.setenv "HSTR_CONFIG" "hicolor"
 
 # Node.js Environment
 os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
@@ -154,11 +165,11 @@ os.setenv "HISTFILESIZE" -1
 os.setenv "HISTSIZE" -1
 
 os.setenv "SHELL_SESSION_HISTORY" 0 # Save & reload history after each command
-os.setenv "PROMPT_COMMAND" "history -a; history -c; history -r; $PROMPT_COMMAND"
-
+os.setenv "PROMPT_COMMAND" "history -a; history -n; $PROMPT_COMMAND"
 os.setenv "MANPAGER" "less"
 os.setenv "VISUAL" "nano"
 os.setenv "EDITOR" "nano"
+os.setenv "HSTR_TIOCSTI" "y"
 
 # Set various Bash options.
 shell.setopt "cdspell"      # directory name auto-correct during cd.
@@ -173,6 +184,7 @@ shell.setopt "nocaseglob" # Case-insensitive path expansion.
 shell.setopt "cdspell"    # Automatic spell-correct during
 # tab completion.
 shell.setopt "histverify" # !$ does not execute automatically.
+shell.setopt "histappend" # Append command history instead of clobbering.
 
 # Untracked Shell Scripts (DO NOT SORT)
 sys.path.prepend "$HOME/.bin"
@@ -196,19 +208,18 @@ sys.path.prepend "$BREW_PREFIX/opt/e2fsprogs/sbin"
 sys.path.prepend "$BREW_PREFIX/bin"
 sys.path.prepend "$BREW_PREFIX/sbin"
 sys.path.prepend "$BREW_PREFIX/share/google-cloud-sdk/path.bash.inc"
-sys.path.prepend "/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin"
 sys.path.prepend "$HOME/.local/bin"
 sys.path.prepend "$HOME/.docker/bin"
 sys.path.prepend "$HOME/.pyenv/bin"
 
-shell.import "$HOMEBREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$HOME/.config/op/plugins.sh"
-shell.import "$HOMEBREW_PREFIX/opt/bash-completion/etc/bash_completion"
-shell.import "$HOMEBREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-shell.import "$HOMEBREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-shell.import "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
+shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
 shell.import "$HOME/.iterm2_shell_integration.bash"
-shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
+shell.import "$BREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
 shell.import "$HOME/.docker/init-bash.sh"
 shell.import "$HOME/.config/op/plugins.sh"
 # Untracked Private Overrides (DO NOT SORT)
@@ -218,8 +229,8 @@ shell.import "$HOME/.bash_profile.local"
 sys.path.contains "most" && os.setenv "MANPAGER" "most"
 
 # Use "vscode" for text editing when available, otherwise use "nano".
-sys.path.contains "code" && os.setenv "VISUAL" "code"
-sys.path.contains "code" && os.setenv "EDITOR" "code"
+sys.path.contains "code" && os.setenv "VISUAL" "cursor"
+sys.path.contains "code" && os.setenv "EDITOR" "cursor"
 sys.path.contains "ngrok" && shell.eval "ngrok completion"
 sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
 sys.path.contains "direnv" && shell.eval "direnv hook bash"
@@ -256,6 +267,7 @@ alias ga="git add"
 alias gd="git diff"
 alias gs="git status"
 alias map="xargs -n1"
+alias hh="hstr"
 
 # Create alias to open cwd in Finder.
 os.platform.is_darwin && alias o="open ./"

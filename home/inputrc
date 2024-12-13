@@ -31,3 +31,6 @@ set skip-completed-text on
 
 "\e\e[D": backward-word # alt + left
 "\e\e[C": forward-word  # alt + right
+
+"\C-r": "\C-a hstr -- \C-j"
+"\C-xk": "\C-a hstr -k \C-j"

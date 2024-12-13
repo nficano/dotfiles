@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Check if the input file is provided
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <input_audio_file> <output_audio_file>"
+  exit 1
+fi
+
+# Input and output files
+INPUT_FILE=$1
+OUTPUT_FILE=$2
+
+# Remove silence using ffmpeg
+ffmpeg -i "$INPUT_FILE" -af silenceremove=1:0:-20dB "$OUTPUT_FILE"
+
+if [ $? -eq 0 ]; then
+  echo "Silence removed successfully. Output saved to $OUTPUT_FILE"
+else
+  echo "Failed to process the audio file."
+fi
