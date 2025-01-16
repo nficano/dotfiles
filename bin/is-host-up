@@ -1,4 +1,5 @@
 #!/bin/bash
+#/ Check if a host is up.
 
 # Function to check the HTTP response code of a URL
 check_url_response() {

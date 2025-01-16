@@ -1,4 +1,6 @@
 #!/bin/sh
+#/ Show HTTP headers of a URL.
+#/
 curl -sv "$@" 2>&1 >/dev/null |
 	grep -v "^\*" |
 	grep -v "^}" |

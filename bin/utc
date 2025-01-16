@@ -1,4 +1,5 @@
 #!/bin/sh
+#/ Show the current time as utc timestamp.
 #/ NAME
 #/      {{ basename }} -- Show the current time as utc timestamp.
 

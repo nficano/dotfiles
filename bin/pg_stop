@@ -1,4 +1,5 @@
 #!/bin/sh
+#/ Stop postgresql service via brew.
 #/ NAME
 #/      {{ basename }} -- Stop postgresql service via brew
 #/

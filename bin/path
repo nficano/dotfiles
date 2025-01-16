@@ -1,13 +1,14 @@
 #!/bin/sh
+#/ Show a pretty-print of the PATH environment variable.
 #/ NAME
 #/      {{ basename }} -- show pretty system path.
-#/ 
+#/
 #/ SYNOPSIS
 #/      {{ basename }} [-h][--help]
-#/ 
+#/
 #/ DESCRIPTION
 #/      Show a pretty-print of the PATH environment variable.
-#/ 
+#/
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables

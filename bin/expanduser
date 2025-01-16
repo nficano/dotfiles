@@ -1,5 +1,5 @@
 #!/bin/bash
-#/ expanduser: Expand the tilde (~) user home shorthand in the specified path.
+#/ Expand ~ to user home directory in paths.
 
 set -o errexit          # Exit on most errors (see the manual)
 set -o nounset          # Disallow expansion of unset variables

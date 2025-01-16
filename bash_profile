@@ -105,7 +105,7 @@ ssh_agent.start() {
 ssh_agent.init() {
     local env="$1"
     [[ -z "$env" ]] && return 1
-    
+
     touch "$env"
     if ! os.devnull ssh_agent.active_sessions; then
         ssh_agent.start "$env"
@@ -229,8 +229,8 @@ shell.import "$HOME/.bash_profile.local"
 sys.path.contains "most" && os.setenv "MANPAGER" "most"
 
 # Use "vscode" for text editing when available, otherwise use "nano".
-sys.path.contains "code" && os.setenv "VISUAL" "cursor"
-sys.path.contains "code" && os.setenv "EDITOR" "cursor"
+sys.path.contains "cursor" && os.setenv "VISUAL" "cursor"
+sys.path.contains "cursor" && os.setenv "EDITOR" "cursor"
 sys.path.contains "ngrok" && shell.eval "ngrok completion"
 sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
 sys.path.contains "direnv" && shell.eval "direnv hook bash"
@@ -268,6 +268,8 @@ alias gd="git diff"
 alias gs="git status"
 alias map="xargs -n1"
 alias hh="hstr"
+alias rr="cd $HOME/code/bglp/monorepo/apps/rabbit"
+alias wr="cd $HOME/code/bglp/monorepo/apps/white-rabbit"
 
 # Create alias to open cwd in Finder.
 os.platform.is_darwin && alias o="open ./"
@@ -279,8 +281,10 @@ os.platform.is_linux || sys.path.contains "gls" && alias ll="ls --color=auto -al
 
 sys.path.contains "rlwrap" && alias node="env NODE_NO_READLINE=1 rlwrap node"
 sys.path.contains "bat" && alias cat="bat --style=\"plain\" --paging never"
-sys.path.contains "network" && complete -W "$(network listcommands)" "network"
-sys.path.contains "dotfiles" && complete -W "$(dotfiles -listcommands)" "dotfiles"
+sys.path.contains "op" && source <(op completion bash)
 
 shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
+
+export PATH="$PATH:$HOME/.bin"
+export PATH="$PATH:$HOME/Dropbox/.sbin"

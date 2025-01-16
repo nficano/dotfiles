@@ -1,2 +1,3 @@
 #!/bin/sh
+# Make files executable.
 exec chmod +x "$@"

@@ -17,4 +17,4 @@ usage () {
 }
 [ $# -ne 0 ] && usage
 
-sudo killall -9 coreaudiod
+sudo kill -9 `ps -A | grep -Fa 'sbin/coreaudiod' | head -n 1 | awk '{print $1}'`

@@ -1,5 +1,5 @@
 #!/bin/sh
-#/ Undo last commit but keep changes
+#/ Undo last commit but keep changes.
 #/
 #/ USAGE:
 #/   git-undo-last-commit-but-keep-changes

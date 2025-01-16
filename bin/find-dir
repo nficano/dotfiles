@@ -1,12 +1,14 @@
 #!/bin/sh
+#/ Find directories by name in directory tree.
+#/
 #/ NAME
 #/      {{ basename }} -- Find folder(s) by name in directory tree.
-#/ 
+#/
 #/ SYNOPSIS
 #/      {{ basename }}... [-h] [--help] <folder_name>
-#/ 
+#/
 #/ DESCRIPTION
-#/      Shortcut for "find . -type d -name <folder_name>" (I don't use find 
+#/      Shortcut for "find . -type d -name <folder_name>" (I don't use find
 #/      enough to remember the syntax).
 
 set -o errexit          # Exit on most errors (see the manual)

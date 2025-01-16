@@ -1,4 +1,5 @@
 #!/bin/sh
+#/ Unzip all files in the current directory.
 #/ NAME
 #/      {{ basename }} -- unzip all files in a given directory
 #/

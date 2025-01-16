@@ -1,4 +1,6 @@
 #!/bin/bash
+#/ Measure connection timing metrics for a URL.
+#/
 #/ NAME
 #/      ttfb -- Measure connection timing metrics for a URL
 #/

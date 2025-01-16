@@ -1,6 +1,5 @@
 #!/bin/bash
-
-# Docker Armageddon - Nuclear option for Docker cleanup
+# Nuclear option for Docker cleanup
 # WARNING: This script will stop and remove ALL Docker resources
 
 print_warning() {
@@ -52,4 +51,4 @@ main() {
     echo "☢️  Docker Armageddon complete - all Docker resources have been destroyed"
 }
 
-main 
+main

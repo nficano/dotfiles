@@ -1,4 +1,5 @@
 #!/bin/sh
+#/ Ignore output of this script.
 #/ NAME
 #/      {{ basename }} -- Ignore output of this script
 

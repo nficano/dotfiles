@@ -1,2 +1,4 @@
 #!/bin/sh
+#/ Show ignored files in git status.
+#/
 git status --ignored

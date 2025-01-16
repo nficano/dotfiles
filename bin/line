@@ -1,5 +1,4 @@
 #!/bin/bash
-
+#/ Print a line from a file.
 line_number=$1
 head -$line_number | tail -1
-

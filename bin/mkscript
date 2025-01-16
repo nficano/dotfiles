@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Create a new shell script from a template
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)"
+BOILERPLATES_DIR="$(dirname "$SCRIPT_DIR")/boilerplates"
+
+# Prompt for script name
+read -p "$(echo -e "${GREEN}Enter script name:${NC} ")" script_name
+
+# Remove .sh extension if provided
+script_name="${script_name%.sh}"
+
+# Check if script already exists
+if [ -f "$SCRIPT_DIR/$script_name" ]; then
+    echo -e "${RED}Error: Script '$script_name' already exists${NC}"
+    exit 1
+fi
+
+# Show template options
+echo -e "\n${BLUE}Available templates:${NC}"
+echo -e "${YELLOW}1${NC}) No args (simple script with -h option)"
+echo -e "${YELLOW}2${NC}) Lite (basic argument parsing)"
+echo -e "${YELLOW}3${NC}) Full (comprehensive argument parsing and error handling)"
+
+# Get template choice
+while true; do
+    read -p "$(echo -e "${GREEN}Select template (1-3):${NC} ")" template_choice
+    case $template_choice in
+        1|2|3) break ;;
+        *) echo -e "${RED}Please enter 1, 2, or 3${NC}" ;;
+    esac
+done
+
+# Set source template based on choice
+case $template_choice in
+    1) source_template="$BOILERPLATES_DIR/shell-script-no-argsboilerplate.sh" ;;
+    2) source_template="$BOILERPLATES_DIR/shell-script-lite-boilerplate.sh" ;;
+    3) source_template="$BOILERPLATES_DIR/shell-script-boilerplate.sh" ;;
+esac
+
+# Get description for lite template
+if [ "$template_choice" = "1" ]; then
+    read -p "$(echo -e "${GREEN}Enter script description:${NC} ")" description
+    # Use envsubst to replace the description placeholder
+    description_escaped=$(printf '%s\n' "$description" | sed 's/[\/&]/\\&/g')
+    sed "s/{{.*description.*}}/$description_escaped/" "$source_template" > "$SCRIPT_DIR/$script_name"
+else
+    cp "$source_template" "$SCRIPT_DIR/$script_name"
+fi
+
+# Make script executable
+chmod +x "$SCRIPT_DIR/$script_name"
+
+echo -e "\n${GREEN}✓ Created script: $SCRIPT_DIR/$script_name${NC}"
+echo -e "${BLUE}ℹ️  Edit the script to customize it for your needs${NC}"
+
+# Open in Cursor
+cursor "$SCRIPT_DIR/$script_name"

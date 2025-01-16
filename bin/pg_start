@@ -1,4 +1,5 @@
 #!/bin/sh
+#/ Start postgresql service via brew.
 #/ NAME
 #/      {{ basename }} -- Start postgresql service via brew
 #/

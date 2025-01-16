@@ -1,2 +1,6 @@
 #!/bin/sh
+#/ Show the PID of a process running on a specified port.
+#/
+#/ USAGE:
+#/    pid-on-port 8080
 exec lsof -i :"$@"

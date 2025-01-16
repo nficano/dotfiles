@@ -1,4 +1,5 @@
 #!/bin/bash
+#/ Show a filtered, formatted, and sorted process list.
 #/ NAME
 #/      {{ basename }} -- Display filtered, formatted, and sorted process list
 #/

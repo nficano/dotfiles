@@ -1,5 +1,5 @@
 #!/bin/sh
-#/ Copies absolute path to clipboard, optionally taking a filename to append.
+#/ Copy absolute path to clipboard, with optional filename.
 #/
 #/ USAGE:
 #/    copy-path [?executable] [--help]

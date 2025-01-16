@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#/ Remove silence from an audio file.
 # Check if the input file is provided
 if [ $# -lt 2 ]; then
   echo "Usage: $0 <input_audio_file> <output_audio_file>"

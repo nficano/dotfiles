@@ -1,5 +1,4 @@
 #!/bin/sh
-#
 # Copy the current branch name to the clipboard.
 
 branch=$(git rev-parse --abbrev-ref HEAD)

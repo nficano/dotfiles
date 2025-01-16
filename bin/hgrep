@@ -1,4 +1,6 @@
 #!/bin/sh
+#/ Grep for shell history.
+#/
 #/ NAME
 #/      {{ basename }} -- grep for shell history.
 #/

@@ -73,7 +73,7 @@ confirm() {
 # Function to move item to trash
 move_to_trash() {
     local target="$1"
-    
+
     # Check if target exists
     if [ ! -e "$target" ] && [ $FORCE -eq 0 ]; then
         echo "t: cannot remove '$target': No such file or directory" >&2
@@ -114,4 +114,3 @@ fi
 for target in "$@"; do
     move_to_trash "$target"
 done
-

@@ -1,4 +1,5 @@
 #!/bin/sh
+#/ Delete all branches that are fully merged into <merge-branch>.
 #/ Usage: git prune-merged-branches [-fu] [-r <remote>] <merge-branch>
 #/ Delete all branches that are fully merged into <merge-branch>.
 #/

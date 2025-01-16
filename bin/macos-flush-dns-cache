@@ -1,10 +1,12 @@
 #!/bin/sh
+#/ Flush DNS cache.
+#/
 #/ NAME
 #/      {{ basename }} -- Flush DNS cache
-#/ 
+#/
 #/ SYNOPSIS
 #/      {{ basename }} [-h] [--help]
-#/ 
+#/
 #/ DESCRIPTION
 #/      DNS cache is a temporary database of all recent DNS lookups.
 #/      By flushing the cache, you can force the system to perform

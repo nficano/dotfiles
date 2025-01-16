@@ -1,4 +1,6 @@
 #!/bin/bash
+#/ Kill a process running on a specified port.
+#/
 #/ NAME
 #/      {{ basename }} -- Kill a process running on a specified port.
 #/

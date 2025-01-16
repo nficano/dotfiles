@@ -1,8 +1,8 @@
 #!/bin/bash
-#/ OS-Agnostic¹ get file metadata.
+#/ Show file metadata.
 #/
 #/ 1. Only tested on Debian and MacOS.
-#/ 
+#/
 #/ USAGE:
 #/    meta <file> [--help]
 #/ EXAMPLES:

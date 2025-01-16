@@ -1,30 +1,31 @@
 #!/bin/sh
+#/ Add a text substitution to .
 #/ NAME
 #/      add-text-subsitution -- Add a text replacement to macOS global preferences.
-#/ 
+#/
 #/ SYNOPSIS
 #/      add-text-subsitution [-h] [--help]
 #/      add-text-subsitution <shortcut> <replacement>
 #/      See: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
-#/ 
+#/
 #/ DESCRIPTION
-#/      This script allows you to add a text replacement shortcut to macOS global 
+#/      This script allows you to add a text replacement shortcut to macOS global
 #/      text substitution settings. It modifies the `NSUserDictionaryReplacementItems`
 #/      preference using the `defaults` command.
-#/ 
+#/
 #/      ARGUMENTS
 #/          <shortcut>      The text to be replaced (e.g., "omw").
 #/          <replacement>   The text to replace the shortcut (e.g., "On my way!").
-#/ 
+#/
 #/      OPTIONS
 #/          -h, --help      Show usage information and exit.
-#/ 
+#/
 #/      USAGE EXAMPLES
 #/          Add a new text replacement:
 #/              ./add-text-subsitution "omw" "On my way!"
-#/ 
+#/
 #/      NOTE
-#/          You may need to log out or restart applications for the changes to 
+#/          You may need to log out or restart applications for the changes to
 #/          take effect.
 
 set -o errexit          # Exit on most errors (see the manual)

@@ -1,5 +1,5 @@
 #!/bin/sh
-#/ rollback git to previous commit (or how I stop confusing git reset and revert).
+#/ Rollback git to previous commit.
 #/
 #/ USAGE:
 #/    git-rollback-to-commit "<COMMIT-SHA>"

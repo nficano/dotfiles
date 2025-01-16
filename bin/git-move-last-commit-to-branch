@@ -1,4 +1,6 @@
 #!/bin/sh
+#/ Move the last commit to a new branch.
+#/
 #/ Usage: git-move-last-commit-to-branch <NEW_BRANCH_NAME>
 
 usage() {

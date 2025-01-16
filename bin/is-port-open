@@ -1,5 +1,5 @@
 #!/bin/sh
-#/ Port Check
+#/ Check if a network port is open.
 #/
 #/ Check if a network port is open (not sure if it works for UDP, I'd assume not).
 #/

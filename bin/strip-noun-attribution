@@ -1,17 +1,19 @@
 #!/usr/bin/python3
-import re
+# Strip attribution from SVG files.
 import glob
 import os
+import re
 
 
 def main():
-    for filename in glob.glob(f'{os.getcwd()}/noun*.svg'):
-        svg = ''
-        with open(filename, 'r') as fh:
+    for filename in glob.glob(f"{os.getcwd()}/noun*.svg"):
+        svg = ""
+        with open(filename, "r") as fh:
             svg = fh.read()
-        svg = re.sub(r'<text.+</text>', '', svg, flags=re.DOTALL)
-        with open(filename, 'w') as fh:
+        svg = re.sub(r"<text.+</text>", "", svg, flags=re.DOTALL)
+        with open(filename, "w") as fh:
             fh.write(svg)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

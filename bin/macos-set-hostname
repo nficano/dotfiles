@@ -1,5 +1,5 @@
 #!/bin/sh
-#/ Update hostname on maco
+#/ Update hostname on MacOS.
 #/
 #/ USAGE:
 #/    macos-set-hostname <new hostname> [--help]
