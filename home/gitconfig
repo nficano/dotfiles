@@ -1,3 +1,5 @@
+[column]
+	ui = auto
 
 [include]
 	path = ~/.gitconfig.local
@@ -13,12 +15,19 @@
 	ui = true
 	pager = true
 
+[branch]
+	sort = -committerdate
+
 [merge]
 	summary = true
 	ff = false
 
 [diff]
 	tool = difftool
+	algorithm = histogram
+	colorMoved = plain
+	mnemonicPrefix = true
+	renames = true
 
 [difftool "difftool"]
 	cmd = cursor --wait --diff $LOCAL $REMOTE
@@ -29,7 +38,20 @@
 [mergetool "cursor"]
 	cmd = cursor --wait $MERGED
 
+[help]
+	autocorrect = prompt
+
+[fetch]
+	prune = true
+	pruneTags = true
+	all = true
+
 [core]
+	autoSquash = true
+	autoStash = true
+	updateRefs = true
+  fsmonitor = true
+  untrackedCache = true
 	excludesfile = ~/.gitignore
 	autocrlf = input
 	pager = diff-so-fancy | less --tabs=4 -RFX
@@ -38,6 +60,7 @@
 [push]
 	default = simple
 	autoSetupRemote = true
+	followTags = true
 
 [filter "lfs"]
 	clean = git-lfs clean -- %f
@@ -64,6 +87,7 @@
 
 [commit]
 	template = ~/.gitmessage
+	verbose = true
 
 [rerere]
 	enabled = true
@@ -83,5 +107,7 @@
 
 [commit]
 	gpgsign = true
+	verbose = true
 [tag]
 	gpgSign = true
+	sort = version:refname

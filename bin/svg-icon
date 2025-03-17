@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#/ Updates SVG files, optionally removing width/height and/or adding fill="currentColor".
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [-cc] [-r] fileOrDir [fileOrDir ...]
+#/
+#/ Available options:
+#/   -h, --help            Print this help and exit
+#/   -v, --verbose         Print script debug info
+#/   -cc, --current-color  Remove existing fill=, add fill="currentColor"
+#/   -r, --responsive      Remove width/height and use viewBox
+#/
+#/ Examples:
+#/   $(basename "$0") --help
+#/   $(basename "$0") -v -cc myicon.svg
+#/   $(basename "$0") -r .
+#/   $(basename "$0") -cc -r icons/ logo.svg
+#/
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+usage() {
+    grep '^#/' < "$0" | cut -c4-
+    exit 1
+}
+
+cleanup() {
+    trap - SIGINT SIGTERM ERR EXIT
+    # script cleanup here
+}
+
+setup_colors() {
+    if [[ -t 2 ]] && [[ "${TERM-}" != "dumb" ]]; then
+        NOFORMAT='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m'
+        BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
+    else
+        NOFORMAT='' RED='' GREEN='' ORANGE='' BLUE='' PURPLE='' CYAN='' YELLOW=''
+    fi
+}
+
+msg() {
+    echo >&2 -e "${1-}"
+}
+
+die() {
+    local message=$1
+    local code=${2-1} # default exit status 1
+    msg "$message"
+    exit "$code"
+}
+
+# Default values
+verbose=0
+current_color=0
+responsive=0
+
+parse_params() {
+    while :; do
+        case "${1-}" in
+            -h|--help)
+                usage
+                ;;
+            -v|--verbose)
+                set -x
+                verbose=1
+                ;;
+            -cc|--current-color)
+                current_color=1
+                ;;
+            -r|--responsive)
+                responsive=1
+                ;;
+            -?*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                break
+                ;;
+        esac
+        shift
+    done
+
+    # Whatever remains are our input file(s)/dir(s)
+    args=("$@")
+
+    # Require at least one argument
+    [[ ${#args[@]} -lt 1 ]] && die "Missing input file/directory"
+    return 0
+}
+
+fix_one_svg() {
+    local file="$1"
+
+    # Remove attributes based on flags
+    if [[ $responsive -eq 1 ]]; then
+        # Extract any existing width/height
+        local width
+        width=$(grep -oP '(?<=width=")[^"]+' "$file" || true)
+        local height
+        height=$(grep -oP '(?<=height=")[^"]+' "$file" || true)
+
+        # Remove any width/height
+        sed -i -E 's/(width|height)="[^"]*"//g' "$file"
+
+        # We'll add viewBox later (together with fill if needed)
+        # but let's keep track if both were found
+        found_width="$width"
+        found_height="$height"
+    fi
+
+    if [[ $current_color -eq 1 ]]; then
+        # Remove existing fill attributes
+        sed -i -E 's/fill="[^"]*"//g' "$file"
+    fi
+
+    # Build additions to put into the <svg> tag
+    local additions=""
+
+    if [[ $responsive -eq 1 && -n "${found_width:-}" && -n "${found_height:-}" ]]; then
+        additions+=' viewBox="0 0 '"$found_width"' '"$found_height"'"'
+    fi
+
+    if [[ $current_color -eq 1 ]]; then
+        additions+=' fill="currentColor"'
+    fi
+
+    # Insert the additions (if any) immediately after <svg
+    if [[ -n "$additions" ]]; then
+        sed -i -E "s|<svg|<svg${additions}|" "$file"
+    fi
+}
+
+process_path() {
+    local path="$1"
+    if [[ -d "$path" ]]; then
+        # Process all *.svg in that directory
+        for svg in "$path"/*.svg; do
+            [[ -f "$svg" ]] || continue
+            msg "${GREEN}Processing:${NOFORMAT} $svg"
+            fix_one_svg "$svg"
+        done
+    elif [[ -f "$path" ]]; then
+        # Process a single file if it ends in .svg
+        if [[ "$path" == *.svg ]]; then
+            msg "${GREEN}Processing file:${NOFORMAT} $path"
+            fix_one_svg "$path"
+        else
+            msg "${ORANGE}Skipping non-SVG file:${NOFORMAT} $path"
+        fi
+    else
+        msg "${RED}Not found:${NOFORMAT} $path"
+    fi
+}
+
+main() {
+    for target in "${args[@]}"; do
+        process_path "$target"
+    done
+    msg "${GREEN}Done!${NOFORMAT}"
+}
+
+parse_params "$@"
+setup_colors
+main
