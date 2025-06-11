@@ -37,11 +37,13 @@ $ make install
 +x                                       Make files executable.
 abspath                                  Return an absolute path.
 add-alias                                Create a new bash alias
+adffind                                  Locates and exports Adobe Creative Cloud font
 clean-up-open-with-menu                  Clean up LaunchServices
 copy-path                                Copy absolute path to clipboard, with optional filename.
 docker-armageddon                        Nuclear option for Docker cleanup
 dots                                     Show custom shell scripts
 drm                                      Remove directories recursively and forcefully.
+dualtrack-merge                          Merges two audio files into a single stereo output file
 exif-migrate-tags                        Copy the creation date from the EXIF data to another file.
 expanduser                               Expand ~ to user home directory in paths.
 extract                                  Extract any compressed archive.
@@ -51,6 +53,7 @@ find-dir                                 Find directories by name in directory t
 fpwd                                     Print the path of the current Finder window.
 git-copy-branch-name                     Copy the current branch name to the clipboard.
 git-copy-modified-files-to-dir           Copy modified files (git status) to a specified directory.
+git-forklift                             Usage: $(basename "$0") [-h] -b BRANCH_NAME -u UNTIL_HASH
 git-move-last-commit-to-branch           Move the last commit to a new branch.
 git-prune-merged-branches                Delete all branches that are fully merged into <merge-branch>.
 git-rollback-to-commit                   Rollback git to previous commit.
@@ -65,7 +68,6 @@ is-port-open                             Check if a network port is open.
 kill-by-pid                              Kill a process by id.
 kill-by-port                             Kill a process running on a specified port.
 line                                     Print a line from a file.
-macos-add-text-substitution              Add a text substitution to .
 macos-clear-notifications                Clear all messages in notification center
 macos-fix-audio                          Fix issue where audio stops working.
 macos-fix-speech                         Fix MacOS speech synthesis.
@@ -92,7 +94,9 @@ strip-noun-attribution                   Strip attribution from SVG files.
 svg-icon                                 Quickly make SVGs responsive and change the  fill="currentColor".
 svgo*                                    Optimize all SVG files in the current directory.
 t                                        Move files/directories to macOS Trash instead of permanent deletion
+typo                                     Adds a typo correction to Espanso
 unzip-all                                Unzip all files in the current directory.
 utc                                      Show the current time as utc timestamp.
+uvw                                      Wrapper for `uv` — intercepts `uv init`, proxies all else
 webp*                                    Convert all .jpg, .jpeg, and .png files in the current directory to .webp.
 ```
