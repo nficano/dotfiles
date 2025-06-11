@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#/ Updates SVG files, optionally removing width/height and/or adding fill="currentColor".
+#/ Quickly make SVGs responsive and change the  fill="currentColor".
 #/
 #/ Usage: $(basename "$0") [-h] [-v] [-cc] [-r] fileOrDir [fileOrDir ...]
 #/

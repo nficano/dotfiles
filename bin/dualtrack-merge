@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Merges two audio files into a single stereo output file
+
+usage() {
+    echo "Usage: $(basename "$0") speaker1.wav speaker2.wav output.wav"
+    echo
+    echo "Merges two audio files into a single stereo output file."
+    echo "The first input becomes the left channel, the second becomes the right channel."
+    exit 1
+}
+
+# Check if ffmpeg is installed
+if ! command -v ffmpeg &> /dev/null; then
+    echo "Error: ffmpeg is not installed"
+    exit 1
+fi
+
+# Check number of arguments
+if [ $# -ne 3 ]; then
+    usage
+fi
+
+input1="$1"
+input2="$2"
+output="$3"
+
+# Check if input files exist
+if [ ! -f "$input1" ]; then
+    echo "Error: First input file '$input1' does not exist"
+    exit 1
+fi
+
+if [ ! -f "$input2" ]; then
+    echo "Error: Second input file '$input2' does not exist"
+    exit 1
+fi
+
+# Run ffmpeg command
+ffmpeg -i "$input1" -i "$input2" -filter_complex "[0:a]channels=1[a1];[1:a]channels=1[a2];[a1][a2]amerge=inputs=2[aout]" -map "[aout]" -ac 2 "$output"
+
+# Check if ffmpeg command was successful
+if [ $? -eq 0 ]; then
+    echo "Successfully merged audio files into '$output'"
+else
+    echo "Error: Failed to merge audio files"
+    exit 1
+fi
