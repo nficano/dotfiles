@@ -22,7 +22,7 @@ padding_width=$(($max_filename_length + 4))
 # Show all files with their descriptions
 while IFS= read -r file; do
     if [ -f "$HOME/.bin/$file" ]; then
-        description=$(sed -n '2p' "$HOME/.bin/$file" | sed 's/^#\/*\s*//' | sed 's/^#//')
+        description=$(sed -n '2p' "$HOME/.bin/$file" | sed 's/^#\/*\s*//' | sed 's/^#\s*//')
         if [ -n "$description" ]; then
             # Print first line with filename
             printf "${BLUE}%-${padding_width}s${WHITE}%s${NC}\n" "$file" "$(echo "$description" | cut -c1-80)"

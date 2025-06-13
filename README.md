@@ -90,6 +90,7 @@ pid-on-port                              Show the PID of a process running on a 
 pstat                                    Show a filtered, formatted, and sorted process list.
 showdesk                                 Show desktop icons.
 silence-removal                          Remove silence from an audio file.
+slugify                                  Rename files and directories to slug fields.
 strip-noun-attribution                   Strip attribution from SVG files.
 svg-icon                                 Quickly make SVGs responsive and change the  fill="currentColor".
 svgo*                                    Optimize all SVG files in the current directory.
