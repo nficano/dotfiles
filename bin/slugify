@@ -7,6 +7,7 @@
 # OPTIONS:
 #    -d, --dryrun      preview the new file/folder names
 #    -r, --recursive   recursively rename all files and folders
+#    -e, --exclude     regex pattern to exclude files/directories from renaming
 
 
 import argparse
@@ -45,13 +46,36 @@ def slugify(text: str) -> str:
     )
 
 
-def process_path(path, dry_run=False, recursive=False):
+def should_exclude(item, exclude_pattern=None):
+    """Check if an item should be excluded based on the pattern."""
+    if exclude_pattern is None:
+        return False
+
+    # Check if the item name matches the exclude pattern
+    if exclude_pattern.search(item.name):
+        return True
+
+    # Check if any part of the path matches the exclude pattern
+    for part in item.parts:
+        if exclude_pattern.search(part):
+            return True
+
+    return False
+
+
+def process_path(path, dry_run=False, recursive=False, exclude_pattern=None):
     path = Path(path)
     if not path.exists():
         print(f"Error: Path '{path}' does not exist", file=sys.stderr)
         return
 
     def rename_item(item):
+        # Skip if item should be excluded
+        if should_exclude(item, exclude_pattern):
+            if dry_run:
+                print(f"Skipping (excluded): {item}")
+            return
+
         parent = item.parent
         name = item.name
         if item.is_file():
@@ -115,8 +139,26 @@ def main():
             "prompt for confirmation)"
         ),
     )
+    parser.add_argument(
+        "-e",
+        "--exclude",
+        help="Regex pattern to exclude files/directories from renaming",
+    )
     args = parser.parse_args()
-    process_path(args.path, args.dryrun, args.recursive)
+
+    # Compile the exclude pattern if provided
+    exclude_pattern = None
+    if args.exclude:
+        try:
+            exclude_pattern = re.compile(args.exclude)
+        except re.error as e:
+            print(
+                f"Error: Invalid regex pattern '{args.exclude}': {e}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    process_path(args.path, args.dryrun, args.recursive, exclude_pattern)
 
 
 if __name__ == "__main__":
