@@ -5,129 +5,9 @@ case $- in
 *i*) ;;
 *) return ;; esac
 
-#
-# Core Utility Functions
-#
-text.substr() {
-    echo "${1:$2:$3}"
-}
-
-os.devnull() {
-    "$@" 2>/dev/null >/dev/null
-}
-
-os.setenv() {
-    export "${1}"="${2}"
-}
-
-os.getenv() {
-    env | grep "^$1=" | cut -d'=' -f2
-}
-
-#
-# System Detection & Path Management
-#
-sys.platform() {
-    uname -s | tr "[:upper:]" "[:lower:]"
-}
-
-os.platform.is_darwin() {
-    [[ $(sys.platform) == darwin ]]
-}
-
-os.platform.is_linux() {
-    [[ $(sys.platform) == linux ]]
-}
-
-os.path.exists() {
-    [[ -f "$1" ]]
-}
-
-sys.path.contains() {
-    os.devnull command -v "$1"
-}
-
-sys.path.prepend() {
-    [[ -d "$1" ]] && PATH="$1:${PATH}"
-}
-
-#
-# Shell Management Functions
-#
-shell.setopt() {
-    sys.path.contains "shopt" && shopt -s "$1"
-}
-
-shell.import() {
-    # shellcheck source=/dev/null
-    [[ -f "$1" ]] && source "$1"
-}
-
-shell.eval() {
-    eval "$($1)"
-}
-
-shell.setup_prompt() {
-    os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_path)\[\e[0m\] [\A] > "
-}
-
-shell.iterm2_style_path() {
-    # Mimic iTerm2's absolute path abbreviation. For example,
-    # "/usr/local/bin" abbreviates to "/u/l/bin".
-    IFS="/"
-    read -ra relpath <<<"$(dirs +0)"
-    buffer=""
-    dirname=$((${#relpath[*]} - 1))
-
-    for folder_name in "${relpath[@]}"; do
-        if [[ $folder_name != "${relpath[$dirname]}" ]]; then
-            buffer+="$(text.substr "$folder_name" 0 1)/"
-        fi
-    done
-    echo -n "$buffer${folder_name}"
-}
-
-#
-# SSH Agent Management
-#
-ssh_agent.active_sessions() {
-    pgrep -u "$USER" ssh-agent
-}
-
-ssh_agent.start() {
-    [[ -z "$1" ]] && return 1
-    os.devnull rm "$1"
-    ssh-agent | sed "s/^echo/#echo/" >"$1"
-    chmod 600 "$1"
-    shell.import "$1"
-}
-
-ssh_agent.init() {
-    local env="$1"
-    [[ -z "$env" ]] && return 1
-
-    touch "$env"
-    if ! os.devnull ssh_agent.active_sessions; then
-        ssh_agent.start "$env"
-    else
-        shell.import "$env"
-    fi
-
-    if ! os.devnull ssh-add -l; then
-        os.devnull ssh-add -k
-    fi
-}
-
-#
-# Homebrew Functions
-#
-brew.prefix() {
-    if os.path.exists /opt/homebrew/bin/brew; then
-        echo /opt/homebrew
-    elif os.path.exists /usr/local/bin/brew; then
-        echo /usr/local
-    fi
-}
+# Source helper functions
+# shellcheck source=/dev/null
+source "lib/.bash_helpers"
 
 os.setenv "TERM" "xterm-256color"
 os.setenv "GPG_TTY" "$(tty)"
@@ -192,38 +72,38 @@ shell.setopt "histappend" # Append command history instead of clobbering.
 sys.path.prepend "$HOME/.bin"
 
 # Prefer GNU Utilities instead of FeeeBSD When Available
-sys.path.prepend "$BREW_PREFIX/opt/coreutils/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/findutils/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/gnu-getopt/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/gnu-sed/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/gnu-tar/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/gnu-time/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/gnu-which/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/grep/libexec/gnubin"
-sys.path.prepend "$BREW_PREFIX/opt/whois/bin"
-sys.path.prepend "$BREW_PREFIX/opt/icu4c/bin"
-sys.path.prepend "$BREW_PREFIX/opt/icu4c/sbin"
-sys.path.prepend "$BREW_PREFIX/opt/openssl/bin"
-sys.path.prepend "$BREW_PREFIX/opt/openjdk/bin"
-sys.path.prepend "$BREW_PREFIX/opt/e2fsprogs/bin"
-sys.path.prepend "$BREW_PREFIX/opt/e2fsprogs/sbin"
-sys.path.prepend "$BREW_PREFIX/bin"
-sys.path.prepend "$BREW_PREFIX/sbin"
-sys.path.prepend "$BREW_PREFIX/share/google-cloud-sdk/path.bash.inc"
-sys.path.prepend "$HOME/.local/bin"
-sys.path.prepend "$HOME/.docker/bin"
-sys.path.prepend "$HOME/.pyenv/bin"
+sys.path.prepend_many \
+  "$BREW_PREFIX/opt/coreutils/libexec/gnubin" \
+  "$BREW_PREFIX/opt/findutils/libexec/gnubin" \
+  "$BREW_PREFIX/opt/gnu-getopt/libexec/gnubin" \
+  "$BREW_PREFIX/opt/gnu-sed/libexec/gnubin" \
+  "$BREW_PREFIX/opt/gnu-tar/libexec/gnubin" \
+  "$BREW_PREFIX/opt/gnu-time/libexec/gnubin" \
+  "$BREW_PREFIX/opt/gnu-which/libexec/gnubin" \
+  "$BREW_PREFIX/opt/grep/libexec/gnubin" \
+  "$BREW_PREFIX/opt/whois/bin" \
+  "$BREW_PREFIX/opt/icu4c/bin" \
+  "$BREW_PREFIX/opt/icu4c/sbin" \
+  "$BREW_PREFIX/opt/openssl/bin" \
+  "$BREW_PREFIX/opt/openjdk/bin" \
+  "$BREW_PREFIX/opt/e2fsprogs/bin" \
+  "$BREW_PREFIX/opt/e2fsprogs/sbin" \
+  "$BREW_PREFIX/bin" \
+  "$BREW_PREFIX/sbin" \
+  "$HOME/.local/bin" \
+  "$HOME/.docker/bin" \
+  "$HOME/.pyenv/bin"
 
+shell.defer --wrap docker shell.import "$HOME/.docker/init-bash.sh"
+shell.defer --wrap gcloud shell.import "$BREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
+shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+shell.defer --wrap git shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+shell.defer --wrap nvm shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
+shell.defer --wrap op shell.import "$HOME/.config/op/plugins.sh"
 shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
-shell.import "$HOME/.config/op/plugins.sh"
 shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
-shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
 shell.import "$HOME/.iterm2_shell_integration.bash"
-shell.import "$BREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
-shell.import "$HOME/.docker/init-bash.sh"
-shell.import "$HOME/.config/op/plugins.sh"
+
 # Untracked Private Overrides (DO NOT SORT)
 shell.import "$HOME/.bash_profile.local"
 
@@ -233,14 +113,14 @@ sys.path.contains "most" && os.setenv "MANPAGER" "most"
 # Use "vscode" for text editing when available, otherwise use "nano".
 sys.path.contains "cursor" && os.setenv "VISUAL" "cursor"
 sys.path.contains "cursor" && os.setenv "EDITOR" "cursor"
-sys.path.contains "ngrok" && shell.eval "ngrok completion"
-sys.path.contains "aws" && shell.eval "complete -C aws_completer aws"
-sys.path.contains "direnv" && shell.eval "direnv hook bash"
-sys.path.contains "pyenv" && shell.eval "pyenv init --path"
-sys.path.contains "pyenv" && shell.eval "pyenv init -"
-sys.path.contains "pyenv" && shell.eval "pyenv virtualenv-init -"
-sys.path.contains "rbenv" && shell.eval "rbenv init -"
-sys.path.contains "dircolors" && shell.eval "dircolors -b $HOME/.dircolors"
+when.cmd ngrok  'shell.eval "ngrok completion"'
+when.cmd aws    'shell.eval "complete -C aws_completer aws"'
+when.cmd direnv 'shell.eval "direnv hook bash"'
+when.cmd pyenv  'shell.eval "pyenv init --path"'
+when.cmd pyenv  'shell.eval "pyenv init -"'
+when.cmd pyenv  'shell.eval "pyenv virtualenv-init -"'
+when.cmd rbenv  'shell.eval "rbenv init -"'
+when.cmd dircolors 'shell.eval "dircolors -b $HOME/.dircolors"'
 # sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 
 complete -cf sudo # enable sudo tab-complete
@@ -270,23 +150,20 @@ alias gd="git diff"
 alias gs="git status"
 alias map="xargs -n1"
 alias hh="hstr"
-alias rr="cd $HOME/code/bglp/monorepo/apps/rabbit"
-alias wr="cd $HOME/code/bglp/monorepo/apps/white-rabbit"
 
 # Create alias to open cwd in Finder.
-os.platform.is_darwin && alias o="open ./"
+when.darwin alias o="open ./"
 
 # Create alias to cd to current working Finder directory.
-os.platform.is_darwin && alias f='cd "$(eval fpwd)" || exit 0'
-os.platform.is_linux || sys.path.contains "gls" && alias ls="ls --color=auto -gXF"
-os.platform.is_linux || sys.path.contains "gls" && alias ll="ls --color=auto -algX"
+when.darwin alias f='cd "$(eval fpwd)" || exit 0'
+alias.setup_ls
 
-sys.path.contains "rlwrap" && alias node="env NODE_NO_READLINE=1 rlwrap node"
-sys.path.contains "bat" && alias cat="bat --style=\"plain\" --paging never"
-sys.path.contains "op" && source <(op completion bash)
+when.cmd rlwrap alias node="env NODE_NO_READLINE=1 rlwrap node"
+when.cmd bat alias cat="bat --style=\"plain\" --paging never"
+when.cmd op 'source <(op completion bash)'
 
 shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
 
-export PATH="$PATH:$HOME/.bin"
-export PATH="$PATH:$HOME/Dropbox/.sbin"
+# Late PATH additions
+sys.path.append "$HOME/Dropbox/.sbin"

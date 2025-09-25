@@ -1,0 +1,447 @@
+#!/usr/bin/env bash
+
+#
+# Core Utility Functions
+#
+text.substr() {
+    echo "${1:$2:$3}"
+}
+
+os.devnull() {
+    "$@" 2>/dev/null >/dev/null
+}
+
+os.setenv() {
+    export "${1}"="${2}"
+}
+
+os.getenv() {
+    env | grep "^$1=" | cut -d'=' -f2
+}
+
+#
+# System Detection & Path Management
+#
+sys.platform() {
+    uname -s | tr "[:upper:]" "[:lower:]"
+}
+
+os.platform.is_darwin() {
+    [[ $(sys.platform) == darwin ]]
+}
+
+os.platform.is_linux() {
+    [[ $(sys.platform) == linux ]]
+}
+
+os.path.exists() {
+    [[ -f "$1" ]]
+}
+
+sys.path.contains() {
+    os.devnull command -v "$1"
+}
+
+sys.path.prepend() {
+    [[ -d "$1" ]] && PATH="$1:${PATH}"
+}
+
+#
+# Shell Management Functions
+#
+shell.defer() {
+    # Usage:
+    #   shell.defer [--wrap] <tool-name> <init-cmd> [args...]
+    # Example:
+    #   shell.defer "nvm" shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
+    #   shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+    #
+    # Creates a stub function named <tool-name>. On first call, it removes
+    # itself, runs the initializer, then re-invokes the tool with the
+    # original arguments. If the tool already exists, the stub is only
+    # installed when --wrap is provided.
+
+    local wrap=0
+    if [[ "$1" == "--wrap" || "$1" == "--force" ]]; then
+        wrap=1; shift
+    fi
+
+    local tool="$1"; shift || true
+    if [[ -z "$tool" || $# -lt 1 ]]; then
+        log.error "shell.defer usage: shell.defer [--wrap] <tool> <init-cmd> [args...]"
+        return 2
+    fi
+
+    # Only skip when tool exists and not wrapping
+    if (( wrap == 0 )) && command -v "$tool" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Compose initializer invocation to embed into the stub.
+    local init_call
+    if [[ $# -eq 1 ]]; then
+        # Single string initializer; execute via eval for flexibility.
+        local cmd_str="$1"
+        local q
+        printf -v q '%q' "$cmd_str"
+        init_call="eval -- $q"
+    else
+        # Command with separate args; preserve quoting.
+        local q
+        printf -v q '%q ' "$@"
+        init_call="$q"
+    fi
+
+    eval "
+${tool}() {
+  unset -f ${tool} 2>/dev/null
+  ${init_call}
+  if ! command -v ${tool} >/dev/null 2>&1; then
+    echo \"shell.defer: '${tool}' not available after initializer\" >&2
+    return 127
+  fi
+  ${tool} \"\$@\"
+}
+"
+}
+
+shell.setopt() {
+    sys.path.contains "shopt" && shopt -s "$1"
+}
+
+shell.import() {
+    # shellcheck source=/dev/null
+    if [[ "$1" == "--defer" ]]; then
+        # Usage: shell.import --defer <tool> <file>
+        local tool="$2" file="$3"
+        if [[ -z "$tool" || -z "$file" ]]; then
+            log.error "shell.import --defer <tool> <file>"
+            return 2
+        fi
+        shell.defer "$tool" shell.import "$file"
+        return
+    fi
+    [[ -f "$1" ]] && source "$1"
+}
+
+shell.eval() {
+    if [[ "$1" == "--defer" ]]; then
+        # Usage: shell.eval --defer <tool> "command to eval"
+        local tool="$2"; shift 2 || true
+        shell.defer "$tool" shell.eval "$1"
+        return
+    fi
+    eval "$($1)"
+}
+
+shell.setup_prompt() {
+    os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_path)\[\e[0m\] [\A] > "
+}
+
+shell.iterm2_style_path() {
+    # Mimic iTerm2's absolute path abbreviation. For example,
+    # "/usr/local/bin" abbreviates to "/u/l/bin".
+    IFS="/"
+    read -ra relpath <<<"$(dirs +0)"
+    buffer=""
+    dirname=$((${#relpath[*]} - 1))
+
+    for folder_name in "${relpath[@]}"; do
+        if [[ $folder_name != "${relpath[$dirname]}" ]]; then
+            buffer+="$(text.substr "$folder_name" 0 1)/"
+        fi
+    done
+    echo -n "$buffer${folder_name}"
+}
+
+#
+# SSH Agent Management
+#
+ssh_agent.active_sessions() {
+    pgrep -u "$USER" ssh-agent
+}
+
+ssh_agent.start() {
+    [[ -z "$1" ]] && return 1
+    os.devnull rm "$1"
+    ssh-agent | sed "s/^echo/#echo/" >"$1"
+    chmod 600 "$1"
+    shell.import "$1"
+}
+
+ssh_agent.init() {
+    local env="$1"
+    [[ -z "$env" ]] && return 1
+
+    touch "$env"
+    if ! os.devnull ssh_agent.active_sessions; then
+        ssh_agent.start "$env"
+    else
+        shell.import "$env"
+    fi
+
+    if ! os.devnull ssh-add -l; then
+        os.devnull ssh-add -k
+    fi
+}
+
+#
+# Homebrew Functions
+#
+brew.prefix() {
+    # Memoized Homebrew prefix detection
+    if [[ -n "${_BREW_PREFIX:-}" ]]; then
+        echo "$_BREW_PREFIX"
+        return 0
+    fi
+    if os.path.exists /opt/homebrew/bin/brew; then
+        _BREW_PREFIX=/opt/homebrew
+    elif os.path.exists /usr/local/bin/brew; then
+        _BREW_PREFIX=/usr/local
+    else
+        _BREW_PREFIX=""
+    fi
+    echo "$_BREW_PREFIX"
+}
+
+#
+# Higher-level convenience APIs
+#
+
+# --- Conditional runners ---------------------------------------------------
+when.cmd() { # when.cmd <command> <then...>
+    local c="$1"; shift || true
+    command -v "$c" >/dev/null 2>&1 && eval "$*"
+}
+when.not_cmd() { # when.not_cmd <command> <then...>
+    local c="$1"; shift || true
+    command -v "$c" >/dev/null 2>&1 || eval "$*"
+}
+when.darwin() { eval "os.platform.is_darwin && $*"; }
+when.linux()  { eval "os.platform.is_linux  && $*"; }
+
+# --- PATH helpers ----------------------------------------------------------
+sys.path.append() {
+    [[ -d "$1" ]] && PATH="${PATH}:$1"
+}
+sys.path.prepend_many() { # pass directories as args
+    local d
+    for d in "$@"; do sys.path.prepend "$d"; done
+}
+sys.path.append_many() { # pass directories as args
+    local d
+    for d in "$@"; do sys.path.append "$d"; done
+}
+
+# --- Alias helpers ---------------------------------------------------------
+alias.setup_ls() {
+    # Portable, colored ls + ll aliases across platforms.
+    if os.platform.is_linux; then
+        alias ls='ls --color=auto -gXF'
+        alias ll='ls --color=auto -algX'
+    else
+        if sys.path.contains gls; then
+            alias ls='gls --color=auto -gXF'
+            alias ll='gls --color=auto -algX'
+        else
+            alias ls='ls -GF'
+            alias ll='ls -alG'
+        fi
+    fi
+}
+
+# --- Simple cache ----------------------------------------------------------
+cache.dir() {
+    local base="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+    mkdir -p "$base"
+    echo "$base"
+}
+
+cache.path_for() { # cache.path_for <key>
+    local key="$1"
+    echo "$(cache.dir)/$(echo "$key" | tr '/ ' '__')"
+}
+
+cache.get() { # cache.get <key> <ttl-seconds>
+    local key="$1" ttl=${2:-0}
+    local f
+    f=$(cache.path_for "$key")
+    [[ -f $f ]] || return 1
+    if (( ttl > 0 )); then
+        local now=$(date +%s) mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+        (( now - mtime <= ttl )) || return 1
+    fi
+    cat "$f"
+}
+
+cache.set() { # cache.set <key> <data-from-stdin>
+    local key="$1" f
+    f=$(cache.path_for "$key")
+    cat - >"$f"
+}
+
+shell.eval_cached() { # shell.eval_cached <key> <ttl> <cmd string>
+    local key="$1" ttl="$2" cmd="$3"
+    local data
+    if data=$(cache.get "$key" "$ttl" 2>/dev/null); then
+        eval "$data"
+        return
+    fi
+    data="$($cmd)"
+    printf "%s" "$data" | cache.set "$key"
+    eval "$data"
+}
+
+# --- State capture ---------------------------------------------------------
+state._dump_env() { env | sort; }
+state._dump_shopt() { shopt -p 2>/dev/null | sort; }
+state._dump_seto() { set -o | sort; }
+state._dump_aliases() { alias -p | sort; }
+state._dump_functions() { declare -F | awk '{print $3}' | sort; }
+state._dump_path() { tr ':' '\n' <<<"$PATH"; }
+state._dump_completions() { complete -p 2>/dev/null | sort; }
+
+state.capture_begin() { # state.capture_begin <name>
+    local name=${1:-session}
+    local base="$(cache.dir)/state/${name}/pre"
+    mkdir -p "$base"
+    state._dump_env >"$base/env"
+    state._dump_shopt >"$base/shopt"
+    state._dump_seto >"$base/seto"
+    state._dump_aliases >"$base/aliases"
+    state._dump_functions >"$base/functions"
+    state._dump_path >"$base/path"
+    state._dump_completions >"$base/completions"
+    export STATE_CAPTURE_NAME="$name"
+}
+
+state.capture_end() { # state.capture_end [name]
+    local name="${1:-${STATE_CAPTURE_NAME:-session}}"
+    local pre="$(cache.dir)/state/${name}/pre"
+    local post="$(cache.dir)/state/${name}/post"
+    mkdir -p "$post"
+    state._dump_env >"$post/env"
+    state._dump_shopt >"$post/shopt"
+    state._dump_seto >"$post/seto"
+    state._dump_aliases >"$post/aliases"
+    state._dump_functions >"$post/functions"
+    state._dump_path >"$post/path"
+    state._dump_completions >"$post/completions"
+    if command -v diff >/dev/null 2>&1; then
+        diff -ru "$pre" "$post" >"$(cache.dir)/state/${name}/diff.txt" || true
+    fi
+}
+
+#
+# Additional Utility Functions
+#
+
+# --- Logging ---------------------------------------------------------------
+log._color() { # $1=color_code
+    echo "\e[${1}m"
+}
+log._reset() { echo "\e[0m"; }
+log.info()  { printf "$(log._color 1; log._color 34)[INFO]$(log._reset) %s\n" "$*"; }
+log.warn()  { printf "$(log._color 1; log._color 33)[WARN]$(log._reset) %s\n" "$*"; }
+log.error() { printf "$(log._color 1; log._color 31)[ERR ]$(log._reset) %s\n" "$*"; }
+
+# --- Preconditions ---------------------------------------------------------
+require.cmd() { # fail if any command is missing
+    local missing=0
+    for c in "$@"; do
+        if ! sys.path.contains "$c"; then
+            log.error "Required command not found: $c"
+            missing=1
+        fi
+    done
+    (( missing == 0 ))
+}
+
+confirm.yesno() { # $1=prompt ; returns 0 for yes
+    local prompt=${1:-"Proceed?"}
+    read -r -p "$prompt [y/N] " reply
+    [[ $reply =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+retry() { # retry N times with backoff; usage: retry 5 2 "cmd arg1 arg2"
+    local tries=${1:-3} sleep_s=${2:-1} cmd=${3}
+    local n=0
+    until eval "$cmd"; do
+        (( n++ >= tries )) && return 1
+        sleep $(( sleep_s * n ))
+    done
+}
+
+# --- Filesystem ------------------------------------------------------------
+fs.isdir() { [[ -d "$1" ]]; }
+fs.isfile() { [[ -f "$1" ]]; }
+fs.exists() { [[ -e "$1" ]]; }
+
+fs.mkcd() { # make dir and cd into it
+    mkdir -p -- "$1" && cd -- "$1" || return 1
+}
+
+fs.touchp() { # ensure parent dir exists then touch
+    mkdir -p -- "$(dirname -- "$1")" && touch -- "$1"
+}
+
+fs.mktmp() { # create temp file/dir; usage: fs.mktmp [dir|file] [prefix]
+    local type=${1:-file} prefix=${2:-tmp}
+    if [[ $type == dir ]]; then
+        mktemp -d "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
+    else
+        mktemp "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
+    fi
+}
+
+fs.extract() { # extract archives of common types to CWD
+    local f="$1"
+    [[ -f $f ]] || { log.error "No such file: $f"; return 1; }
+    case "$f" in
+        *.tar.bz2)   tar xjf "$f" ;;
+        *.tar.gz)    tar xzf "$f" ;;
+        *.tar.xz)    tar xJf "$f" ;;
+        *.tbz2)      tar xjf "$f" ;;
+        *.tgz)       tar xzf "$f" ;;
+        *.zip)       unzip -q "$f" ;;
+        *.rar)       unrar x "$f" ;;
+        *.7z)        7z x "$f" ;;
+        *)           log.error "Unknown archive: $f"; return 2 ;;
+    esac
+}
+
+# --- Strings ---------------------------------------------------------------
+str.trim() { local s="$*"; s="${s%%[[:space:]]*}"; s="${s##*[[:space:]]}"; echo "$s"; }
+str.lower() { tr '[:upper:]' '[:lower:]'; }
+str.upper() { tr '[:lower:]' '[:upper:]'; }
+
+str.urlencode() { # minimal RFC 3986
+    local LC_ALL=C
+    local s="$*"
+    local i c out=""
+    for (( i=0; i<${#s}; i++ )); do
+        c=${s:i:1}
+        case "$c" in
+            [a-zA-Z0-9._~-]) out+="$c" ;;
+            ' ') out+='%20' ;;
+            *) printf -v out '%s%%%02X' "$out" "'"$c ;;
+        esac
+    done
+    echo "$out"
+}
+
+str.urldecode() {
+    : "${*//+/ }"; echo -e "${_//%/\\x}"
+}
+
+# --- Time ------------------------------------------------------------------
+time.epoch()   { date +%s; }
+time.iso8601() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# --- Clipboard -------------------------------------------------------------
+clip.copy() {
+    if os.platform.is_darwin; then pbcopy; else xclip -selection clipboard; fi
+}
+clip.paste() {
+    if os.platform.is_darwin; then pbpaste; else xclip -selection clipboard -o; fi
+}
