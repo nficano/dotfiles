@@ -171,6 +171,8 @@ os.setenv "VISUAL" "nano"
 os.setenv "EDITOR" "nano"
 os.setenv "HSTR_TIOCSTI" "y"
 
+os.setenv "LESS" "-R"
+
 # Set various Bash options.
 shell.setopt "cdspell"      # directory name auto-correct during cd.
 shell.setopt "checkwinsize" # Update window size after each command.

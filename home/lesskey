@@ -1,0 +1,13 @@
+#command
+# Page Down / Spacebar
+" "      forw-screen
+# Shift-Space = Page Up
+"\e[Z"   back-screen
+# Option-Down = Page Down
+"\e[1;9B" forw-screen
+# Option-Up = Page Up
+"\e[1;9A" back-screen
+# Home / g = top
+"g"      goto-line
+# End / G = bottom
+"G"      goto-end

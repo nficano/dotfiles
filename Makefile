@@ -43,4 +43,5 @@ setup-tree:
 	ln -fsn $(DOTFILES)/home/nanorc ${HOME}/.nanorc
 	ln -fsn $(DOTFILES)/home/pip.conf ${HOME}/.pip/pip.conf
 	ln -fsn $(DOTFILES)/home/tmux.conf ${HOME}/.tmux.conf
+	ln -fsn $(DOTFILES)/home/lesskey ${HOME}/.lesskey
 	ln -s $(DOTFILES)/bin ${HOME}/.bin

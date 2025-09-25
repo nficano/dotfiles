@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# Show listening ports on grouped by process
+
+
+set -euo pipefail
+
+# ---------- Colors ----------
+supports_color() {
+  [[ -t 1 ]] || return 1
+  local n
+  n=$(tput colors 2>/dev/null || echo 0)
+  (( n > 0 ))
+}
+
+if supports_color; then
+  CLR_RESET="\033[0m"
+  CLR_DIM="\033[2m"
+  CLR_BOLD="\033[1m"
+  CLR_RED="\033[31m"
+  CLR_GREEN="\033[32m"
+  CLR_YELLOW="\033[33m"
+  CLR_BLUE="\033[34m"
+  CLR_MAGENTA="\033[35m"
+  CLR_CYAN="\033[36m"
+else
+  CLR_RESET=""; CLR_DIM=""; CLR_BOLD=""; CLR_RED=""; CLR_GREEN=""; CLR_YELLOW=""; CLR_BLUE=""; CLR_MAGENTA=""; CLR_CYAN="";
+fi
+
+hdr()   { printf "%b\n" "${CLR_BLUE}${CLR_BOLD}$*${CLR_RESET}"; }
+label() { printf "%b"   "${CLR_BLUE}$*${CLR_RESET}"; }
+val()   { printf "%b\n" "${CLR_GREEN}$*${CLR_RESET}"; }
+warn()  { printf "%b\n" "${CLR_YELLOW}$*${CLR_RESET}"; }
+err()   { printf "%b\n" "${CLR_RED}$*${CLR_RESET}"; }
+
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+OS=$(uname -s)
+
+# Normalize hostnames like local short hostname or "pine" to 127.0.0.1
+normalize_local_host() {
+  local hp=$1 host port
+  host=${hp%:*}; port=${hp##*:}
+  # Only normalize explicit hostname 'pine'
+  case "$host" in
+    pine|pine.local)
+      host=127.0.0.1 ;;
+  esac
+  printf "%s:%s\n" "$host" "$port"
+}
+
+# Get friendly process name from PID
+proc_name_from_pid() {
+  local pid=$1 name=""
+  if [[ "$OS" == "Darwin" ]]; then
+    name=$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')
+    [[ -n "$name" ]] && name=${name##*/}
+  else
+    name=$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')
+  fi
+  [[ -z "$name" ]] && name="pid:$pid"
+  printf "%s\n" "$name"
+}
+
+# Print listening sockets grouped by process
+print_listeners() {
+  # Require lsof for best cross-platform output
+  if ! command_exists lsof; then
+    warn "  lsof not found; skipping listeners"
+    return
+  fi
+
+  # Collect pid\taddr pairs from lsof (TCP LISTEN and UDP)
+  local lines pid addr
+  lines=$(
+    {
+      lsof -nP -iTCP -sTCP:LISTEN -F pn 2>/dev/null || true
+      lsof -nP -iUDP -F pn 2>/dev/null || true
+    } | awk '
+      /^p/ { pid=substr($0,2); next }
+      /^n/ {
+        name=substr($0,2)
+        gsub(/^[A-Z]+ /, "", name)          # drop TCP/UDP prefix if present
+        sub(/ \(LISTEN\)$/, "", name)
+        gsub(/\*:/, "0.0.0.0:", name)      # wildcard to 0.0.0.0
+        gsub(/^\[/, "", name); gsub(/\]$/, "", name)  # drop IPv6 brackets
+        # keep only host:port style; skip if it contains -> (connections)
+        if (name ~ /->/) next
+        print pid "\t" name
+      }'
+  )
+
+  if [[ -z "$lines" ]]; then
+    warn "  No listening sockets found"
+    return
+  fi
+
+  # Replace local hostnames like 'pine' with 127.0.0.1 and build name\taddr list
+  local out_lines=""
+  while IFS=$'\t' read -r pid addr; do
+    [[ -z "$pid" || -z "$addr" ]] && continue
+    local name
+    name=$(proc_name_from_pid "$pid")
+    addr=$(normalize_local_host "$addr")
+    printf "%s\t%s\n" "$name" "$addr"
+  done <<<"$lines" | sort -k1,1 -k2,2 | awk '!seen[$0]++' > /tmp/.ports_listeners.$$ 2>/dev/null || true
+
+  if [[ ! -s /tmp/.ports_listeners.$$ ]]; then
+    rm -f /tmp/.ports_listeners.$$ 2>/dev/null || true
+    warn "  No listening sockets found"
+    return
+  fi
+
+  # Pretty print grouped
+  local PROC_W=30
+  local last_name="" pad left
+  while IFS=$'\t' read -r name addr; do
+    if [[ "$name" != "$last_name" ]]; then
+      printf -v left "%s""  ${name}"
+      # pad name field to width
+      printf -v pad "%-*s" $((PROC_W))""
+      # Build padded label with name truncated/padded
+      if (( ${#name} < PROC_W-2 )); then
+        printf -v left "%-*s" $((PROC_W-2)) "$name"
+      else
+        # truncate and add ellipsis if very long
+        local t=${name:0:$((PROC_W-5))}...
+        printf -v left "  %-*s" $((PROC_W-2)) "$t"
+      fi
+      label "$left"; val "$addr"
+      printf -v pad "%-*s" $((PROC_W-2)) ""
+      last_name="$name"
+    else
+      # subsequent lines: align under address column
+      label "$pad"; val "$addr"
+    fi
+  done < /tmp/.ports_listeners.$$
+
+  rm -f /tmp/.ports_listeners.$$ 2>/dev/null || true
+}
+
+# ---------- Main ----------
+
+print_listeners
+
+exit 0

@@ -1,0 +1,426 @@
+#!/usr/bin/env bash
+# Show basic network information
+
+set -euo pipefail
+
+# ---------- Colors ----------
+supports_color() {
+  [[ -t 1 ]] || return 1
+  local n
+  n=$(tput colors 2>/dev/null || echo 0)
+  (( n > 0 ))
+}
+
+if supports_color; then
+  CLR_RESET="\033[0m"
+  CLR_DIM="\033[2m"
+  CLR_BOLD="\033[1m"
+  CLR_RED="\033[31m"
+  CLR_GREEN="\033[32m"
+  CLR_YELLOW="\033[33m"
+  CLR_BLUE="\033[34m"
+  CLR_MAGENTA="\033[35m"
+  CLR_CYAN="\033[36m"
+else
+  CLR_RESET=""; CLR_DIM=""; CLR_BOLD=""; CLR_RED=""; CLR_GREEN=""; CLR_YELLOW=""; CLR_BLUE=""; CLR_MAGENTA=""; CLR_CYAN="";
+fi
+
+hdr()   { printf "%b\n" "${CLR_BLUE}${CLR_BOLD}$*${CLR_RESET}"; }
+label() { printf "%b"   "${CLR_DIM}$*${CLR_RESET}"; }
+val()   { printf "%b\n" "${CLR_GREEN}$*${CLR_RESET}"; }
+warn()  { printf "%b\n" "${CLR_YELLOW}$*${CLR_RESET}"; }
+err()   { printf "%b\n" "${CLR_RED}$*${CLR_RESET}"; }
+
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+OS=$(uname -s)
+
+# ---------- Helpers ----------
+trim() { sed -e 's/^\s\+//' -e 's/\s\+$//'; }
+
+# Convert hex netmask like 0xffffff00 to dotted decimal
+hexmask_to_dotted() {
+  local hex=${1#0x}
+  local o1=$((16#${hex:0:2}))
+  local o2=$((16#${hex:2:2}))
+  local o3=$((16#${hex:4:2}))
+  local o4=$((16#${hex:6:2}))
+  printf "%d.%d.%d.%d\n" "$o1" "$o2" "$o3" "$o4"
+}
+
+# Count bits set to 1 in dotted mask
+mask_to_cidr() {
+  local mask=$1 IFS=.
+  read -r a b c d <<<"$mask"
+  local -a map=(0 1 2 3 4 5 6 7 8)
+  # Fallback bit-count for any octet
+  bits_in_octet() {
+    local n=$1 c=0
+    while (( n > 0 )); do (( c += n & 1, n >>= 1 )); done
+    echo $c
+  }
+  printf "%d\n" $(( $(bits_in_octet "$a") + $(bits_in_octet "$b") + $(bits_in_octet "$c") + $(bits_in_octet "$d") ))
+}
+
+ip_to_int() {
+  local ip=$1
+  local IFS=.
+  read -r a b c d <<<"$ip"
+
+  (( val = a << 24 | b << 16 | c << 8 | d ))
+  printf "%u\n" "$val"
+}
+
+int_to_ip() {
+  local n=$1
+  printf "%d.%d.%d.%d\n" $(( (n>>24)&255 )) $(( (n>>16)&255 )) $(( (n>>8)&255 )) $(( n&255 ))
+}
+
+network_from_ip_mask() {
+  local ip=$1 mask=$2
+  local ipi mki net
+  ipi=$(ip_to_int "$ip")
+  mki=$(ip_to_int "$mask")
+  net=$(( ipi & mki ))
+  int_to_ip "$net"
+}
+
+# ---------- Public IP ----------
+get_public_ip() {
+  # $1: either -4 or -6
+  local flag=$1
+  local endpoints=(
+    "https://ifconfig.co"
+    "https://api.ipify.org"
+    "https://icanhazip.com"
+  )
+  local ip
+  for ep in "${endpoints[@]}"; do
+    if ip=$(curl -fsS $flag --connect-timeout 2 --max-time 3 "$ep" 2>/dev/null | tr -d '\r' | head -n1); then
+      ip=${ip//[$'\t\r ']} # trim
+      if [[ -n "$ip" ]]; then
+        echo "$ip"; return 0
+      fi
+    fi
+  done
+  echo "N/A"
+}
+
+# ---------- DNS ----------
+dns_servers_macos() {
+  # Unique nameserver lines from scutil
+  scutil --dns 2>/dev/null | awk '/nameserver\[[0-9]+\]/{print $3}' | awk '!(NR in seen){ if(!($0 in seen2)){ print; seen2[$0]=1 } } {seen[NR]=1}'
+}
+
+dns_servers_linux() {
+  if command_exists resolvectl; then
+    resolvectl dns 2>/dev/null | awk '{for(i=3;i<=NF;i++) print $i}' | sed 's/%.*//' | awk '!seen[$0]++'
+  else
+    awk '/^nameserver/{print $2}' /etc/resolv.conf 2>/dev/null | awk '!seen[$0]++'
+  fi
+}
+
+reverse_dns() {
+  local ip=$1 out=""
+  # Strip any zone index like %en0 before reverse lookup
+  ip=${ip%%%*}
+  if command_exists dig; then
+    out=$(dig +time=2 +tries=1 +short -x "$ip" 2>/dev/null | sed -n '1p' | sed 's/\.$//') || true
+  elif command_exists host; then
+    out=$(host "$ip" 2>/dev/null | awk '/domain name pointer/{print $5}' | sed 's/\.$//') || true
+  elif command_exists nslookup; then
+    out=$(nslookup "$ip" 2>/dev/null | awk -F'= ' '/name =/{print $2}' | sed 's/\.$//') || true
+  fi
+  [[ -n "$out" ]] && echo "$out" || echo ""
+}
+
+# Format IPv6 with zone index (e.g., fe80::1%utun0) to a friendlier
+# representation: fe80::1 (utun0)
+pretty_zone() {
+  local s=$1
+  if [[ "$s" == *%* ]]; then
+    local nozone=${s%%%*}
+    local zone=${s#*%}
+    printf "%s (%s)\n" "$nozone" "$zone"
+  else
+    printf "%s\n" "$s"
+  fi
+}
+
+# Normalize hostnames like local short hostname or "pine" to 127.0.0.1
+normalize_local_host() {
+  local hp=$1 host port
+  host=${hp%:*}; port=${hp##*:}
+  # Only normalize explicit hostname 'pine' (per request)
+  case "$host" in
+    pine|pine.local)
+      host=127.0.0.1 ;;
+  esac
+  printf "%s:%s\n" "$host" "$port"
+}
+
+# Get friendly process name from PID
+proc_name_from_pid() {
+  local pid=$1 name=""
+  if [[ "$OS" == "Darwin" ]]; then
+    name=$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')
+    [[ -n "$name" ]] && name=${name##*/}
+  else
+    name=$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')
+  fi
+  [[ -z "$name" ]] && name="pid:$pid"
+  printf "%s\n" "$name"
+}
+
+
+# ---------- Default Gateways ----------
+default_gw_v4=""
+default_gw_v4_dev=""
+default_gw_v6=""
+default_gw_v6_dev=""
+
+get_defaults_macos() {
+  if out=$(route -n get default 2>/dev/null); then
+    default_gw_v4=$(awk '/gateway:/{print $2}' <<<"$out" | head -n1)
+    default_gw_v4_dev=$(awk '/interface:/{print $2}' <<<"$out" | head -n1)
+  fi
+  if command_exists netstat; then
+    local l6
+    l6=$(netstat -nr -f inet6 2>/dev/null | awk '$1=="default"{print $2" "$6; exit}')
+    if [[ -n "$l6" ]]; then
+      default_gw_v6=${l6%% *}
+      default_gw_v6_dev=${l6##* }
+    fi
+  fi
+}
+
+get_defaults_linux() {
+  if command_exists ip; then
+    if out=$(ip -4 route show default 2>/dev/null | head -n1); then
+      default_gw_v4=$(awk '/default via/{print $3}' <<<"$out")
+      default_gw_v4_dev=$(awk '/dev/{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1);break}}}' <<<"$out")
+    fi
+    if out=$(ip -6 route show default 2>/dev/null | head -n1); then
+      default_gw_v6=$(awk '/default via/{print $3}' <<<"$out" | sed 's/%.*//')
+      default_gw_v6_dev=$(awk '/dev/{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1);break}}}' <<<"$out")
+    fi
+  else
+    # Fallback to netstat
+    if out=$(netstat -rn 2>/dev/null | awk '$1=="0.0.0.0"{print $2" "$NF; exit}'); then
+      default_gw_v4=${out%% *}
+      default_gw_v4_dev=${out##* }
+    fi
+    if out=$(netstat -rn -A inet6 2>/dev/null | awk '$1=="::/0"{print $2" "$NF; exit}'); then
+      default_gw_v6=${out%% *}
+      default_gw_v6_dev=${out##* }
+    fi
+  fi
+}
+
+# ---------- Interfaces (macOS) ----------
+friendly_name_for_dev_macos() {
+  local dev=$1
+  networksetup -listallhardwareports 2>/dev/null | awk -v d="$dev" '
+    /^Hardware Port:/ {hp=$0; sub(/^Hardware Port: /,"",hp)}
+    /^Device:/ && $2==d {print hp; exit}
+  '
+}
+
+print_interfaces_macos() {
+  local devs
+  # Show only network adapters known to System Settings (proper names)
+  devs=$(networksetup -listallhardwareports 2>/dev/null | awk '/^Device: /{print $2}' | awk 'NF>0')
+  for dev in $devs; do
+    [[ -z "$dev" || "$dev" == "(null)" ]] && continue
+
+    local ifout ipv4 mask_hex mask_dotted cidr netv4 mac status friendly
+    ifout=$(ifconfig "$dev" 2>/dev/null || true)
+    [[ -z "$ifout" ]] && continue
+
+    # Only show interfaces that have an IP (IPv4 or global IPv6) or are active
+    ipv4=$(awk '/\binet\b/{print $2}' <<<"$ifout" | head -n1)
+    local ipv6s
+    ipv6s=$(awk '/\binet6\b/{print $2}' <<<"$ifout" | grep -v '^fe80' || true)
+    status=$(awk -F': ' '/status:/{print $2}' <<<"$ifout" | head -n1)
+    [[ -z "$ipv4" && -z "$ipv6s" && "$status" != "active" ]] && continue
+
+    friendly=$(friendly_name_for_dev_macos "$dev")
+    [[ -z "$friendly" ]] && friendly="$dev"
+
+    mac=$(awk '/\bether\b/{print $2}' <<<"$ifout" | head -n1)
+    mask_hex=$(awk '{for(i=1;i<=NF;i++) if($i=="netmask") {print $(i+1); exit}}' <<<"$ifout")
+    if [[ -n "$mask_hex" ]]; then
+      mask_dotted=$(hexmask_to_dotted "$mask_hex")
+      cidr=$(mask_to_cidr "$mask_dotted")
+      if [[ -n "$ipv4" ]]; then
+        netv4=$(network_from_ip_mask "$ipv4" "$mask_dotted")
+      fi
+    fi
+
+    printf "\n"
+    hdr "  • ${friendly} (${dev})"
+    label "    Status: "; val "${status:-unknown}"
+    if [[ -n "$mac" ]]; then label "    MAC:    "; val "$mac"; fi
+    if [[ -n "$ipv4" ]]; then
+      label "    IPv4:   "; val "${ipv4}${cidr:+/$cidr}"
+      if [[ -n "$mask_dotted" ]]; then label "    Mask:   "; val "$mask_dotted"; fi
+      if [[ -n "$netv4" && -n "$cidr" ]]; then label "    Subnet: "; val "${netv4}/$cidr"; fi
+      if [[ -n "$default_gw_v4_dev" && "$default_gw_v4_dev" == "$dev" && -n "$default_gw_v4" ]]; then
+        label "    GW(v4): "; val "$default_gw_v4"
+      fi
+    fi
+    if [[ -n "$ipv6s" ]]; then
+      while IFS= read -r a; do
+        # Extract prefixlen if available next to address in ifconfig output
+        local pref
+        pref=$(awk '/inet6/{for(i=1;i<=NF;i++){if($i=="prefixlen"){print $(i+1);break}}}' <<<"$ifout" | head -n1)
+        label "    IPv6:   "; val "$(pretty_zone "$a")${pref:+/$pref}"
+      done <<<"$ipv6s"
+      if [[ -n "$default_gw_v6_dev" && "$default_gw_v6_dev" == "$dev" && -n "$default_gw_v6" ]]; then
+        label "    GW(v6): "; val "$(pretty_zone "$default_gw_v6")"
+      fi
+    fi
+  done
+}
+
+# ---------- Interfaces (Linux) ----------
+print_interfaces_linux() {
+  local devs
+  if command_exists ip; then
+    devs=$(ip -o link show | awk -F': ' '{print $2}')
+  else
+    devs=$(ls /sys/class/net 2>/dev/null || true)
+  fi
+
+  for dev in $devs; do
+    [[ "$dev" == lo* ]] && continue
+    local ipv4 mask_cidr mask_dotted netv4 mac status ipv6s
+    if command_exists ip; then
+      ipv4=$(ip -o -4 addr show dev "$dev" | awk '{print $4}' | head -n1) # includes /CIDR
+      if [[ -n "$ipv4" ]]; then
+        mask_cidr=${ipv4#*/}
+        ipv4=${ipv4%/*}
+        # Convert CIDR to dotted
+        local m
+        (( m = (0xffffffff << (32-mask_cidr)) & 0xffffffff ))
+        mask_dotted=$(printf "%d.%d.%d.%d" $(( (m>>24)&255 )) $(( (m>>16)&255 )) $(( (m>>8)&255 )) $(( m&255 )))
+        netv4=$(network_from_ip_mask "$ipv4" "$mask_dotted")
+      fi
+      ipv6s=$(ip -o -6 addr show dev "$dev" scope global 2>/dev/null | awk '{print $4}') || true
+      mac=$(ip -o link show "$dev" | awk '{for(i=1;i<=NF;i++){if($i=="link/ether"){print $(i+1);break}}}')
+      status=$(cat "/sys/class/net/$dev/operstate" 2>/dev/null || echo unknown)
+    else
+      # Fallback to ifconfig
+      local ifout
+      ifout=$(ifconfig "$dev" 2>/dev/null || true)
+      [[ -z "$ifout" ]] && continue
+      ipv4=$(awk '/\binet\b/{print $2}' <<<"$ifout" | head -n1)
+      local cidr_guess
+      mask_dotted=$(awk '{for(i=1;i<=NF;i++) if($i=="netmask") {print $(i+1); exit}}' <<<"$ifout")
+      if [[ -n "$mask_dotted" && -n "$ipv4" ]]; then
+        cidr_guess=$(mask_to_cidr "$mask_dotted")
+        netv4=$(network_from_ip_mask "$ipv4" "$mask_dotted")
+      fi
+      ipv6s=$(awk '/\binet6\b/{print $2}' <<<"$ifout" | grep -v '^fe80' || true)
+      mac=$(awk '/\bether\b/{print $2}' <<<"$ifout" | head -n1)
+      status=$(awk -F': ' '/status:/{print $2}' <<<"$ifout" | head -n1)
+      mask_cidr=$cidr_guess
+    fi
+
+    # Skip totally empty
+    [[ -z "$ipv4" && -z "$ipv6s" ]] && continue
+
+    printf "\n"
+    hdr "  • ${dev}"
+    label "    Status: "; val "${status:-unknown}"
+    if [[ -n "$mac" ]]; then label "    MAC:    "; val "$mac"; fi
+    if [[ -n "$ipv4" ]]; then
+      label "    IPv4:   "; val "${ipv4}${mask_cidr:+/$mask_cidr}"
+      if [[ -n "$mask_dotted" ]]; then label "    Mask:   "; val "$mask_dotted"; fi
+      if [[ -n "$netv4" && -n "$mask_cidr" ]]; then label "    Subnet: "; val "${netv4}/$mask_cidr"; fi
+      if [[ -n "$default_gw_v4_dev" && "$default_gw_v4_dev" == "$dev" && -n "$default_gw_v4" ]]; then
+        label "    GW(v4): "; val "$default_gw_v4"
+      fi
+    fi
+    if [[ -n "$ipv6s" ]]; then
+      while IFS= read -r a; do
+        # Split possible /prefix before pretty printing zone
+        if [[ "$a" == */* ]]; then
+          local addr=${a%/*}
+          local pre=${a#*/}
+          label "    IPv6:   "; val "$(pretty_zone "$addr")/$pre"
+        else
+          label "    IPv6:   "; val "$(pretty_zone "$a")"
+        fi
+      done <<<"$ipv6s"
+      if [[ -n "$default_gw_v6_dev" && "$default_gw_v6_dev" == "$dev" && -n "$default_gw_v6" ]]; then
+        label "    GW(v6): "; val "$(pretty_zone "$default_gw_v6")"
+      fi
+    fi
+  done
+}
+
+# ---------- Main ----------
+
+HOSTNAME=$(hostname 2>/dev/null || uname -n)
+KERNEL=$(uname -sr)
+
+case "$OS" in
+  Darwin) get_defaults_macos ;;
+  Linux)  get_defaults_linux ;;
+esac
+
+hdr "Host Network Overview"
+if [[ -n "$default_gw_v4" ]]; then
+  label "  Default GW (v4): "; val "${default_gw_v4}${default_gw_v4_dev:+ via ${default_gw_v4_dev}}"
+else
+  label "  Default GW (v4): "; warn "N/A"
+fi
+if [[ -n "$default_gw_v6" ]]; then
+  label "  Default GW (v6): "; val "$(pretty_zone "${default_gw_v6}")${default_gw_v6_dev:+ via ${default_gw_v6_dev}}"
+else
+  label "  Default GW (v6): "; warn "N/A"
+fi
+
+# Public IPs (may take a moment; skip if curl missing)
+if command_exists curl; then
+  pub4=$(get_public_ip -4)
+  pub6=$(get_public_ip -6)
+  label "  Public IPv4: "; val "$pub4"
+  label "  Public IPv6: "; val "$pub6"
+else
+  label "  Public IPv4: "; warn "curl not found"
+  label "  Public IPv6: "; warn "curl not found"
+fi
+
+printf "\n"
+hdr "DNS Servers"
+case "$OS" in
+  Darwin) dns_list=$(dns_servers_macos) ;;
+  Linux)  dns_list=$(dns_servers_linux) ;;
+  *) dns_list="" ;;
+esac
+
+if [[ -z "${dns_list:-}" ]]; then
+  warn "  No DNS servers detected"
+else
+  while IFS= read -r dns; do
+    [[ -z "$dns" ]] && continue
+    dns_host=$(reverse_dns "$dns" || true)
+    if [[ -n "$dns_host" ]]; then
+      label "  • "; val "$(pretty_zone "$dns") (${dns_host})"
+    else
+      label "  • "; val "$(pretty_zone "$dns")"
+    fi
+  done <<<"$dns_list"
+fi
+
+printf "\n"
+hdr "Interfaces"
+case "$OS" in
+  Darwin) print_interfaces_macos ;;
+  Linux)  print_interfaces_linux ;;
+  *) warn "Unsupported OS: $OS" ;;
+esac
+
+exit 0
