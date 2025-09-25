@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#/ Get string value for key
+#/
+#/ USAGE:
+#/  $(basename "$0") key
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/
+#/ Examples:
+#/    $(basename "$0") --help
+#/    $(basename "$0") mykey
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/rdb-common"
+
+usage () {
+    grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+    exit 1
+}
+
+main() {
+  # Check for help flags first
+  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+  fi
+
+  [ $# -eq 1 ] || { usage; exit 2; }
+  init_db
+  local key="$1" t
+  t=$(key_type "$key" || true)
+  if [ -n "${t:-}" ] && [ "$t" != "string" ]; then
+    # Key exists but is not a string type - this is an error
+    exit 1
+  fi
+  if [ -z "${t:-}" ]; then
+    # Key doesn't exist - Redis returns (nil), we print nothing and exit 0
+    exit 0
+  fi
+  local k; k=$(sql_escape "$key")
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "SELECT value FROM kv WHERE key='${k}' LIMIT 1;"
+}
+
+main "$@"

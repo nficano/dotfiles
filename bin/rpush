@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#/ Push one or more values to list tail
+#/
+#/ USAGE:
+#/  $(basename "$0") key value [value ...]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/
+#/ Examples:
+#/    $(basename "$0") --help
+#/    $(basename "$0") mylist a b
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/rdb-common"
+
+usage () {
+    grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+    exit 1
+}
+
+main() {
+  # Check for help flags first
+  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+  fi
+
+  [ $# -ge 2 ] || { usage; exit 2; }
+  init_db
+  local key="$1"; shift
+  ensure_type_or_new "$key" list
+
+  local k; k=$(sql_escape "$key")
+  local max_idx
+  max_idx=$("$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "SELECT COALESCE(MAX(idx), -1) FROM list_entries WHERE key='${k}';")
+  local base=$max_idx
+  local i=0
+  for v in "$@"; do
+    i=$((i+1))
+    local idx=$(( base + i ))
+    local vv; vv=$(sql_escape "$v")
+    "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+      "INSERT OR REPLACE INTO list_entries(key, idx, value) VALUES ('${k}', ${idx}, '${vv}');" >/dev/null
+  done
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "SELECT COUNT(1) FROM list_entries WHERE key='${k}';"
+}
+
+main "$@"

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#/ List keys matching a pattern
+#/
+#/ USAGE:
+#/ $(basename "$0") pattern
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/
+#/ Examples:
+#/    $(basename "$0") --help
+#/    $(basename "$0") 'user:*'
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/rdb-common"
+
+usage () {
+    grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+    exit 1
+}
+
+glob_to_like() {
+  # Translate shell glob to SQL LIKE (very basic)
+  local pat=$1
+  # Escape existing % _ and backslash
+  pat=${pat//%/\%}
+  pat=${pat//_/\_}
+  pat=${pat//\\/\\\\}
+  # Convert glob wildcards
+  pat=${pat//\*/%}
+  pat=${pat//\?/_}
+  printf "%s" "$pat"
+}
+
+main() {
+  # Check for help flags first
+  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+  fi
+
+  [ $# -eq 1 ] || { usage; exit 2; }
+  init_db
+  local like; like=$(glob_to_like "$1")
+  local lk; lk=$(sql_escape "$like")
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "SELECT key FROM keys WHERE key LIKE '${lk}' ORDER BY key;"
+}
+
+main "$@"
