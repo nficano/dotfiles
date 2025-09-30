@@ -29,14 +29,17 @@
 	mnemonicPrefix = true
 	renames = true
 
-[difftool "difftool"]
-	cmd = cursor --wait --diff $LOCAL $REMOTE
+[diff]
+  tool = default-difftool
+
+[difftool "default-difftool"]
+  cmd = cursor --wait --diff $LOCAL $REMOTE
 
 [merge]
-	tool = cursor
+  tool = cursor
 
 [mergetool "cursor"]
-	cmd = cursor --wait $MERGED
+  cmd = cursor --wait --merge $REMOTE $LOCAL $BASE $MERGED
 
 [help]
 	autocorrect = prompt
@@ -47,6 +50,8 @@
 	all = true
 
 [core]
+	editor = cursor --wait --new-window
+	excludesFile = ~/.gitignore-global
 	autoSquash = true
 	autoStash = true
 	updateRefs = true
@@ -92,6 +97,7 @@
 [rerere]
 	enabled = true
 	autoupdate = true
+	autoStash = true
 
 [init]
 	defaultBranch = main
@@ -108,6 +114,15 @@
 [commit]
 	gpgsign = true
 	verbose = true
+
 [tag]
 	gpgSign = true
 	sort = version:refname
+
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
