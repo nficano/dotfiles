@@ -6,7 +6,7 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 
 - `bin/` – executable utilities referenced below; symlinked into `~/.bin` by `make setup-tree`.
 - `home/` – version-controlled copies of dotfiles such as `gitconfig`, `tmux.conf`, and `pip.conf`; `make setup-tree` links them into `$HOME`.
-- `lib/` – shared shell libraries. `lib/bash/utils` provides logging, prompting, filesystem helpers, deferred sourcing, locking, and other primitives consumed by the skeletons and shell profile. The scripts that implement the Redis-style datastore source `lib/rdb-common` for the SQLite-backed storage helper.
+- `lib/` – shared shell libraries. `lib/bash/utils` provides logging, prompting, filesystem helpers, deferred sourcing, locking, and other primitives consumed by the skeletons and shell profile.
 - `profiles/` – application-specific settings, currently an iTerm2 profile in `profiles/iterm2/profile.json`.
 - `setup/` – provisioning assets. `setup/macos/mac-provision` automates a full macOS bootstrap (Xcode tools, Homebrew, defaults) and the accompanying `Brewfile` captures required packages.
 - `shell/` – interactive shell entrypoints. `shell/bash/profile` exports environment variables, amends `PATH`, and lazy-loads tooling using the helpers from `lib/bash/utils`.
