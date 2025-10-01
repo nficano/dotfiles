@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+#/ {{ description }}
+#/
+#/ Usage: $(basename "$0") [-h] [-v] -u url [-m method] [-d data] [--retries N] [--timeout sec]
+#/
+#/ Available options:
+#/    -h, --help         Print this help and exit
+#/    -v, --verbose      Enable verbose output
+#/    -u, --url          Target URL (required)
+#/    -m, --method       HTTP method (default GET)
+#/    -d, --data         Request payload
+#/        --retries      Retry attempts (default 3)
+#/        --timeout      Request timeout seconds (default 10)
+#/
+#/ Examples:
+#/    $(basename "$0") -u https://example.com
+#/    $(basename "$0") -u https://api -m POST -d '{"key":"value"}' --retries 5
+
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash_helpers"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+url=""
+method="GET"
+data=""
+retries=3
+timeout=10
+
+usage() {
+  grep '^#/' < "$0" | cut -c4-
+  exit "${1:-0}"
+}
+
+cleanup() {
+  trap - SIGINT SIGTERM ERR EXIT
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --url)
+        shift
+        [[ $# -gt 0 ]] || { printf 'Error: --url requires a value\n' >&2; usage 1; }
+        transformed+=('-u' "$1")
+        shift
+        continue
+        ;;
+      --url=*)
+        transformed+=('-u' "${1#*=}")
+        shift
+        continue
+        ;;
+      --method)
+        shift
+        [[ $# -gt 0 ]] || { printf 'Error: --method requires a value\n' >&2; usage 1; }
+        transformed+=('-m' "$1")
+        shift
+        continue
+        ;;
+      --method=*)
+        transformed+=('-m' "${1#*=}")
+        shift
+        continue
+        ;;
+      --data)
+        shift
+        [[ $# -gt 0 ]] || { printf 'Error: --data requires a value\n' >&2; usage 1; }
+        transformed+=('-d' "$1")
+        shift
+        continue
+        ;;
+      --data=*)
+        transformed+=('-d' "${1#*=}")
+        shift
+        continue
+        ;;
+      --retries)
+        shift
+        [[ $# -gt 0 ]] || { printf 'Error: --retries requires a value\n' >&2; usage 1; }
+        retries="$1"
+        shift
+        continue
+        ;;
+      --retries=*)
+        retries="${1#*=}"
+        shift
+        continue
+        ;;
+      --timeout)
+        shift
+        [[ $# -gt 0 ]] || { printf 'Error: --timeout requires a value\n' >&2; usage 1; }
+        timeout="$1"
+        shift
+        continue
+        ;;
+      --timeout=*)
+        timeout="${1#*=}"
+        shift
+        continue
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        printf 'Error: Unknown option: %s\n' "$1" >&2
+        usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvu:m:d:' opt; do
+    case "$opt" in
+      h) usage ;;
+      v) verbose=1 ;;
+      u) url="$OPTARG" ;;
+      m) method="$OPTARG" ;;
+      d) data="$OPTARG" ;;
+      :) printf 'Error: Option -%s requires an argument\n' "$OPTARG" >&2; usage 1 ;;
+      \?) printf 'Error: Invalid option: -%s\n' "$OPTARG" >&2; usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+
+  if [[ $# -gt 0 ]]; then
+    printf 'Error: Unexpected positional arguments\n' >&2
+    usage 1
+  fi
+
+  if [[ -z "$url" ]]; then
+    printf 'Error: --url is required\n' >&2
+    usage 1
+  fi
+
+  if ! [[ "$retries" =~ ^[0-9]+$ ]] || [[ "$retries" -le 0 ]]; then
+    printf 'Error: --retries must be a positive integer\n' >&2
+    usage 1
+  fi
+
+  if ! [[ "$timeout" =~ ^[0-9]+$ ]] || [[ "$timeout" -le 0 ]]; then
+    printf 'Error: --timeout must be a positive integer\n' >&2
+    usage 1
+  fi
+}
+
+main() {
+  local attempt=1
+  local delay=1
+  local response
+  local body
+  local http_status
+  local success=0
+  local exit_code=0
+
+  while (( attempt <= retries )); do
+    (( verbose )) && printf 'Attempt %d/%d\n' "$attempt" "$retries" >&2
+
+    if response=$(curl --fail-with-body --show-error --silent \
+      --max-time "$timeout" \
+      --request "$method" \
+      ${data:+--data "$data"} \
+      --write-out 'HTTPSTATUS:%{http_code}' \
+      "$url"); then
+      http_status="${response##*HTTPSTATUS:}"
+      body="${response%HTTPSTATUS:*}"
+      printf 'HTTP status: %s\n' "$http_status"
+      printf 'Response body:\n%s\n' "$body"
+      printf '# TODO: parse JSON or handle response\n'
+      success=1
+      break
+    else
+      exit_code=$?
+      (( verbose )) && printf 'Request failed with exit code %d\n' "$exit_code" >&2
+      if (( attempt == retries )); then
+        printf 'Error: Request failed after %d attempts\n' "$retries" >&2
+        break
+      fi
+      sleep "$delay"
+      delay=$((delay * 2))
+    fi
+
+    attempt=$((attempt + 1))
+  done
+
+  if (( success )); then
+    return 0
+  fi
+
+  return "${exit_code:-1}"
+}
+
+parse_args "$@"
+main

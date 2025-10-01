@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+#/ {{ description }}
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [-j jobs] [task1 [task2...]]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/    -j, --jobs      Maximum concurrent tasks (default CPU count or 4)
+#/
+#/ Examples:
+#/    $(basename "$0") --jobs 2 "echo first" "echo second"
+#/    seq 1 5 | $(basename "$0") -j 3
+
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash_helpers"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+max_jobs=0
+stop_launch=0
+had_failure=0
+declare -a tasks=()
+declare -a pids=()
+
+cleanup() {
+  local exit_code=$?
+  stop_launch=1
+
+  proc.wait_for_pids pids had_failure
+
+  if (( had_failure )) && [[ $exit_code -eq 0 ]]; then
+    exit_code=1
+  fi
+
+  script.cleanup
+  return "$exit_code"
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  max_jobs=$(proc.cpu_count)
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --jobs)
+        shift
+        [[ $# -gt 0 ]] || { log.error "--jobs requires a value"; script.usage 1; }
+        transformed+=('-j' "$1")
+        shift
+        continue
+        ;;
+      --jobs=*)
+        transformed+=('-j' "${1#*=}")
+        shift
+        continue
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvj:' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      j) max_jobs="$OPTARG" ;;
+      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  tasks=("$@")
+
+  script.validate_positive_int "$max_jobs" "--jobs"
+}
+
+launch_task() {
+  local task="$1"
+
+  (
+    (( verbose )) && log.info "Starting task: $task" >&2
+    log.info "Processing task: $task"
+    # TODO: replace with actual task logic for "$task"
+  ) &
+
+  local pid=$!
+  pids+=("$pid")
+}
+
+wait_for_slot() {
+  while [[ ${#pids[@]} -ge $max_jobs ]]; do
+    local oldest="${pids[0]}"
+    if ! wait "$oldest"; then
+      had_failure=1
+    fi
+    pids=("${pids[@]:1}")
+  done
+}
+
+main() {
+  if [[ ${#tasks[@]} -eq 0 ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      tasks+=("$line")
+    done
+  fi
+
+  if [[ ${#tasks[@]} -eq 0 ]]; then
+    (( verbose )) && log.warn "No tasks provided"
+    return 0
+  fi
+
+  local task
+  for task in "${tasks[@]}"; do
+    if (( stop_launch )); then
+      (( verbose )) && log.warn "Launch halted by signal; draining workers"
+      break
+    fi
+
+    wait_for_slot
+    launch_task "$task"
+  done
+
+  while [[ ${#pids[@]} -gt 0 ]]; do
+    local pid="${pids[0]}"
+    if ! wait "$pid"; then
+      had_failure=1
+    fi
+    pids=("${pids[@]:1}")
+  done
+
+  if (( had_failure )); then
+    return 1
+  fi
+}
+
+parse_args "$@"
+main

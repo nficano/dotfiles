@@ -363,6 +363,72 @@ confirm.yesno() { # $1=prompt ; returns 0 for yes
     [[ $reply =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
+# --- Enhanced Prompting System -----------------------------------------------
+prompt.ask_yes_no() { # prompt.ask_yes_no <prompt> [assume_yes] [non_interactive] [verbose]
+    local prompt="$1"
+    local assume_yes="${2:-0}"
+    local non_interactive="${3:-0}"
+    local verbose="${4:-0}"
+
+    if (( assume_yes )); then
+        (( verbose )) && printf 'Assuming yes: %s\n' "$prompt"
+        return 0
+    fi
+
+    if (( non_interactive )); then
+        log.error "Cannot prompt in non-interactive mode ($prompt)"
+        return 1
+    fi
+
+    local reply=""
+    read -r -p "$prompt [y/N]: " reply
+    case "$reply" in
+        [Yy]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+prompt.read_input() { # prompt.read_input <prompt> [default] [non_interactive] [env_var]
+    local prompt="$1"
+    local default="${2:-}"
+    local non_interactive="${3:-0}"
+    local env_var="${4:-}"
+
+    if (( non_interactive )); then
+        if [[ -n "$env_var" ]]; then
+            echo "${!env_var:-$default}"
+        else
+            echo "$default"
+        fi
+        return
+    fi
+
+    local input=""
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " input
+        echo "${input:-$default}"
+    else
+        read -r -p "$prompt: " input
+        echo "$input"
+    fi
+}
+
+prompt.read_required() { # prompt.read_required <prompt> [non_interactive] [env_var]
+    local prompt="$1"
+    local non_interactive="${2:-0}"
+    local env_var="${3:-}"
+
+    local input
+    input=$(prompt.read_input "$prompt" "" "$non_interactive" "$env_var")
+
+    if [[ -z "$input" ]]; then
+        log.error "Input value must not be empty"
+        return 1
+    fi
+
+    echo "$input"
+}
+
 retry() { # retry N times with backoff; usage: retry 5 2 "cmd arg1 arg2"
     local tries=${1:-3} sleep_s=${2:-1} cmd=${3}
     local n=0
@@ -444,4 +510,171 @@ clip.copy() {
 }
 clip.paste() {
     if os.platform.is_darwin; then pbpaste; else xclip -selection clipboard -o; fi
+}
+
+# --- Script Framework ------------------------------------------------------
+script.usage() { # script.usage [exit_code]
+    local exit_code="${1:-0}"
+    grep '^#/' < "${BASH_SOURCE[1]}" | cut -c4-
+    exit "$exit_code"
+}
+
+script.cleanup() { # script.cleanup - basic cleanup function
+    trap - SIGINT SIGTERM ERR EXIT
+}
+
+script.parse_common() { # script.parse_common <args...> - parse common options (h, v, help, verbose)
+    local opt
+    local -a transformed=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help) transformed+=('-h') ;;
+            --verbose) transformed+=('-v') ;;
+            --)
+                shift
+                break
+                ;;
+            --*)
+                log.error "Unknown option: $1"
+                script.usage 1
+                ;;
+            *)
+                break
+                ;;
+        esac
+        shift
+    done
+
+    transformed+=("$@")
+    set -- "${transformed[@]}"
+
+    while getopts ':hv' opt; do
+        case "$opt" in
+            h) script.usage ;;
+            v) verbose=1 ;;
+            \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+        esac
+    done
+
+    shift $((OPTIND - 1))
+    echo "$@"
+}
+
+script.validate_positive_int() { # script.validate_positive_int <value> <name>
+    local value="$1" name="$2"
+    if ! [[ $value =~ ^[0-9]+$ ]] || [[ $value -le 0 ]]; then
+        log.error "$name must be a positive integer"
+        script.usage 1
+    fi
+}
+
+script.require_args() { # script.require_args <count> <description>
+    local count="$1" description="$2"
+    if [[ $# -lt $((count + 2)) ]]; then
+        log.error "Missing required $description"
+        script.usage 1
+    fi
+}
+
+# --- Lock Management -------------------------------------------------------
+lock.acquire() { # lock.acquire <lock_name> [verbose]
+    local lock_name="$1" verbose="${2:-0}"
+    local lock_file="${TMPDIR:-/tmp}/${lock_name}.lock"
+    local lock_fd=-1
+
+    if ! eval "exec {lock_fd}>\"$lock_file\""; then
+        log.error "Cannot open lock file $lock_file"
+        return 1
+    fi
+
+    if ! flock -n "$lock_fd"; then
+        (( verbose )) && log.warn "Another instance is already running (lock: $lock_file)"
+        eval "exec ${lock_fd}>&-"
+        return 1
+    fi
+
+    (( verbose )) && log.info "Acquired lock $lock_file"
+    echo "$lock_fd:$lock_file"
+}
+
+lock.release() { # lock.release <lock_fd:lock_file>
+    local lock_spec="$1"
+    local lock_fd="${lock_spec%%:*}"
+    local lock_file="${lock_spec#*:}"
+
+    if [[ $lock_fd -ne -1 ]]; then
+        flock -u "$lock_fd" 2>/dev/null || true
+        eval "exec ${lock_fd}>&-" 2>/dev/null || true
+    fi
+
+    if [[ -n "$lock_file" ]]; then
+        rm -f -- "$lock_file"
+    fi
+}
+
+# --- Process Management ----------------------------------------------------
+proc.cpu_count() { # proc.cpu_count - get CPU count with fallback
+    local count=4
+    if command -v getconf >/dev/null 2>&1; then
+        count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+    fi
+    if ! [[ $count =~ ^[0-9]+$ ]] || [[ $count -le 0 ]]; then
+        count=4
+    fi
+    echo "$count"
+}
+
+proc.wait_for_pids() { # proc.wait_for_pids <pids_array> [had_failure_ref]
+    local -n pids_ref="$1"
+    local had_failure_ref="${2:-}"
+    local had_failure=0
+
+    for pid in "${pids_ref[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            if ! wait "$pid"; then
+                had_failure=1
+            fi
+        fi
+    done
+
+    if [[ -n "$had_failure_ref" ]]; then
+        printf -v "$had_failure_ref" "%d" "$had_failure"
+    fi
+
+    pids_ref=()
+}
+
+# --- File Processing -------------------------------------------------------
+file.expand_globs() { # file.expand_globs <paths_array> - expand glob patterns
+    local -n paths_ref="$1"
+    local -a expanded=()
+
+    local previous_nullglob previous_dotglob
+    previous_nullglob=$(shopt -p nullglob 2>/dev/null || true)
+    previous_dotglob=$(shopt -p dotglob 2>/dev/null || true)
+    shopt -s nullglob dotglob
+
+    for path in "${paths_ref[@]}"; do
+        local -a matches=()
+        while IFS= read -r match; do
+            matches+=("$match")
+        done < <(compgen -G "$path" 2>/dev/null || true)
+
+        if [[ ${#matches[@]} -eq 0 ]]; then
+            matches+=("$path")
+        fi
+
+        expanded+=("${matches[@]}")
+    done
+
+    # Restore shell options
+    if [[ -n "$previous_nullglob" ]]; then
+        eval "$previous_nullglob"
+    fi
+    if [[ -n "$previous_dotglob" ]]; then
+        eval "$previous_dotglob"
+    fi
+
+    paths_ref=("${expanded[@]}")
 }

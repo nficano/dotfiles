@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+#/ {{ description }}
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [--lock-name name]
+#/
+#/ Available options:
+#/    -h, --help         Print this help and exit
+#/    -v, --verbose      Enable verbose output
+#/        --lock-name    Override lock file name
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") --lock-name nightly-job
+
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash_helpers"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+lock_name=""
+lock_spec=""
+
+cleanup() {
+  if [[ -n "$lock_spec" ]]; then
+    lock.release "$lock_spec"
+  fi
+  script.cleanup
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --lock-name)
+        shift
+        [[ $# -gt 0 ]] || { log.error "--lock-name requires a value"; script.usage 1; }
+        lock_name="$1"
+        shift
+        continue
+        ;;
+      --lock-name=*)
+        lock_name="${1#*=}"
+        shift
+        continue
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hv' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected positional arguments"
+    script.usage 1
+  fi
+
+  if [[ -z "$lock_name" ]]; then
+    lock_name="$(basename "$0")"
+  fi
+}
+
+main() {
+  if ! lock_spec=$(lock.acquire "$lock_name" "$verbose"); then
+    exit 0
+  fi
+
+  # TODO: implement cron-safe task
+}
+
+parse_args "$@"
+main

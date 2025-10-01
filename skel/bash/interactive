@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#/ {{ description }}
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [--non-interactive] [-y]
+#/
+#/ Available options:
+#/    -h, --help            Print this help and exit
+#/    -v, --verbose         Enable verbose output
+#/        --non-interactive Disable interactive prompts
+#/    -y, --yes             Assume "yes" for confirmations
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") --non-interactive --yes
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash_helpers"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+assume_yes=0
+non_interactive=0
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --non-interactive) non_interactive=1; shift; continue ;;
+      --yes) transformed+=('-y') ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvy' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      y) assume_yes=1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected positional arguments"
+    script.usage 1
+  fi
+}
+
+main() {
+  if ! prompt.ask_yes_no 'Proceed with the interactive step?' "$assume_yes" "$non_interactive" "$verbose"; then
+    log.warn "Aborted by user"
+    return 1
+  fi
+
+  local input_value
+  input_value=$(prompt.read_required 'Enter a value' "$non_interactive" 'INPUT_VALUE')
+  (( $? != 0 )) && return 1
+
+  log.info "Captured value: $input_value"
+  # TODO: implement interactive workflow
+}
+
+parse_args "$@"
+main

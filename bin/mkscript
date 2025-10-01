@@ -1,66 +1,210 @@
 #!/usr/bin/env bash
-# Create a new shell script from a template
+#/ Create a new script from a predefined skeleton.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [-y]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/    -y, --yes       Assume "yes" for prompts
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") --yes
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)"
-BOILERPLATES_DIR="$(dirname "$SCRIPT_DIR")/boilerplates"
+source "$(dirname "$0")/../lib/bash_helpers"
 
-# Prompt for script name
-read -p "$(echo -e "${GREEN}Enter script name:${NC} ")" script_name
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
-# Remove .sh extension if provided
-script_name="${script_name%.sh}"
+verbose=0
+assume_yes=0
 
-# Check if script already exists
-if [ -f "$SCRIPT_DIR/$script_name" ]; then
-    echo -e "${RED}Error: Script '$script_name' already exists${NC}"
-    exit 1
-fi
+show_help() {
+  grep '^#/' < "${BASH_SOURCE[0]}" | cut -c4-
+  echo
+  select_template 1
+}
 
-# Show template options
-echo -e "\n${BLUE}Available templates:${NC}"
-echo -e "${YELLOW}1${NC}) No args (simple script with -h option)"
-echo -e "${YELLOW}2${NC}) Lite (basic argument parsing)"
-echo -e "${YELLOW}3${NC}) Full (comprehensive argument parsing and error handling)"
+select_template() {
+  local show_list="${1:-0}"
+  local templates=(
+    'noargs:No-args script'
+    'args:Positional arguments script'
+    'params-args:Flags, parameter, and args script'
+    'cron-safe:Cron-safe job with locking'
+    'fileproc:File or stdin batch processor'
+    'net:HTTP/API request script'
+    'parallel:Bounded parallel runner'
+    'daemon:Interval daemon loop'
+    'interactive:Interactive prompt script'
+  )
 
-# Get template choice
-while true; do
-    read -p "$(echo -e "${GREEN}Select template (1-3):${NC} ")" template_choice
-    case $template_choice in
-        1|2|3) break ;;
-        *) echo -e "${RED}Please enter 1, 2, or 3${NC}" ;;
+  if [[ "$show_list" == "1" ]]; then
+    printf 'Available skeletons:\n'
+    local index=1
+    local entry
+    for entry in "${templates[@]}"; do
+      local key="${entry%%:*}"
+      local label="${entry#*:}"
+      printf '  %d) %-13s %s\n' "$index" "$key" "$label"
+      index=$((index + 1))
+    done
+    return
+  fi
+
+  while :; do
+    local choice
+    read -r -p 'Select a template by number or name: ' choice || choice=""
+
+    if [[ -z "$choice" ]]; then
+      [[ ${templates[0]-} ]] && printf '%s' "${templates[0]%%:*}" && return
+      log.error 'Invalid selection.'
+      continue
+    fi
+
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+      local idx=$((choice - 1))
+      if (( idx >= 0 && idx < ${#templates[@]} )); then
+        printf '%s' "${templates[idx]%%:*}"
+        return
+      fi
+    else
+      for entry in "${templates[@]}"; do
+        local key="${entry%%:*}"
+        if [[ "$choice" == "$key" ]]; then
+          printf '%s' "$key"
+          return
+        fi
+      done
+    fi
+
+    log.error 'Invalid selection. Try again.'
+  done
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --yes) transformed+=('-y') ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
     esac
-done
+    shift
+  done
 
-# Set source template based on choice
-case $template_choice in
-    1) source_template="$BOILERPLATES_DIR/shell-script-no-argsboilerplate.sh" ;;
-    2) source_template="$BOILERPLATES_DIR/shell-script-lite-boilerplate.sh" ;;
-    3) source_template="$BOILERPLATES_DIR/shell-script-boilerplate.sh" ;;
-esac
+  transformed+=("$@")
+  set -- "${transformed[@]}"
 
-# Get description for lite template
-if [ "$template_choice" = "1" ]; then
-    read -p "$(echo -e "${GREEN}Enter script description:${NC} ")" description
-    # Use envsubst to replace the description placeholder
-    description_escaped=$(printf '%s\n' "$description" | sed 's/[\/&]/\\&/g')
-    sed "s/{{.*description.*}}/$description_escaped/" "$source_template" > "$SCRIPT_DIR/$script_name"
-else
-    cp "$source_template" "$SCRIPT_DIR/$script_name"
-fi
+  while getopts ':hvy' opt; do
+    case "$opt" in
+      h)
+        show_help
+        exit 0
+        ;;
+      v) verbose=1 ;;
+      y) assume_yes=1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
 
-# Make script executable
-chmod +x "$SCRIPT_DIR/$script_name"
+  shift $((OPTIND - 1))
 
-echo -e "\n${GREEN}✓ Created script: $SCRIPT_DIR/$script_name${NC}"
-echo -e "${BLUE}ℹ️  Edit the script to customize it for your needs${NC}"
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected positional arguments"
+    script.usage 1
+  fi
+}
 
-# Open in Cursor
-cursor "$SCRIPT_DIR/$script_name"
+render_script() {
+  local template="$1"
+  local target="$2"
+  local description="$3"
+
+  local skeleton_dir="$script_dir/../skel/bash"
+  local skeleton_path="$skeleton_dir/${template}"
+
+  if [[ ! -f "$skeleton_path" ]]; then
+    log.error "Skeleton not found: $template"
+    return 1
+  fi
+
+  local escaped="$description"
+  escaped="${escaped//\\/\\\\}"
+  escaped="${escaped//&/\\&}"
+  escaped="${escaped//\//\/}"
+
+  sed "s/{{ description }}/$escaped/g" "$skeleton_path" > "$target"
+}
+
+main() {
+  parse_args "$@"
+
+  # Show available templates
+  select_template 1
+  echo
+
+  local template
+  template=$(select_template)
+  log.info "Selected skeleton: $template"
+
+  local script_name
+  script_name=$(prompt.read_required 'Script name (kebab-case)')
+
+  if [[ ! $script_name =~ ^[a-z0-9]+(-[a-z0-9]+)*(.sh)?$ ]]; then
+    log.error "Script name must be kebab-case (letters, numbers, hyphen)."
+    exit 1
+  fi
+
+  local destination_dir
+  destination_dir="$script_dir"
+
+  local description
+  description=$(prompt.read_required 'Short description')
+
+  if [[ $script_name != *.sh ]]; then
+    script_name="${script_name}"
+  fi
+
+  local target_path
+  target_path="${destination_dir%/}/$script_name"
+
+  fs.mkcd "${destination_dir%/}"
+
+  if [[ -e "$target_path" ]]; then
+    if ! prompt.ask_yes_no "File exists at $target_path. Overwrite?" "$assume_yes" 0 "$verbose"; then
+      log.warn "Aborting"
+      exit 1
+    fi
+  fi
+
+  render_script "$template" "$target_path" "$description"
+
+  chmod +x -- "$target_path"
+  log.info "Created $target_path"
+
+  if [[ -n "${EDITOR:-}" ]]; then
+    log.info "Opening $target_path in $EDITOR"
+    $EDITOR "$target_path"
+  else
+    log.warn "EDITOR environment variable not set, cannot open file"
+  fi
+}
+
+main "$@"

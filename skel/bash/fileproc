@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+#/ {{ description }}
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [-n] [path1 [path2...]]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/    -n, --dry-run   Show actions without making changes
+#/
+#/ Examples:
+#/    $(basename "$0") input.txt dir/
+#/    find . -type f -name '*.txt' | $(basename "$0") --dry-run
+
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash_helpers"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+dry_run=0
+declare -a paths=()
+temp_dir=""
+
+cleanup() {
+  if [[ -n ${temp_dir:-} && -d ${temp_dir:-} ]]; then
+    rm -rf -- "$temp_dir"
+  fi
+  script.cleanup
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --dry-run) transformed+=('-n') ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvn' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      n) dry_run=1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  paths=("$@")
+}
+
+main() {
+  (( verbose )) && log.info "Verbose mode enabled"
+
+  if [[ ${#paths[@]} -eq 0 ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      paths+=("$line")
+    done
+  fi
+
+  if [[ ${#paths[@]} -eq 0 ]]; then
+    (( verbose )) && log.warn "No input paths provided"
+    return 0
+  fi
+
+  temp_dir=$(fs.mktmp dir fileproc)
+
+  file.expand_globs paths
+
+  local target
+  for target in "${paths[@]}"; do
+    if (( dry_run )); then
+      log.info "[dry-run] Would process: $target (tmp: $temp_dir)"
+    else
+      log.info "Processing: $target (tmp: $temp_dir)"
+    fi
+    # TODO: implement processing for "$target"
+  done
+}
+
+parse_args "$@"
+main

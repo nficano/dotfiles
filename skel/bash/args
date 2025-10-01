@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#/ {{ description }}
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [arg1 [arg2...]]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") -v input.txt another.txt
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash_helpers"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+declare -a args=()
+
+parse_args() {
+  args=($(script.parse_common "$@"))
+}
+
+main() {
+  (( verbose )) && log.info "Verbose mode enabled"
+
+  log.info "Arguments: ${args[*]}"
+  # TODO: implement script logic
+}
+
+parse_args "$@"
+main
