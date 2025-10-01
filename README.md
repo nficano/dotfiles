@@ -49,7 +49,7 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 
 ### Media and Asset Pipelines
 
-- `adffind` – Locates Adobe Creative Cloud fonts in CoreSync, optionally converting them to TTF or WOFF2 with FontForge/woff2 before copying them out.
+- `adobe-creative-fonts` – Locates Adobe Creative Cloud fonts in CoreSync, optionally converting them to TTF or WOFF2 with FontForge/woff2 before copying them out.
 - `dualtrack-merge` – Uses ffmpeg to turn two mono audio recordings into a single stereo file (first input becomes the left channel).
 - `exif-migrate-tags` – Copies all EXIF metadata from one file to another via `exiftool`, useful when transcoding media.
 - `mkv-to-mp4*` – Converts every `.mkv` in the current folder to `.mp4` via ffmpeg stream copy.
