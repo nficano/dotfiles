@@ -30,7 +30,7 @@ set -o nounset          # Disallow expansion of unset variables
 #set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
-source "$(dirname "$0")/../lib/bash_helpers"
+source "$(dirname "$0")/../lib/bash/utils"
 
 usage () {
     grep '^#/' < "$0" | cut -c4-

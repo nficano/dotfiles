@@ -24,7 +24,7 @@ run_setup() {
   hide_vendor_directories
   show_library_folder
   install_pipx
-  
+
   # shellcheck disable=SC2039
   echo "✨  Done in $((SECONDS))s."
   exit 0
@@ -45,7 +45,7 @@ get_dotfiles_path() {
 }
 
 get_brewfile_path() {
-  echo "$(get_dotfiles_path)/Brewfile"
+  echo "$(get_dotfiles_path)/setup/macos/Brewfile"
 }
 
 is_duti_installed() {
@@ -184,7 +184,7 @@ setup_default_file_associations() {
 set_wallpaper() {
   log "Setting wallpaper ..."
 #   osascript -e "
-# tell application \"System Events\" 
+# tell application \"System Events\"
 #     tell every desktop
 #         set picture to \"$HOME/github/dotfiles/os/darwin/wallpaper/The Cliffs.heic\"
 #     end tell

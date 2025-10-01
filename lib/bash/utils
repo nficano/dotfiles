@@ -211,14 +211,34 @@ brew.prefix() {
 # --- Conditional runners ---------------------------------------------------
 when.cmd() { # when.cmd <command> <then...>
     local c="$1"; shift || true
-    command -v "$c" >/dev/null 2>&1 && eval "$*"
+    command -v "$c" >/dev/null 2>&1 || return 1
+    if (($# == 0)); then
+        return 0
+    elif (($# == 1)); then
+        eval "$1"
+    else
+        "$@"
+    fi
 }
 when.not_cmd() { # when.not_cmd <command> <then...>
     local c="$1"; shift || true
-    command -v "$c" >/dev/null 2>&1 || eval "$*"
+    command -v "$c" >/dev/null 2>&1 && return 1
+    if (($# == 0)); then
+        return 0
+    elif (($# == 1)); then
+        eval "$1"
+    else
+        "$@"
+    fi
 }
-when.darwin() { eval "os.platform.is_darwin && $*"; }
-when.linux()  { eval "os.platform.is_linux  && $*"; }
+when.darwin() {
+    os.platform.is_darwin || return 1
+    "$@"
+}
+when.linux() {
+    os.platform.is_linux || return 1
+    "$@"
+}
 
 # --- PATH helpers ----------------------------------------------------------
 sys.path.append() {

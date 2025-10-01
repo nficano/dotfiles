@@ -1,7 +1,7 @@
 DOTFILES := $(PWD)
 
 install:
-	bash $(DOTFILES)/macsetup
+	bash $(DOTFILES)/setup/macos/mac-provision
 
 deploy-patch:
 	bumpversion patch
@@ -19,7 +19,7 @@ deploy-major:
 	git push --tags
 
 create-brewfile:
-	brew bundle dump --force
+	brew bundle dump --force --file=$(DOTFILES)/setup/macos/Brewfile
 
 setup-tree:
 	mkdir -p ${HOME}/.virtualenvs
@@ -31,7 +31,7 @@ setup-tree:
 	rm -f ${HOME}/.bash_profile
 	rm -f ${HOME}/.inputrc
 	rm -f ${HOME}/.bin
-	ln -fsn $(DOTFILES)/bash_profile ${HOME}/.bash_profile
+	ln -fsn $(DOTFILES)/shell/bash/profile ${HOME}/.bash_profile
 	ln -fsn $(DOTFILES)/home/agrc ${HOME}/.agrc
 	ln -fsn $(DOTFILES)/home/dircolors ${HOME}/.dircolors
 	ln -fsn $(DOTFILES)/home/direnvrc ${HOME}/.direnvrc

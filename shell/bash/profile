@@ -5,9 +5,22 @@ case $- in
 *i*) ;;
 *) return ;; esac
 
+# Resolve dotfiles root so sourcing works via symlinks
+if [[ -z "${DOTFILES_ROOT:-}" ]]; then
+  __dotfiles_source="${BASH_SOURCE[0]}"
+  while [[ -h "$__dotfiles_source" ]]; do
+    __dotfiles_dir="$(cd -P "$(dirname "$__dotfiles_source")" && pwd)"
+    __dotfiles_source="$(readlink "$__dotfiles_source")"
+    [[ $__dotfiles_source != /* ]] && __dotfiles_source="${__dotfiles_dir}/${__dotfiles_source}"
+  done
+  DOTFILES_ROOT="$(cd -P "$(dirname "$__dotfiles_source")" && pwd)"
+  export DOTFILES_ROOT
+  unset __dotfiles_dir __dotfiles_source
+fi
+
 # Source helper functions
 # shellcheck source=/dev/null
-source "lib/.bash_helpers"
+source "${DOTFILES_ROOT}/../../lib/bash/utils"
 
 os.setenv "TERM" "xterm-256color"
 os.setenv "GPG_TTY" "$(tty)"
