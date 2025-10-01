@@ -12,7 +12,7 @@
 #/    $(basename "$0") 'user:*'
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-. "$HERE/../lib/rdb-common"
+. "$HERE/../lib/envdb"
 
 usage () {
     grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"

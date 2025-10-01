@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shared helpers for key/value "database" for environment stuff.
+
+# Config
+: "${REDISQL_DB:=${HOME}/.redisql/db.sqlite}"
+SQLITE_BIN=${SQLITE_BIN:-sqlite3}
+
+err() { printf "%s\n" "$*" >&2; }
+die() { err "$*"; exit 1; }
+
+require_sqlite() {
+  command -v "$SQLITE_BIN" >/dev/null 2>&1 || die "sqlite3 not found; install SQLite or set SQLITE_BIN"
+}
+
+ensure_db_dir() {
+  mkdir -p "$(dirname -- "$REDISQL_DB")"
+}
+
+sql_run() {
+  # Usage: sql_run <<'SQL' ... SQL
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB"
+}
+
+sql_value() {
+  # Execute SQL passed as STDIN and return first row only
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" | head -n 1 || true
+}
+
+sql_escape() {
+  # Escape single quotes for use in SQL string literals
+  local s=${1-}
+  printf "%s" "$s" | sed "s/'/''/g"
+}
+
+init_db() {
+  ensure_db_dir
+  require_sqlite
+  # Initialize schema and enable WAL for concurrency
+  "$SQLITE_BIN" -batch -noheader "$REDISQL_DB" <<'SQL'
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS keys (
+  key TEXT PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('string','list','hash','set','zset'))
+);
+CREATE TABLE IF NOT EXISTS kv (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  FOREIGN KEY (key) REFERENCES keys(key) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS list_entries (
+  key TEXT NOT NULL,
+  idx INTEGER NOT NULL,
+  value TEXT,
+  PRIMARY KEY (key, idx),
+  FOREIGN KEY (key) REFERENCES keys(key) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS hash_entries (
+  key TEXT NOT NULL,
+  field TEXT NOT NULL,
+  value TEXT,
+  PRIMARY KEY (key, field),
+  FOREIGN KEY (key) REFERENCES keys(key) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS set_members (
+  key TEXT NOT NULL,
+  member TEXT NOT NULL,
+  PRIMARY KEY (key, member),
+  FOREIGN KEY (key) REFERENCES keys(key) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS zset_entries (
+  key TEXT NOT NULL,
+  member TEXT NOT NULL,
+  score REAL NOT NULL,
+  PRIMARY KEY (key, member),
+  FOREIGN KEY (key) REFERENCES keys(key) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_list_key_idx ON list_entries(key, idx);
+CREATE INDEX IF NOT EXISTS idx_hash_key ON hash_entries(key);
+CREATE INDEX IF NOT EXISTS idx_set_key ON set_members(key);
+CREATE INDEX IF NOT EXISTS idx_zset_key_score ON zset_entries(key, score, member);
+SQL
+}
+
+wrongtype() {
+  die "WRONGTYPE Operation against a key holding the wrong kind of value"
+}
+
+key_type() {
+  local k; k=$(sql_escape "$1")
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "SELECT type FROM keys WHERE key='${k}' LIMIT 1;" | head -n1 || true
+}
+
+key_exists() {
+  local k; k=$(sql_escape "$1")
+  local c
+  c=$("$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "SELECT COUNT(1) FROM keys WHERE key='${k}';")
+  [ "${c:-0}" -gt 0 ]
+}
+
+ensure_type_or_new() {
+  # ensure_type_or_new key expected_type
+  local key="$1" expected="$2"
+  local t; t=$(key_type "$key" || true)
+  if [ -z "${t:-}" ]; then
+    local k; k=$(sql_escape "$key")
+    "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+      "INSERT OR REPLACE INTO keys(key, type) VALUES ('${k}','${expected}');" >/dev/null
+  elif [ "$t" != "$expected" ]; then
+    wrongtype
+  fi
+}
+
+replace_with_string() {
+  # replace key with string value (overwrites any existing type)
+  local key="$1" val="$2"
+  local k v
+  k=$(sql_escape "$key")
+  v=$(sql_escape "$val")
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" <<SQL
+BEGIN;
+DELETE FROM keys WHERE key='${k}';
+INSERT INTO keys(key, type) VALUES ('${k}','string');
+INSERT OR REPLACE INTO kv(key, value) VALUES ('${k}','${v}');
+COMMIT;
+SQL
+}
+
+delete_key() {
+  local key="$1" k
+  k=$(sql_escape "$key")
+  "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
+    "DELETE FROM keys WHERE key='${k}';" >/dev/null
+}
+
+print_ok() { echo OK; }
