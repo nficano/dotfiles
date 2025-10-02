@@ -1,0 +1,250 @@
+#!/usr/bin/env bash
+#/ Generates deterministic release names
+#/
+#/ Usage: $(basename "$0") [-h] [-c]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -c, --checksum  A key to make names deterministic.
+#/
+#/ Examples:
+#/    $(basename "$0") --help
+#/    $(basename "$0") --checksum 59d4642
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+checksum=""
+declare -a args=()
+
+readonly RELEASE_NAME_ADJECTIVES=(
+  "Airy" "Bouncy" "Bubbly" "Cheeky" "Chipper" "Clumsy" "Dizzy" "Frisky"
+  "Giddy" "Goofy" "Jazzy" "Jolly" "Jumpy" "Kooky" "Loopy" "Peppy"
+  "Perky" "Quirky" "Rowdy" "Snappy" "Tipsy" "Upbeat" "Waggish"
+  "Whimsical" "Witty" "Zany" "Zippy" "Nifty" "Pranky" "Larky"
+  "Chirpy" "Breezy" "Chummy" "Playful" "Impish"
+
+  # Colors & Visuals
+  "Amber" "Azure" "Brassy" "Bronzed" "Cerulean" "Coral" "Crimson"
+  "Dusky" "Emerald" "Frosty" "Golden" "Hazel" "Indigo" "Jade"
+  "Lilac" "Mauve" "Mossy" "Ochre" "Quartz" "Radiant" "Ruby"
+  "Rustic" "Saffron" "Sapphire" "Scarlet" "Silken" "Silver"
+  "Topaz" "Turquoise" "Velvety" "Verdant" "Viridian" "Willowy"
+
+  # Brave & Bold
+  "Bold" "Brash" "Brazen" "Brave" "Edgy" "Feisty" "Gallant"
+  "Gritty" "Gutsy" "Hardy" "Heroic" "Plucky" "Resilient"
+  "Spunky" "Stout" "Tenacious" "Valiant" "Vigorous" "Zealous"
+  "Wild" "Ferocious" "Staunch" "Rebellious"
+
+  # Clever & Quirky
+  "Artful" "Astute" "Brainy" "Brilliant" "Canny" "Clever"
+  "Crafty" "Curious" "Cunning" "Inventive" "Keen" "Lucid"
+  "Perceptive" "Quick" "Roguish" "Savvy" "Scheming" "Shrewd"
+  "Sly" "Smarty" "Snarky" "Tricky" "Wily" "Wise" "Oddball"
+  "Nutty" "Original" "Offbeat" "Unusual"
+
+  # Chill & Dreamy
+  "Blissful" "Calm" "Chill" "Cloudy" "Cozy" "Dreamy" "Gentle"
+  "Hazy" "Mellow" "Mystic" "Peaceful" "Quiet" "Relaxed" "Serene"
+  "Sleepy" "Smooth" "Soft" "Soothing" "Stellar" "Still"
+  "Sublime" "Tender" "Tranquil" "Twinkly" "Wistful" "Zen"
+  "Cosmic" "Astral" "Galactic"
+
+  # Funny & Lighthearted
+  "Absurd" "Bonkers" "Campy" "Crazy" "Dopey" "Droll" "Farcical"
+  "Fluffy" "Foolish" "Goony" "Groovy" "Hokey" "Jokey" "Nutty"
+  "Odd" "Ridiculous" "Silly" "Slapstick" "Spoofy" "Surreal"
+  "Wacky" "Zonky" "Loony" "Mocking" "Punny"
+
+  # Nature & Elements
+  "Arctic" "Balmy" "Breezy" "Crisp" "Dewy" "Dusty" "Earthy"
+  "Fiery" "Foggy" "Glacial" "Icy" "Lush" "Moody" "Mossy"
+  "Oceanic" "Rainy" "Rocky" "Salty" "Sandy" "Shadowy" "Smoky"
+  "Snowy" "Stormy" "Sunny" "Volcanic" "Watery" "Windy"
+  "Wintry" "Rustling" "Blooming" "Blazing" "Leafy" "Petaled"
+  "Seedy" "Floral"
+
+  # Elegant & Stylish
+  "Alluring" "Chic" "Classy" "Dapper" "Elegant" "Fancy"
+  "Flashy" "Glam" "Gorgeous" "Grand" "Majestic" "Opulent"
+  "Ornate" "Polished" "Posh" "Regal" "Sassy" "Sleek" "Smart"
+  "Snazzy" "Splendid" "Stunning" "Stylish" "Suave" "Swanky"
+  "Trendy" "Urbane" "Vogue" "Winsome" "Graceful" "Magnetic"
+  "Showy"
+
+  # Weird & Fantastical
+  "Arcane" "Bizarre" "Cryptic" "Eerie" "Enchanted" "Fae"
+  "Freaky" "Ghostly" "Gothic" "Grim" "Haunted" "Magical"
+  "Mythic" "Occult" "Phantom" "Runic" "Sorcerous" "Spectral"
+  "Spooky" "Surreal" "Uncanny" "Visionary" "Wyrd" "Yonder"
+  "Dreamlike" "Fantastic" "Legendary" "Mystical"
+)
+
+readonly RELEASE_NAME_NOUNS=(
+  "Warthog" "Hedgehog" "Badger" "Drake" "Eft" "Fawn" "Gibbon" "Heron" "Ibex"
+  "Koala" "Lynx" "Meerkat" "Narwhal" "Ocelot" "Pangolin" "Quokka" "Raccoon"
+  "Sloth" "Tapir" "Uakari" "Vole" "Wombat" "Yak" "Zebra" "Beaver" "Dormouse"
+  "Echidna" "Fennec" "Gopher" "Hamster" "Iguana" "Jaguar" "Kangaroo" "Lemur"
+  "Mongoose" "Opossum" "Panda" "Quail" "Squirrel" "Toucan" "Urial" "Viper"
+  "Wallaby" "Bison" "Dingo" "Eagle" "Falcon" "Gazelle" "Hawk" "Impala" "Lion"
+  "Marmot" "Newt" "Otter" "Puma" "Raven" "Stoat" "Tiger" "Vulture" "Wolf"
+  "Albatross" "Armadillo" "Antelope" "Baboon" "Barnacle" "Barracuda" "Bat"
+  "Beetle" "Bongo" "Bonobo" "Buffalo" "Camel" "Caracal" "Catfish" "Cobra"
+  "Condor" "Coral" "Coyote" "Crane" "Cricket" "Crocodile" "Crow" "Dragonfly"
+  "Dolphin" "Donkey" "Dove" "Duckbill" "Dunlin" "Earthworm" "Eel" "Egret"
+  "Elephant" "Emu" "Ferret" "Finch" "Firefly" "Flamingo" "Flounder" "Fox" "Frog"
+  "Galago" "Gecko" "Gerbil" "Goldfish" "Goose" "Grasshopper" "Grouse" "Guppy"
+  "Haddock" "Hare" "Harrier" "Honeybee" "Hornet" "Horse" "Hummingbird" "Hyena"
+  "Ibis" "Jackal" "Jay" "Jellyfish" "Jerboa" "Kingfisher" "Kiwi" "Kookaburra"
+  "Lamprey" "Lapwing" "Lark" "Leech" "Leopard" "Lizard" "Lobster" "Locust"
+  "Macaque" "Macaw" "Magpie" "Manatee" "Mandrill" "Markhor" "Mayfly" "Mink"
+  "Mole" "Monkey" "Moose" "Mosquito" "Moth" "Mule" "Myna" "Nighthawk"
+  "Nightingale" "Nilgai" "Octopus" "Okapi" "Orangutan" "Orca" "Oryx" "Ostrich"
+  "Owl" "Ox" "Oyster" "Parakeet" "Parrot" "Partridge" "Peacock" "Pelican"
+  "Penguin" "Perch" "Pheasant" "Pigeon" "Platypus" "Porcupine" "Porpoise"
+  "Possum" "Prawn" "Puffin" "Python" "Quagga" "Quetzal" "Quoll" "Rabbit"
+  "Rattlesnake" "Reindeer" "Rooster" "Salamander" "Sandpiper" "Sardine"
+  "Scorpion" "Seahorse" "Seal" "Serval" "Shark" "Sheep" "Shrew" "Shrike"
+  "Skink" "Skunk" "Snail" "Snake" "Spider" "Spoonbill" "Squid" "Starfish" "Stork"
+  "Sturgeon" "Sunfish" "Swallow" "Swan" "Swift" "Swordfish" "Tamarin" "Tanager"
+  "Tarantula" "Termite" "Tern" "Thrush" "Toad" "Tortoise" "Trout" "Turkey"
+  "Urchin" "Vicuna" "Vireo" "Walrus" "Warbler" "Weasel" "Whale" "Whippet"
+  "Wildcat" "Wigeon" "Wildebeest" "Wolverine" "Woodpecker" "Worm" "Wren"
+  "Xerus" "Zorilla" "Zebu" "Agouti" "Anole" "Auk" "Bandicoot" "Barbet" "Bittern"
+  "Blackbird" "Bluejay" "Booby" "Bull" "Caribou" "Carp" "Civet" "Clam" "Coati"
+  "Cockroach" "Collie" "Cormorant" "Cottontail" "Cougar" "Cow" "CraneFly"
+  "Crayfish" "Cuscus" "Darter" "Deer" "Dhole" "Dikdik" "Dogfish" "Dugong"
+  "Eider" "Elk" "Falconet" "Fangtooth" "Flatfish" "Flycatcher" "Frigatebird"
+  "Frogmouth" "Gaur" "Glowworm" "Gnat" "Gnu" "Goat" "Goby" "Gull" "Hagfish"
+  "Halibut" "Hammerhead" "HawkMoth" "Hellbender" "Hen" "Heron" "Herring" "Hoopoe"
+  "Horsefly" "Housefly" "Hyaena" "Jackdaw" "Jacana" "Jaybird" "Jird" "Katydid"
+  "Kea" "KingCobra" "Kite" "Koel" "Krill" "Ladybird" "Lapdog" "Lemming" "Limpet"
+  "Lionfish" "Linnet" "Loon" "Lorikeet" "Mallard" "Mandarinfish" "MarshHarrier"
+  "Mealybug" "Mollusk" "Monitor" "Muskox" "MuskDeer" "Nandu" "Nautilus" "Nene"
+  "Nightjar" "Nutria" "Nyala" "Oilbird" "Olm" "Onager" "Oriole" "Osprey"
+  "Pangasius" "Panther" "Papillon" "Peregrine" "Petrel" "Pike" "Pika" "Plover"
+  "Polecat" "Pony" "Potoroo" "Pufferfish" "Rat" "Ratfish" "Redshank" "Rhea"
+  "Robin" "Rook" "Sable" "Saola" "Sawfish" "SecretaryBird" "Serow" "Shoebill"
+  "Shrimp" "Silkworm" "Silverfish" "Slug" "Snook" "Songbird" "Springbok"
+  "Squab" "Squill" "Starling" "StickInsect" "Stilt" "Stonechat" "Suricate"
+  "Swiftlet" "Swordtail" "Tamandua" "Tapeworm" "Tarsier" "Tench" "Terrier"
+  "Thrasher" "Thrip" "Titmice" "Trogon" "Tropicbird" "Tuna" "Turaco" "Turbot"
+  "Urubu" "Uromastyx" "Vanga" "Wagtail" "Wallaroo" "Waxwing" "Weevil" "Whimbrel"
+  "Whydah" "WildBoar" "Wolfhound" "Wrasse" "Xenopus" "Yabby" "Yellowtail"
+  "Yellowthroat" "Zander" "Zokor"
+ )
+
+ generate_release_name() {
+    # Use git SHA to generate deterministic release names
+    local sha_hex="${GIT_COMMIT}"
+
+    # Handle case where git info is not available
+    if [[ "$sha_hex" == "unknown" ]]; then
+        # Use current timestamp as fallback
+        sha_hex="$(printf "%x" $(date +%s))"
+    fi
+
+    # Ensure we have at least 4 hex characters
+    while [[ ${#sha_hex} -lt 4 ]]; do
+        sha_hex="${sha_hex}0"
+    done
+
+    # Convert hex to decimal for indexing
+    local adj_index=$((0x${sha_hex:0:2} % ${#RELEASE_NAME_ADJECTIVES[@]}))
+    local adjective="${RELEASE_NAME_ADJECTIVES[$adj_index]}"
+
+    # Get first letter of adjective
+    local first_letter="${adjective:0:1}"
+
+    # Find nouns that start with the same letter
+    local matching_nouns=()
+    for noun in "${RELEASE_NAME_NOUNS[@]}"; do
+        if [[ "${noun:0:1}" == "$first_letter" ]]; then
+            matching_nouns+=("$noun")
+        fi
+    done
+
+    # If no matching nouns, use original selection
+    if [[ ${#matching_nouns[@]} -eq 0 ]]; then
+        local noun_index=$((0x${sha_hex:2:2} % ${#RELEASE_NAME_NOUNS[@]}))
+        local noun="${RELEASE_NAME_NOUNS[$noun_index]}"
+    else
+        # Select from matching nouns using different part of hash
+        local noun_index=$((0x${sha_hex:2:2} % ${#matching_nouns[@]}))
+        local noun="${matching_nouns[$noun_index]}"
+    fi
+
+    echo "${adjective}-${noun}" | tr '[:upper:]' '[:lower:]'
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --checksum)
+        [[ $# -gt 1 ]] || { log.error "--checksum requires a value"; script.usage 1; }
+        transformed+=('-c' "$2")
+        shift
+        ;;
+      --checksum=*)
+        transformed+=('-c' "${1#*=}")
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hc:' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      c) checksum="$OPTARG" ;;
+      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  args=("$@")
+}
+
+main() {
+  # Determine checksum/git sha to generate the release name
+  local sha
+  if [[ -n "$checksum" ]]; then
+    sha="$checksum"
+  else
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      sha="$(git rev-parse HEAD 2>/dev/null)" || { log.error "Failed to read latest git commit hash"; exit 1; }
+    else
+      log.error "--checksum required when not inside a git repository"
+      exit 1
+    fi
+  fi
+
+  GIT_COMMIT="$sha"
+  generate_release_name
+}
+
+parse_args "$@"
+main
