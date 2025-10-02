@@ -168,7 +168,7 @@ alias hh="hstr"
 when.darwin alias o="open ./"
 
 # Create alias to cd to current working Finder directory.
-when.darwin alias f='cd "$(eval fpwd)" || exit 0'
+when.darwin alias f='cd "$(finder-front-path)" || exit 0'
 alias.setup_ls
 
 when.cmd rlwrap alias node="env NODE_NO_READLINE=1 rlwrap node"
