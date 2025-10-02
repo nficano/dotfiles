@@ -1,0 +1,22 @@
+#!/bin/sh
+#/ Clear all messages from macOS Notification Center.
+#/
+#/ Usage:
+#/    macos-notifications-clear
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace         # Make sure any error trap is inherited
+#set -o pipefail         # Use last non-zero exit code in a pipeline
+#set -o xtrace          # Trace the execution of the script (debug)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 0
+}
+
+if [ "$#" -gt 0 ]; then
+    usage
+fi
+killall NotificationCenter

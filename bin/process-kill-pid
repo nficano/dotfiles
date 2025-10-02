@@ -1,0 +1,27 @@
+#!/bin/sh
+#/ Send SIGTERM to a process id with a helpful wrapper around sudo kill.
+#/
+#/ Usage:
+#/    process-kill-pid <pid>
+#/
+
+set -o errexit # Exit on most errors (see the manual)
+set -o nounset # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage() {
+    grep '^#/' <"$0" | cut -c4-
+    exit 0
+}
+
+if [ "$#" -ne 1 ]; then
+    usage
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    usage
+fi
+
+sudo kill -TERM "$1"

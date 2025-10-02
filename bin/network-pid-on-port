@@ -1,0 +1,12 @@
+#!/bin/sh
+#/ Show processes listening on a specific TCP port via lsof.
+#/
+#/ Usage:
+#/    network-pid-on-port <port>
+
+if [ "$#" -ne 1 ]; then
+    echo "Usage: network-pid-on-port <port>" >&2
+    exit 1
+fi
+
+exec lsof -nP -iTCP:"$1" -sTCP:LISTEN

@@ -1,0 +1,23 @@
+#!/bin/sh
+#/ Restart coreaudiod when macOS audio stops responding.
+#/
+#/ Usage:
+#/    macos-audio-reset
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 0
+}
+
+if [ "$#" -gt 0 ]; then
+    usage
+fi
+
+sudo kill -9 `ps -A | grep -Fa 'sbin/coreaudiod' | head -n 1 | awk '{print $1}'`

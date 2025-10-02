@@ -1,0 +1,21 @@
+#!/usr/bin/python3
+#/ Legacy helper to strip Noun Project attribution text from svg files matching noun*.svg.
+#/
+#/ Usage: svg-noun-legacy
+import glob
+import os
+import re
+
+
+def main():
+    for filename in glob.glob(f"{os.getcwd()}/noun*.svg"):
+        svg = ""
+        with open(filename, "r") as fh:
+            svg = fh.read()
+        svg = re.sub(r"<text.+</text>", "", svg, flags=re.DOTALL)
+        with open(filename, "w") as fh:
+            fh.write(svg)
+
+
+if __name__ == "__main__":
+    main()

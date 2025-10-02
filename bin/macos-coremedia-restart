@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#/ Restart macOS media-related services (Dock, WindowServer, audio helpers).
+#/
+#/ Usage: macos-coremedia-restart
+
+if [ "$#" -gt 0 ]; then
+  echo "Usage: macos-coremedia-restart" >&2
+  exit 1
+fi
+
+sudo killall -9 coreaudiod VDCAssistant UVCAssistant WindowServer Dock SystemUIServer

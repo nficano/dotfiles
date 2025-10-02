@@ -1,0 +1,32 @@
+#!/bin/sh
+#/ Show the symbolic and octal permissions for a file or directory.
+#/
+#/ Usage:
+#/    file-permissions /path/to/file/or/dir
+#/
+#/ Examples:
+#/    file-permissions /usr/bin    # drwxr-xr-x 755 /usr/bin
+
+set -o errexit
+set -o nounset
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 0
+}
+
+if [ "$#" -ne 1 ]; then
+    usage
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    usage
+fi
+
+path=$1
+
+if stat -c '%A %a %n' "$path" 2>/dev/null; then
+    exit 0
+fi
+
+stat -f '%Sp %OLp %N' "$path"

@@ -1,0 +1,5 @@
+#!/bin/sh
+#/ Remux all .mp4 files in the working directory into .mov files.
+#/
+#/ Usage: mp4-remux-mov
+for f in *.mp4; do ffmpeg -i "$f" -c copy "${f%.mp4}.mov"; done

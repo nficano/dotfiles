@@ -1,0 +1,8 @@
+#!/bin/sh
+#/ Fetch and print only the HTTP response headers for a URL.
+#/
+#/ Usage: http-show-headers <url>
+curl -sv "$@" 2>&1 >/dev/null |
+	grep -v "^\*" |
+	grep -v "^}" |
+	cut -c3-

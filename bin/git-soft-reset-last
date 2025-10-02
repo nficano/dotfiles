@@ -1,0 +1,19 @@
+#!/bin/sh
+#/ Undo last commit but keep changes.
+#/
+#/ USAGE:
+#/   git-soft-reset-last
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o xtrace          # Trace the execution of the script (debug)
+
+usage () {
+  grep '^#/' < "$0" | cut -c4-
+  exit 1
+}
+[ $# -ne 0 ] && usage
+
+git reset --soft HEAD~1
+git status

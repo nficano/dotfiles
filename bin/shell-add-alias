@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#/ Append a new Bash alias definition to ~/.bash_profile.
+#/
+#/ Usage: shell-add-alias -n <name> -c <command>
+#
+# Options:
+#   -h          Show help
+#   -n NAME     The name of the alias
+#   -c COMMAND  The command for the alias
+
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+usage() {
+    grep '^# ' "$0" | cut -c3-
+    exit 1
+}
+
+alias_name=""
+alias_command=""
+
+while getopts "hn:c:" opt; do
+    case "$opt" in
+        h) usage ;;
+        n) alias_name="$OPTARG" ;;
+        c) alias_command="$OPTARG" ;;
+        *) usage ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# Ensure required parameters are provided
+if [ -z "$alias_name" ] || [ -z "$alias_command" ]; then
+    echo -e "${RED}Error:${NC} Missing required parameters. See -h for usage instructions."
+    exit 1
+fi
+
+# Path to bash_profile
+bash_profile="$HOME/.bash_profile"
+
+# Check if bash_profile exists
+if [ ! -f "$bash_profile" ]; then
+    echo -e "${RED}Error:${NC} $bash_profile does not exist"
+    exit 1
+fi
+
+# Find the last alias in the file and add the new alias after it
+if grep -q "^alias " "$bash_profile"; then
+    # Get the line number of the last alias
+    last_alias_line=$(grep -n "^alias " "$bash_profile" | tail -n 1 | cut -d: -f1)
+
+    echo -e "${YELLOW}Debug: Adding alias after line ${last_alias_line} in ${bash_profile}${NC}"
+
+    # Use awk to insert the new alias after the last alias
+    awk -v line="$last_alias_line" -v new_alias="alias ${alias_name}=\"${alias_command}\"" \
+        'NR == line {print; print new_alias; next} {print}' "$bash_profile" > "${bash_profile}.tmp" && \
+    mv "${bash_profile}.tmp" "$bash_profile"
+else
+    # If no aliases exist, append to the end of the file
+    echo "alias ${alias_name}=\"${alias_command}\"" >> "$bash_profile"
+fi
+
+echo -e "${GREEN}✓ Alias '${YELLOW}${alias_name}${GREEN}' added successfully to $bash_profile${NC}"
+echo -e "${GREEN}→ Run '${YELLOW}source ~/.bash_profile${GREEN}' to apply the changes${NC}"

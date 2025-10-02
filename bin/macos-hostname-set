@@ -1,0 +1,30 @@
+#!/bin/sh
+#/ Update the macOS LocalHostName, ComputerName, HostName, and NetBIOS name.
+#/
+#/ Usage:
+#/    macos-hostname-set <new-hostname>
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 0
+}
+
+if [ "$#" -ne 1 ]; then
+    usage
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    usage
+fi
+new_hostname="$*"
+for key in LocalHostName ComputerName HostName; do sudo scutil --set $key "$new_hostname"; done
+sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string "$new_hostname"
+dscacheutil -flushcache
+echo "Your hostname is now: $new_hostname"

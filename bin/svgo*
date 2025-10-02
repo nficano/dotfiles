@@ -1,3 +1,0 @@
-#! /usr/bin/env bash
-# Optimize all SVG files in the current directory.
-svgo --multipass -i "*.svg" >/dev/null 2>&1

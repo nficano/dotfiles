@@ -1,0 +1,5 @@
+#!/bin/sh
+#/ Remux all .mkv files in the working directory into .mp4 files.
+#/
+#/ Usage: mkv-remux-mp4
+for f in *.mkv; do ffmpeg -i "$f" -c copy "${f%.mkv}.mp4"; done

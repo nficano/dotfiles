@@ -1,0 +1,49 @@
+#!/bin/bash
+#/ Show file metadata.
+#/
+#/ 1. Only tested on Debian and MacOS.
+#/
+#/ Usage:
+#/    file-metadata <file>
+#/ Examples:
+#/    file-metadata /etc/hosts
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 0
+}
+
+err () {
+    echo -e "\e[1;31m$1\e[0m"
+}
+
+os () {
+    uname -o
+}
+
+is_installed () {
+    command -v "$1" >/dev/null
+}
+
+if [ "$#" -ne 1 ]; then
+    usage
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    usage
+fi
+
+if is_installed "mdls"; then
+    exec mdls "$1"
+elif is_installed "mediainfo"; then
+    exec mediainfo "$1"
+else
+    err "No known show file metadata command for $(os)"
+fi
+

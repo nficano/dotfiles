@@ -1,0 +1,5 @@
+#!/usr/bin/env osascript
+#/ Print the path of the frontmost Finder window.
+#/
+#/ Usage: finder-front-path
+tell app "Finder" to POSIX path of (insertion location as alias)

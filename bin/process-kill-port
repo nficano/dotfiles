@@ -1,0 +1,60 @@
+#!/bin/bash
+#/ Kill the process currently listening on the given TCP port.
+#/
+#/ NAME
+#/      {{ basename }} -- Kill a process running on a specified port.
+#/
+#/ SYNOPSIS
+#/      {{ basename }} [-h] [--help]
+#/      {{ basename }} <port>
+#/
+#/ DESCRIPTION
+#/      This script finds and kills a process that is currently listening on
+#/      the specified TCP port. It is useful in situations where you need to
+#/      free up a port that is being used by an unresponsive or unwanted process.
+#/      The script takes a single argument, which is the port number.
+#/
+#/      Arguments:
+#/      <port>  The port number to search for a listening process.
+#/      --help  Display this help message and exit.
+
+set -o errexit # Exit on most errors (see the manual)
+set -o nounset # Disallow expansion of unset variables
+
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage() {
+  grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
+  exit 0
+}
+
+if [ "$#" -ne 1 ]; then
+  usage
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  usage
+fi
+
+PORT="$1"
+
+# Find the PID of the process using the specified port
+PID=$(lsof -t -iTCP:"$PORT" -sTCP:LISTEN)
+
+# Check if a process was found
+if [ -z "$PID" ]; then
+  echo "No process found running on port $PORT"
+  exit 1
+fi
+
+# Kill the process
+kill -9 "$PID"
+
+# Confirm the process was killed
+if [ $? -eq 0 ]; then
+  echo "Process on port $PORT has been killed."
+else
+  echo "Failed to kill the process on port $PORT."
+fi

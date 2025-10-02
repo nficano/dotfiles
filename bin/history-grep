@@ -1,0 +1,23 @@
+#!/bin/sh
+#/ Search shell history with a regular expression and de-duplicate matches.
+#/
+#/ Usage: history-grep <pattern>
+
+set -o errexit
+set -o nounset
+
+usage() {
+    grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
+    exit 0
+}
+
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    usage
+fi
+
+bash_history=$(cat "$HOME/.bash_history")
+echo "$bash_history" | grep -a --color=always -E "$1" | awk '!x[$0]++'

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#/ Delete one or more keys from the envdb store.
+#/
+#/ Usage: kv-delete <key> [<key> ...]
+#/
+#/ Options:
+#/    -h, --help      Print this help and exit
+#/
+#/ Examples:
+#/    kv-delete --help
+#/    kv-delete key1 key2
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/envdb"
+
+usage() {
+  grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+  exit 0
+}
+
+main() {
+  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+  fi
+
+  [ $# -ge 1 ] || { usage; exit 2; }
+  init_db
+  local count=0
+  for key in "$@"; do
+    if key_exists "$key"; then
+      delete_key "$key"
+      count=$((count+1))
+    fi
+  done
+  echo "$count"
+}
+
+main "$@"

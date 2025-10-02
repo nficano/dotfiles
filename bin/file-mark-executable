@@ -1,0 +1,5 @@
+#!/bin/sh
+#/ Mark one or more files as executable via chmod +x.
+#/
+#/ Usage: file-mark-executable <path> [<path> ...]
+exec chmod +x "$@"

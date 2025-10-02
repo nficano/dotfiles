@@ -1,0 +1,6 @@
+#!/bin/sh
+#/ Show desktop icons in Finder.
+#/
+#/ Usage: finder-show-desktop
+defaults write com.apple.finder CreateDesktop -bool true
+killall Finder

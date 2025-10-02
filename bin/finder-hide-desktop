@@ -1,0 +1,6 @@
+#!/bin/sh
+#/ Hide desktop icons in Finder.
+#/
+#/ Usage: finder-hide-desktop
+defaults write com.apple.finder CreateDesktop -bool false
+killall Finder

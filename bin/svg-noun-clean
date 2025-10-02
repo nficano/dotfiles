@@ -1,0 +1,32 @@
+#! /usr/bin/env python3
+#/ Strip Noun Project attribution blocks from SVG files and re-run svgo optimisation.
+#/
+#/ Usage: svg-noun-clean <svg> [<svg> ...]
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+
+XPATH = ".//{http://www.w3.org/2000/svg}text"
+
+
+def svgo(file):
+    subprocess.run(["/opt/homebrew/bin/svgo", " --multipass", "-i", file])
+
+
+def find_attribution(root):
+    for elem in root.findall(XPATH):
+        yield elem
+
+
+def rewrite(path):
+    tree = ET.parse(path)
+    root = tree.getroot()
+    for elem in find_attribution(root):
+        root.remove(elem)
+    tree.write(path)
+
+
+if __name__ == "__main__":
+    for path in sys.argv[1:]:
+        rewrite(path)
+        svgo(path)

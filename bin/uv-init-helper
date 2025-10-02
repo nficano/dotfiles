@@ -1,0 +1,37 @@
+#!/bin/bash
+#/ Wrap the uv CLI, creating a reusable direnv-managed venv when running `uv init`.
+#/
+#/ Usage: uv-init-helper <uv-args...>
+
+# Find the *real* uv binary (not this wrapper)
+REAL_UV=$(which -a uv | grep -v "$0" | head -n 1)
+
+# Handle `uv init` specially
+if [[ "$1" == "init" ]]; then
+  ENVRC_PATH="$PWD/.envrc"
+
+  if [ -f "$ENVRC_PATH" ]; then
+    echo "📄 Found existing .envrc"
+    VENV_PATH=$(grep '^export VIRTUAL_ENV=' "$ENVRC_PATH" | cut -d '"' -f2)
+  else
+    PROJECT_NAME=$(basename "$PWD")
+    RANDOM_SUFFIX=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)
+    VENV_NAME="${PROJECT_NAME}-${RANDOM_SUFFIX}"
+    VENV_PATH="$HOME/.virtualenvs/$VENV_NAME"
+
+    echo "🔧 Creating venv at $VENV_PATH"
+    python3 -m venv "$VENV_PATH"
+
+    echo "🌱 Writing .envrc"
+    echo "export VIRTUAL_ENV=\"$VENV_PATH\"" > "$ENVRC_PATH"
+    echo "source \"\$VIRTUAL_ENV/bin/activate\"" >> "$ENVRC_PATH"
+    echo "✅ .envrc created. Run 'direnv allow' to enable auto-activation."
+  fi
+
+  echo "⚡ Activating venv and running: uv init ${@:2}"
+  source "$VENV_PATH/bin/activate"
+  exec "$REAL_UV" init "${@:2}"
+else
+  # Pass everything else through to real uv
+  exec "$REAL_UV" "$@"
+fi

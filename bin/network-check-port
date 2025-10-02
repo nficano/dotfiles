@@ -1,0 +1,24 @@
+#!/bin/sh
+#/ Check whether a TCP port is accepting connections.
+#/
+#/ Usage:
+#/    network-check-port <host> <port> [--help]
+#/
+
+set -o errexit          # Exit on most errors (see the manual)
+set -o nounset          # Disallow expansion of unset variables
+#set -o errtrace        # Make sure any error trap is inherited (BASH only)
+#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
+#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+
+usage () {
+    grep '^#/' < "$0" | cut -c4-
+    exit 0
+}
+
+if [ "$#" -eq 1 ] && [ "$1" = "--help" ]; then
+    usage
+fi
+
+[ $# -ne 2 ] && usage
+nc -zvw10 "$1" "$2"
