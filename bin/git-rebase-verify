@@ -1,0 +1,363 @@
+#!/usr/bin/env bash
+#/ Interactively validate a rebased branch against a base branch
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [--non-interactive] [-y] [-t <base>] [-f <feature>] [-o <old-tip>] [-c "<check-cmd>"] [--no-fetch]
+#/
+#/ Available options:
+#/    -h, --help              Print this help and exit
+#/    -v, --verbose           Enable verbose output
+#/        --non-interactive   Disable interactive prompts
+#/    -y, --yes               Assume "yes" for confirmations
+#/    -t, --target <ref>      Base/target branch (default auto: origin/main | main | origin/master | master)
+#/    -f, --feature <ref>     Feature branch to verify (default: current branch)
+#/    -o, --old-tip <ref>     Pre-rebase tip/ref for range-diff (optional; falls back to ORIG_HEAD or reflog)
+#/    -c, --check-cmd "<cmd>" Command to run during dry-run merge (e.g., "npm test" or "make build")
+#/        --no-fetch          Skip 'git fetch --all --prune'
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") -t origin/main -f my/feature -c "pnpm -w build"
+#/    $(basename "$0") --non-interactive --yes --no-fetch
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+assume_yes=0
+non_interactive=0
+skip_fetch=0
+
+target_ref=""
+feature_ref=""
+old_tip_ref=""
+check_cmd=""
+
+# --- helpers (script-local; general-purpose stuff lives in utils) ----------------
+
+gits.require() { require.cmd git; }
+
+gits.current_branch() {
+  git rev-parse --abbrev-ref HEAD
+}
+
+gits.has_ref() {
+  git rev-parse -q --verify "$1" >/dev/null 2>&1
+}
+
+gits.best_default_target() {
+  local candidates=(origin/main main origin/master master)
+  for c in "${candidates[@]}"; do
+    if gits.has_ref "$c"; then echo "$c"; return 0; fi
+  done
+  # last resort: current upstream or die trying
+  local up
+  up=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)
+  [[ -n "$up" ]] && echo "$up" || echo "origin/main"
+}
+
+gits.resolve_or_die() {
+  local ref="$1" what="$2"
+  if ! gits.has_ref "$ref"; then
+    log.error "Cannot resolve $what ref: $ref"
+    exit 2
+  fi
+  git rev-parse "$ref"
+}
+
+gits.find_old_tip_guess() {
+  # Prefer ORIG_HEAD if present, else previous position of feature, else empty
+  if gits.has_ref ORIG_HEAD; then
+    echo "ORIG_HEAD"; return
+  fi
+  local feat="${1:-}"
+  if [[ -n "$feat" ]]; then
+    local prev
+    prev=$(git rev-parse -q --verify "${feat}@{1}" 2>/dev/null || true)
+    [[ -n "$prev" ]] && { echo "$prev"; return; }
+  fi
+  echo ""
+}
+
+hr() { printf '%*s\n' "$(tput cols 2>/dev/null || echo 80)" '' | tr ' ' -; }
+
+section() { hr; log.info "$*"; hr; }
+
+maybe_run() { # maybe_run "<desc>" <cmd...>
+  local desc="$1"; shift
+  (( verbose )) && log.info "RUN: $desc"
+  "$@"
+}
+
+# -- parse args -------------------------------------------------------------
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  # support --opt=value and --opt value
+  _take_arg() {
+    local long="$1" short="$2"
+    local val=
+    if [[ "$2" == *=* ]]; then
+      val="${2#*=}"
+      transformed+=("$short" "$val")
+    else
+      if [[ -n "${3:-}" ]]; then
+        val="$3"
+        transformed+=("$short" "$val")
+        return 2  # caller should shift 1 extra
+      else
+        log.error "Missing value for $long"
+        script.usage 1
+      fi
+    fi
+    return 1
+  }
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --non-interactive) non_interactive=1; shift; continue ;;
+      --yes) transformed+=('-y') ;;
+      --no-fetch) skip_fetch=1; shift; continue ;;
+      --target|--target=*)
+        local extra="${2:-}"
+        _take_arg "--target" "-t" "$1" "$extra"; s=$?; shift $(( s==2?2:1 )); continue ;;
+      --feature|--feature=*)
+        local extra="${2:-}"
+        _take_arg "--feature" "-f" "$1" "$extra"; s=$?; shift $(( s==2?2:1 )); continue ;;
+      --old-tip|--old-tip=*)
+        local extra="${2:-}"
+        _take_arg "--old-tip" "-o" "$1" "$extra"; s=$?; shift $(( s==2?2:1 )); continue ;;
+      --check-cmd|--check-cmd=*)
+        local extra="${2:-}"
+        _take_arg "--check-cmd" "-c" "$1" "$extra"; s=$?; shift $(( s==2?2:1 )); continue ;;
+      --)
+        shift; break ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvyt:f:o:c:' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      y) assume_yes=1 ;;
+      t) target_ref="$OPTARG" ;;
+      f) feature_ref="$OPTARG" ;;
+      o) old_tip_ref="$OPTARG" ;;
+      c) check_cmd="$OPTARG" ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+      :)  log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
+    esac
+  done
+  shift $((OPTIND - 1))
+
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected positional arguments"
+    script.usage 1
+  fi
+}
+
+# -- steps ------------------------------------------------------------------
+
+step_fetch() {
+  (( skip_fetch )) && { log.info "Skipping fetch (per --no-fetch)"; return 0; }
+  if prompt.ask_yes_no "Fetch remotes (git fetch --all --prune)?" "$assume_yes" "$non_interactive" "$verbose"; then
+    maybe_run "git fetch --all --prune" git fetch --all --prune
+  fi
+}
+
+step_range_diff() {
+  local base="$1" feature="$2" old="$3"
+  if [[ -z "$old" ]]; then
+    log.warn "No old tip provided; skipping range-diff."
+    return 0
+  fi
+  section "1) Compare old vs rebased with git range-diff"
+  if ! command -v git >/dev/null 2>&1; then return 1; fi
+  if command -v git >/dev/null 2>&1; then
+    if git range-diff --help >/dev/null 2>&1; then
+      git range-diff "$base...$old" "$base...$feature" || true
+      echo
+      log.info "Review above: expect equivalence (possibly reordered), no big surprises."
+    else
+      log.warn "git range-diff not available; skipping."
+    fi
+  fi
+}
+
+step_name_status() {
+  local base="$1" feature="$2"
+  section "2) What will change when merging $feature into $base?"
+  git diff --name-status "$base...$feature" || true
+}
+
+step_left_right() {
+  local base="$1" feature="$2"
+  section "3) Unique commits (cherry-pick aware)"
+  git log --left-right --cherry-pick --oneline "$base...$feature" || true
+}
+
+step_merge_tree_preview() {
+  local base="$1" feature="$2"
+  if ! git help -a | grep -q '^  merge-tree$' ; then
+    log.warn "git merge-tree not available; skipping conflict preview."
+    return 0
+  fi
+  section "5) Conflict preview (merge-tree)"
+  local mb
+  mb=$(git merge-base "$base" "$feature")
+  git merge-tree "$mb" "$base" "$feature" | sed -n '1,200p' || true
+  echo
+  log.info "Note: merge-tree preview is informative; actual merge may still differ."
+}
+
+step_diff_MB() {
+  local base="$1" feature="$2"
+  section "6) Detect renames/splits"
+  git diff -M -B --summary "$base...$feature" || true
+}
+
+step_dry_run_merge() {
+  local base="$1" feature="$2" check="$3"
+  section "4) Dry-run merge in an isolated worktree (no commits)"
+  local tmpdir
+  tmpdir=$(fs.mktmp dir mergecheck)
+  log.info "Worktree: $tmpdir"
+
+  local status=0
+  # Create detached worktree at base
+  if ! git worktree add --detach "$tmpdir" "$base"; then
+    log.error "Failed to create worktree at $base"
+    rm -rf "$tmpdir" || true
+    return 1
+  fi
+
+  # Ensure cleanup
+  (
+    set +e
+    cd "$tmpdir" || exit 1
+
+    log.info "Merging $feature into $base (no-ff, no-commit)"
+    if ! git merge --no-ff --no-commit "$feature"; then
+      status=1
+      log.error "Merge reported conflicts."
+      git --no-pager diff --name-only --diff-filter=U || true
+    else
+      log.info "Merge applies without conflicts."
+      if [[ -n "$check" ]]; then
+        echo
+        section "Running check command: $check"
+        # shellcheck disable=SC2086
+        bash -lc "$check"
+        if (( $? != 0 )); then
+          status=1
+          log.error "Check command failed."
+        else
+          log.info "Check command passed."
+        fi
+      fi
+    fi
+
+    git merge --abort >/dev/null 2>&1 || true
+  )
+  local sub_rc=$?
+
+  # Remove worktree
+  git worktree remove --force "$tmpdir" >/dev/null 2>&1 || rm -rf "$tmpdir" || true
+
+  (( sub_rc != 0 )) && status=1
+  return "$status"
+}
+
+# -- main -------------------------------------------------------------------
+
+main() {
+  gits.require
+
+  # Defaults
+  [[ -z "$feature_ref" ]] && feature_ref="$(gits.current_branch)"
+  [[ -z "$target_ref"  ]] && target_ref="$(gits.best_default_target)"
+
+  if (( verbose )); then
+    log.info "Defaults — target: $target_ref | feature: $feature_ref"
+  fi
+
+  # Interactive overrides
+  if (( ! non_interactive )); then
+    target_ref=$(prompt.read_input "Base branch to compare/merge into" "$target_ref" 0)
+    feature_ref=$(prompt.read_input "Feature branch to validate" "$feature_ref" 0)
+    if [[ -z "$old_tip_ref" ]]; then
+      local guess
+      guess=$(gits.find_old_tip_guess "$feature_ref")
+      old_tip_ref=$(prompt.read_input "Pre-rebase old tip (optional)" "$guess" 0)
+    fi
+    if [[ -z "$check_cmd" ]]; then
+      check_cmd=$(prompt.read_input "Check command to run during dry-run (optional)" "" 0)
+    fi
+  else
+    # Non-interactive: if no old-tip provided, attempt guess silently
+    [[ -z "$old_tip_ref" ]] && old_tip_ref="$(gits.find_old_tip_guess "$feature_ref")"
+  fi
+
+  # Resolve refs early (fail fast)
+  local base_sha feature_sha
+  base_sha=$(gits.resolve_or_die "$target_ref" "target")
+  feature_sha=$(gits.resolve_or_die "$feature_ref" "feature")
+  if [[ -n "$old_tip_ref" ]]; then
+    gits.resolve_or_die "$old_tip_ref" "old-tip" >/dev/null
+  fi
+
+  log.info "Using target: $target_ref ($base_sha)"
+  log.info "Using feature: $feature_ref ($feature_sha)"
+  [[ -n "$old_tip_ref" ]] && log.info "Using old-tip: $old_tip_ref"
+
+  # Confirm go-ahead
+  if ! prompt.ask_yes_no "Proceed with validation steps?" "$assume_yes" "$non_interactive" "$verbose"; then
+    log.warn "Aborted by user"
+    return 1
+  fi
+
+  step_fetch
+
+  # Execute steps
+  step_range_diff "$target_ref" "$feature_ref" "$old_tip_ref"
+  step_name_status "$target_ref" "$feature_ref"
+  step_left_right "$target_ref" "$feature_ref"
+  local merge_rc=0
+  if ! step_dry_run_merge "$target_ref" "$feature_ref" "$check_cmd"; then
+    merge_rc=1
+  fi
+  step_merge_tree_preview "$target_ref" "$feature_ref"
+  step_diff_MB "$target_ref" "$feature_ref"
+
+  echo
+  hr
+  if (( merge_rc == 0 )); then
+    log.info "Summary: ✓ Dry-run merge clean${check_cmd:+; checks passed}."
+  else
+    log.error "Summary: ✗ Issues detected during dry-run merge and/or checks."
+  fi
+  hr
+
+  return "$merge_rc"
+}
+
+parse_args "$@"
+main
