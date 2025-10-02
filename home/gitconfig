@@ -119,10 +119,6 @@
 	gpgSign = true
 	sort = version:refname
 
-[branch "master"]
-	remote = origin
-	merge = refs/heads/master
-
 [branch "main"]
 	remote = origin
 	merge = refs/heads/main
