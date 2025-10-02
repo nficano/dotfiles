@@ -74,7 +74,7 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 - **`git-peel-last-commit`** – Creates a new branch from `HEAD` and removes the last commit from the current branch
 - **`git-prune-merged`** – Lists or deletes branches fully merged into a target branch, locally or on a remote, with optional fetch
 - **`git-rebase-prefer-upstream`** – Intended helper for rebasing while preferring upstream changes; currently shells out to `git revert` and should be adjusted before use
-- **`git-rebase-veridy`** - Interactively validate a rebased branch against a base branch.
+- **`git-rebase-verify`** - Interactively validate a rebased branch against a base branch.
 - **`git-release-tag-name`** - Generates deterministic tag release names based off of commit hash.
 - **`git-reset-stage`** – Runs `git reset` to unstage everything
 - **`git-revert-to`** – Runs `git revert` for a specific commit hash
