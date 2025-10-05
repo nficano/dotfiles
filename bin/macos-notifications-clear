@@ -1,22 +1,39 @@
-#!/bin/sh
-#/ Clear all messages from macOS Notification Center.
+#!/usr/bin/env bash
+#/ Clear all notifications from macOS Notification Center.
 #/
-#/ Usage:
-#/    macos-notifications-clear
+#/ Usage: $(basename "$0") [-h] [-v]
 #/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Terminates NotificationCenter so the UI relaunches without badges.
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
-#set -o errtrace         # Make sure any error trap is inherited
-#set -o pipefail         # Use last non-zero exit code in a pipeline
-#set -o xtrace          # Trace the execution of the script (debug)
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 0
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
 }
 
-if [ "$#" -gt 0 ]; then
-    usage
-fi
-killall NotificationCenter
+main() {
+  (( verbose )) && log.info "Clearing Notification Center"
+  killall NotificationCenter || true
+  log.info "Notification Center cleared"
+}
+
+parse_args "$@"
+main

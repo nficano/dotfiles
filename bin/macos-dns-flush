@@ -1,33 +1,42 @@
-#!/bin/sh
-#/ Flush the macOS DNS cache.
+#!/usr/bin/env bash
+#/ Flush the macOS DNS cache to force fresh name resolution.
 #/
-#/ NAME
-#/      {{ basename }} -- Flush DNS cache
+#/ Usage: $(basename "$0") [-h] [-v]
 #/
-#/ SYNOPSIS
-#/      {{ basename }} [-h] [--help]
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
 #/
-#/ DESCRIPTION
-#/      DNS cache is a temporary database of all recent DNS lookups.
-#/      By flushing the cache, you can force the system to perform
-#/      a new DNS lookup.
+#/ Details:
+#/    Runs dscacheutil and signals mDNSResponder to rebuild caches.
 
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
+source "$(dirname "$0")/../lib/bash/utils"
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
-#set -o errtrace        # Make sure any error trap is inherited (BASH only)
-#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
-#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
-usage () {
-    grep '^#/ ' < "$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
-    exit 0
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
 }
 
-if [ "$#" -gt 0 ]; then
-    usage
-fi
+main() {
+  (( verbose )) && log.info "Flushing DNS caches"
 
- sudo dscacheutil -flushcache
- sudo killall -HUP mDNSResponder
+  sudo dscacheutil -flushcache
+  sudo killall -HUP mDNSResponder
+
+  log.info "macOS DNS cache flushed"
+}
+
+parse_args "$@"
+main

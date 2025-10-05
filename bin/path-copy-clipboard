@@ -1,34 +1,77 @@
-#!/bin/sh
-#/ Copy the current directory or a specified entry to the clipboard.
+#!/usr/bin/env bash
+#/ Copy the current directory (or child entry) to the clipboard.
 #/
-#/ Usage:
-#/    path-copy-clipboard [entry]
-#/ EXAMPLES:
-#/    cd /usr/local/bin
-#/    path-copy-clipboard         # copies /usr/local/bin
-#/    path-copy-clipboard jq      # copies /usr/local/bin/jq
+#/ Usage: $(basename "$0") [-h] [-v] [entry]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    When no entry is provided, copies the working directory path.
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
-#set -o errtrace        # Make sure any error trap is inherited (BASH only)
-#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
-#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 0
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+declare -a args=()
+
+parse_args() {
+  args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        verbose=1
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    args+=("$1")
+    shift
+  done
+
+  if (( ${#args[@]} > 1 )); then
+    log.error "At most one entry may be provided"
+    script.usage 1
+  fi
 }
 
-if [ $# -gt 1 ]; then
-    usage
-fi
+main() {
+  local base_path entry target
+  base_path=$(pwd)
+  entry="${args[0]:-}"
 
-if [ $# -eq 1 ] && [ "$1" = "--help" ]; then
-    usage
-fi
+  if [[ -n "$entry" ]]; then
+    target="${base_path%/}/$entry"
+  else
+    target="$base_path"
+  fi
 
-if [ $# -eq 0 ]; then
-  echo "$(pwd)" | tr -d '\n' | pbcopy
-else
-  echo "$(pwd)/$1" | tr -d '\n' | pbcopy
-fi
+  printf '%s' "$target" | clip.copy
+
+  (( verbose )) && log.info "Copied path to clipboard: $target"
+}
+
+parse_args "$@"
+main

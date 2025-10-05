@@ -1,32 +1,121 @@
-#! /usr/bin/env python3
-#/ Strip Noun Project attribution blocks from SVG files and re-run svgo optimisation.
+#!/usr/bin/env bash
+#/ Remove Noun Project attribution blocks from SVGs and re-run svgo.
 #/
-#/ Usage: svg-noun-clean <svg> [<svg> ...]
-import subprocess
+#/ Usage: $(basename "$0") [-h] [-v] <svg> [<svg> ...]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Strips <text> elements from SVG files and optimizes them using svgo.
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+declare -a svgs=()
+
+parse_args() {
+  svgs=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        verbose=1
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    svgs+=("$1")
+    shift
+  done
+
+  if (( ${#svgs[@]} == 0 )); then
+    log.error "Provide at least one SVG file"
+    script.usage 1
+  fi
+}
+
+ensure_dependencies() {
+  if ! require.cmd python3 svgo; then
+    log.error "python3 and svgo are required"
+    exit 1
+  fi
+}
+
+strip_attribution() {
+  local file="$1"
+  python3 <<'PY' "$file"
 import sys
 import xml.etree.ElementTree as ET
 
 XPATH = ".//{http://www.w3.org/2000/svg}text"
 
-
-def svgo(file):
-    subprocess.run(["/opt/homebrew/bin/svgo", " --multipass", "-i", file])
-
-
-def find_attribution(root):
-    for elem in root.findall(XPATH):
-        yield elem
-
-
-def rewrite(path):
+def remove_blocks(path: str) -> int:
     tree = ET.parse(path)
     root = tree.getroot()
-    for elem in find_attribution(root):
+    removed = 0
+    for elem in list(root.findall(XPATH)):
         root.remove(elem)
+        removed += 1
     tree.write(path)
-
+    return removed
 
 if __name__ == "__main__":
-    for path in sys.argv[1:]:
-        rewrite(path)
-        svgo(path)
+    count = remove_blocks(sys.argv[1])
+    print(count)
+PY
+}
+
+process_svg() {
+  local file="$1"
+
+  if [[ ! -f "$file" ]]; then
+    log.warn "Skipping missing file: $file"
+    return
+  fi
+
+  local removed
+  removed=$(strip_attribution "$file")
+
+  svgo --multipass -i "$file" >/dev/null 2>&1
+
+  if (( verbose )); then
+    log.info "Cleaned $file (removed ${removed:-0} attribution blocks)"
+  else
+    log.info "Cleaned $file"
+  fi
+}
+
+main() {
+  ensure_dependencies
+  local svg
+  for svg in "${svgs[@]}"; do
+    process_svg "$svg"
+  done
+  log.info "SVG cleanup complete"
+}
+
+parse_args "$@"
+main

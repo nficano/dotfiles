@@ -1,30 +1,62 @@
-#!/bin/sh
-#/ Unzip every .zip file in the current directory into matching folders.
-#/ NAME
-#/      {{ basename }} -- unzip all files in a given directory
+#!/usr/bin/env bash
+#/ Unzip each .zip file in the current directory into its own folder.
 #/
-#/ SYNOPSIS
-#/      {{ basename }} [-h] [--help]
+#/ Usage: $(basename "$0") [-h] [-v]
 #/
-#/ DESCRIPTION
-#/      Scans a directory for zip files and unzips them to a new subfolder
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Skips archives that have already been extracted.
 
-set -o errexit # Exit on most errors (see the manual)
-set -o nounset # Disallow expansion of unset variables
-#set -o errtrace        # Make sure any error trap is inherited (BASH only)
-#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
-#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-usage() {
-    grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
-    exit 1
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
 }
 
-[ $# -ne 0 ] && usage
+extract_zip() {
+  local file="$1" folder
+  folder="${file%.*}"
+  mkdir -p "$folder"
+  unzip -n "$file" -d "$folder" >/dev/null
+  (( verbose )) && log.info "Extracted $file -> $folder"
+}
 
-for file in *.zip; do
-    folder="${file%.*}"
-    mkdir -p "$folder"
-    unzip -n "$file" -d "$folder"
-    #rm "$file"
-done
+main() {
+  if ! require.cmd unzip; then
+    log.error "unzip command is required"
+    exit 1
+  fi
+
+  shopt -s nullglob
+
+  log.info "Extracting zip archives in $(pwd)"
+
+  local matched=0 file
+  for file in *.zip; do
+    matched=1
+    extract_zip "$file"
+  done
+
+  if (( ! matched )); then
+    log.warn "No zip files found"
+  fi
+}
+
+parse_args "$@"
+main

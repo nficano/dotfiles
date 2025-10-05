@@ -1,5 +1,41 @@
-#!/usr/bin/env osascript
+#!/usr/bin/env bash
 #/ Print the path of the frontmost Finder window.
 #/
-#/ Usage: finder-front-path
-tell app "Finder" to POSIX path of (insertion location as alias)
+#/ Usage: $(basename "$0") [-h] [-v]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose logging to stderr
+#/
+#/ Details:
+#/    Returns the POSIX path for the active Finder window via AppleScript.
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
+}
+
+main() {
+  if (( verbose )); then
+    log.info "Querying Finder for front window path" >&2
+  fi
+
+  osascript -e 'tell application "Finder" to POSIX path of (insertion location as alias)'
+}
+
+parse_args "$@"
+main

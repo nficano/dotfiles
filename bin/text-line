@@ -1,18 +1,67 @@
-#!/bin/bash
-#/ Print the nth line from stdin.
+#!/usr/bin/env bash
+#/ Print the Nth line from standard input.
 #/
-#/ Usage: text-line <line-number>
+#/ Usage: $(basename "$0") [-h] [-v] <line-number>
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Consumes stdin and outputs exactly the requested line if available.
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: text-line <line-number>" >&2
-  exit 1
-fi
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-  echo "Usage: text-line <line-number>" >&2
-  exit 0
-fi
+source "$(dirname "$0")/../lib/bash/utils"
 
-line_number=$1
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
-head -n "$line_number" | tail -n 1
+verbose=0
+line_number=""
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        verbose=1
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        line_number="$1"
+        shift
+        break
+        ;;
+    esac
+  done
+
+  if [[ -z "$line_number" ]]; then
+    log.error "Line number is required"
+    script.usage 1
+  fi
+
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected extra arguments: $*"
+    script.usage 1
+  fi
+
+  script.validate_positive_int "$line_number" "Line number"
+}
+
+main() {
+  (( verbose )) && log.info "Selecting line #$line_number"
+  sed -n "${line_number}p" | head -n 1
+}
+
+parse_args "$@"
+main

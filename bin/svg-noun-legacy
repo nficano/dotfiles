@@ -1,21 +1,72 @@
-#!/usr/bin/python3
-#/ Legacy helper to strip Noun Project attribution text from svg files matching noun*.svg.
+#!/usr/bin/env bash
+#/ Strip attribution text from noun*.svg files in the current directory.
 #/
-#/ Usage: svg-noun-legacy
+#/ Usage: $(basename "$0") [-h] [-v]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Matches files beginning with noun and removes <text> blocks in-place.
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
+}
+
+process_svgs() {
+  python3 <<'PY'
 import glob
 import os
 import re
+import sys
 
+pattern = os.path.join(os.getcwd(), "noun*.svg")
+removed = 0
 
-def main():
-    for filename in glob.glob(f"{os.getcwd()}/noun*.svg"):
-        svg = ""
-        with open(filename, "r") as fh:
-            svg = fh.read()
-        svg = re.sub(r"<text.+</text>", "", svg, flags=re.DOTALL)
-        with open(filename, "w") as fh:
-            fh.write(svg)
+for filename in glob.glob(pattern):
+    with open(filename, "r", encoding="utf-8") as fh:
+        svg = fh.read()
+    cleaned, count = re.subn(r"<text.+?</text>", "", svg, flags=re.DOTALL)
+    if count:
+        with open(filename, "w", encoding="utf-8") as fh:
+            fh.write(cleaned)
+        removed += 1
 
+print(removed)
+PY
+}
 
-if __name__ == "__main__":
-    main()
+main() {
+  if ! require.cmd python3; then
+    log.error "python3 is required"
+    exit 1
+  fi
+
+  local updated
+  updated=$(process_svgs)
+
+  if (( verbose )); then
+    log.info "Processed noun*.svg files (updated $updated files)"
+  else
+    log.info "Noun SVG cleanup complete"
+  fi
+}
+
+parse_args "$@"
+main

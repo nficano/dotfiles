@@ -1,30 +1,80 @@
-#!/bin/sh
-#/ Update the macOS LocalHostName, ComputerName, HostName, and NetBIOS name.
+#!/usr/bin/env bash
+#/ Update the macOS host/computer/NetBIOS names.
 #/
-#/ Usage:
-#/    macos-hostname-set <new-hostname>
+#/ Details:
+#/    Applies the new value to scutil names and SMB NetBIOS name, then flushes caches.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] <new-hostname>
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
 #/
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
-#set -o errtrace        # Make sure any error trap is inherited (BASH only)
-#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
-#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 0
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+declare -a args=()
+
+parse_args() {
+  args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        verbose=1
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    args+=("$1")
+    shift
+  done
+
+  if (( ${#args[@]} != 1 )); then
+    log.error "A single hostname value is required"
+    script.usage 1
+  fi
 }
 
-if [ "$#" -ne 1 ]; then
-    usage
-fi
+main() {
+  local new_hostname
+  new_hostname="${args[0]}"
 
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    usage
-fi
-new_hostname="$*"
-for key in LocalHostName ComputerName HostName; do sudo scutil --set $key "$new_hostname"; done
-sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string "$new_hostname"
-dscacheutil -flushcache
-echo "Your hostname is now: $new_hostname"
+  (( verbose )) && log.info "Updating macOS host names to '$new_hostname'"
+
+  local key
+  for key in LocalHostName ComputerName HostName; do
+    sudo scutil --set "$key" "$new_hostname"
+  done
+
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server \
+    NetBIOSName -string "$new_hostname"
+  dscacheutil -flushcache
+
+  log.info "macOS hostname updated to: $new_hostname"
+}
+
+parse_args "$@"
+main

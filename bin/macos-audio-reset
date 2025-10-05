@@ -1,23 +1,49 @@
-#!/bin/sh
-#/ Restart coreaudiod when macOS audio stops responding.
+#!/usr/bin/env bash
+#/ Restart coreaudiod when macOS audio is unresponsive.
 #/
-#/ Usage:
-#/    macos-audio-reset
+#/ Usage: $(basename "$0") [-h] [-v]
 #/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Finds the running coreaudiod PID and forcefully restarts it with sudo.
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
-#set -o errtrace        # Make sure any error trap is inherited (BASH only)
-#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
-#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 0
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
 }
 
-if [ "$#" -gt 0 ]; then
-    usage
-fi
+main() {
+  (( verbose )) && log.info "Locating coreaudiod PID"
 
-sudo kill -9 `ps -A | grep -Fa 'sbin/coreaudiod' | head -n 1 | awk '{print $1}'`
+  local pid
+  pid=$(pgrep -x coreaudiod || true)
+
+  if [[ -z "$pid" ]]; then
+    log.error "coreaudiod is not running"
+    exit 1
+  fi
+
+  (( verbose )) && log.info "Restarting coreaudiod (pid: $pid)"
+  sudo kill -9 "$pid"
+  log.info "coreaudiod restart requested"
+}
+
+parse_args "$@"
+main

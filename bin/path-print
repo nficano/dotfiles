@@ -1,22 +1,38 @@
-#!/bin/sh
-#/ Pretty-print the PATH environment variable one entry per line.
+#!/usr/bin/env bash
+#/ Print each PATH entry on its own line.
 #/
-#/ Usage: path-print
+#/ Usage: $(basename "$0") [-h] [-v]
 #/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Useful for inspecting or diffing the PATH variable.
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
-#set -o errtrace        # Make sure any error trap is inherited (BASH only)
-#set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
-#set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-usage () {
-    grep '^#/ ' < "$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
-    exit 0
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
 }
 
-if [ "$#" -gt 0 ]; then
-    usage
-fi
+main() {
+  (( verbose )) && log.info "Printing PATH entries"
+  tr ':' '\n' <<<"${PATH:-}"
+}
 
-echo "$PATH" | tr ':' "\n"
+parse_args "$@"
+main

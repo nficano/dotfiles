@@ -1,11 +1,47 @@
 #!/usr/bin/env bash
-#/ Restart macOS media-related services (Dock, WindowServer, audio helpers).
+#/ Restart macOS media subsystems (coreaudio, video capture, UI services).
 #/
-#/ Usage: macos-coremedia-restart
+#/ Usage: $(basename "$0") [-h] [-v]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    Kills relevant processes with sudo so they relaunch in a clean state.
 
-if [ "$#" -gt 0 ]; then
-  echo "Usage: macos-coremedia-restart" >&2
-  exit 1
-fi
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-sudo killall -9 coreaudiod VDCAssistant UVCAssistant WindowServer Dock SystemUIServer
+source "$(dirname "$0")/../lib/bash/utils"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n "$remaining" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
+}
+
+main() {
+  (( verbose )) && log.info "Restarting macOS media services"
+
+  sudo killall -9 \
+    coreaudiod \
+    VDCAssistant \
+    UVCAssistant \
+    WindowServer \
+    Dock \
+    SystemUIServer
+
+  log.info "macOS media services restarted"
+}
+
+parse_args "$@"
+main

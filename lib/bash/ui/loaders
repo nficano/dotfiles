@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# npm-ish spinner for bash
+# Usage:
+#   spinner "Installing deps" -- npm install
+#   spinner.start "Building"; sleep 2; spinner.ok
+#   spinner.start "Tests";   sleep 1; spinner.fail
+
+set -euo pipefail
+
+# colors (no color on non-tty)
+if [ -t 1 ]; then
+  c_reset=$'\033[0m'; c_dim=$'\033[2m'; c_cyan=$'\033[36m'
+  c_green=$'\033[32m'; c_red=$'\033[31m'
+else
+  c_reset=""; c_dim=""; c_cyan=""; c_green=""; c_red=""
+fi
+
+# spinner state
+_spinner_pid=""
+_spinner_text=""
+_spinner_frames=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
+_spinner_interval=0.08
+
+_spinner_draw() {
+  local i=0
+  tput civis 2>/dev/null || true
+  while :; do
+    printf "\r%s%s %s%s" "${c_cyan}" "${_spinner_frames[i]}" "${_spinner_text}" "${c_reset}"
+    i=$(( (i + 1) % ${#_spinner_frames[@]} ))
+    sleep "$_spinner_interval"
+  done
+}
+
+spinner.start() {
+  _spinner_text="${*:-Working}"
+  # if not a TTY, just print a simple line and return
+  if [ ! -t 1 ] || [ "${CI:-}" = "true" ]; then
+    printf "%s... " "${_spinner_text}"
+    return 0
+  fi
+  _spinner_draw & _spinner_pid=$!
+  # detach from parent traps
+  disown "$_spinner_pid" 2>/dev/null || true
+}
+
+spinner.stop() {
+  local symbol="$1" color="$2" status="$3"
+  if [ -n "${_spinner_pid}" ] && kill -0 "$_spinner_pid" 2>/dev/null; then
+    kill "$_spinner_pid" 2>/dev/null || true
+    wait "$_spinner_pid" 2>/dev/null || true
+  fi
+  tput cnorm 2>/dev/null || true
+  if [ -t 1 ] && [ "${CI:-}" != "true" ]; then
+    printf "\r\033[K%s%s %s%s\n" "$color" "$symbol" "$_spinner_text" "$c_reset"
+  else
+    printf "%s\n" "$status"
+  fi
+  _spinner_pid=""
+  _spinner_text=""
+}
+
+spinner.ok()   { spinner.stop "✔" "$c_green" "done"; }
+spinner.fail() { spinner.stop "✖" "$c_red"   "failed"; }
+
+# trap to clean up on Ctrl+C
+trap 'if [ -n "${_spinner_pid}" ]; then kill "$_spinner_pid" 2>/dev/null; tput cnorm 2>/dev/null; fi' INT TERM EXIT
+
+spinner() {
+  # usage: spinner "Message" -- your command here
+  local msg cmd=( )
+  msg="$1"; shift
+  if [ "${1:-}" = "--" ]; then shift; fi
+  cmd=( "$@" )
+  spinner.start "$msg"
+  if "${cmd[@]}"; then
+    spinner.ok
+    return 0
+  else
+    spinner.fail
+    return 1
+  fi
+}
+
+# demo if run directly
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  spinner "Pretending to work" -- bash -c 'sleep 2'
+  spinner.start "Doing a thing"; sleep 1; spinner.ok
+  spinner.start "Failing job";   sleep 1; spinner.fail
+fi
