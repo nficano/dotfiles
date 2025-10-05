@@ -1,5 +1,5 @@
 #!/bin/bash
-#/ Trim leading and trailing silence from an audio file using ffmpeg's silenceremove filter.
+#/ Trim leading and trailing silence from an audio.
 #/
 #/ Usage: audio-trim-silence <input_audio_file> <output_audio_file>
 # Check if the input file is provided
