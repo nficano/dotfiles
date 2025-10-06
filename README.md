@@ -8,10 +8,33 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 - **`home/`** – Version-controlled copies of dotfiles such as `gitconfig`, `tmux.conf`, and `pip.conf`; `make setup-tree` links them into `$HOME`
 - **`lib/`** – Shared shell libraries. `lib/bash/utils` provides logging, prompting, filesystem helpers, deferred sourcing, locking, and other primitives consumed by the skeletons and shell profile. The scripts that implement the key/value datastore source `lib/envdb` for storing environment-like data.
 - **`profiles/`** – Application-specific settings, currently an iTerm2 profile in `profiles/iterm2/profile.json`
-- **`setup/`** – Provisioning assets. `setup/macos/mac-provision` automates a full macOS bootstrap (Xcode tools, Homebrew, defaults) and the accompanying `Brewfile` captures required packages
+- **`setup/`** – Provisioning assets. `setup/macos/mac-provision` now supports dry-runs, change detection, config syncing, and Homebrew automation. `setup/macos/Brewfile` captures brew dependencies and `setup/macos/defaults.conf` records macOS `defaults` managed by the provisioner
 - **`shell/`** – Interactive shell entrypoints. `shell/bash/profile` exports environment variables, amends `PATH`, and lazy-loads tooling using the helpers from `lib/bash/utils`
 - **`skel/`** – Bash script skeletons consumed by `bin/script-scaffold` when scaffolding new utilities
 - **`Makefile`** – Convenience tasks: `make install` runs the macOS provisioner, `make setup-tree` prepares directories and symlinks in the home directory, and the `deploy-*` targets bump the version tag
+
+## macOS Provisioning
+
+`setup/macos/mac-provision` bootstraps and reconciles a macOS workstation. Highlights:
+
+- Performs a dry-run (`setup/macos/mac-provision --dry-run`) that shows each step, the detected drift (missing brew formulae, differing defaults, hidden directories, firewall state), and the commands that would run.
+- Applies configuration with loaders/spinners while writing defaults, refreshing file associations, and regenerating Brewfiles so long-running steps stay responsive.
+- Reads desired user defaults from `setup/macos/defaults.conf` (`domain|key|type|value`). Use `setup/macos/mac-provision --update-defaults` to rewrite the file from current system settings (dropping keys that no longer resolve) or edit it manually to add more defaults.
+- Keeps Homebrew aligned with `setup/macos/Brewfile`; run `setup/macos/mac-provision --update-brewfile` to dump the current system state back into the repo, or `--update-only` to perform configuration dumps without provisioning.
+- Ensures the following during a full run: Xcode CLI tools and license acceptance, Homebrew installation, Brew bundle reconciliation, duti-based file associations, curated macOS defaults (keyboard repeat, Finder/Dock tweaks, Bluetooth audio quality, screenshot location, etc.), vendor directory visibility, `pipx` installation, and enabling the application firewall.
+
+Combine the flags to suit your workflow. Examples:
+
+```bash
+# Inspect the changes without modifying the system
+setup/macos/mac-provision --dry-run
+
+# Sync Brewfile and defaults, but stop before provisioning
+setup/macos/mac-provision --update-brewfile --update-defaults --update-only
+
+# Apply everything non-interactively
+setup/macos/mac-provision --yes --non-interactive
+```
 
 ## bin/ Utilities
 
@@ -54,15 +77,13 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 - **`adobe-font-export`** – Extracts Adobe Creative Cloud fonts from CoreSync, optionally converting them to TTF or WOFF2 via FontForge/woff2 before copying them out
 - **`audio-stereo-merge`** – Uses ffmpeg to turn two mono audio recordings into a single stereo track (first input becomes the left channel)
 - **`audio-trim-silence`** – Uses ffmpeg's `silenceremove` filter to trim silence from audio files
+- **`convert-to-mp4`** – Converts a single media file (mkv/mov/avi/webm/gif, etc.) to `.mp4`
+- **`convert-to-webp`** – Converts common image/video formats to `.webp` via ffmpeg
 - **`exif-copy-tags`** – Copies all EXIF metadata from one file to another via `exiftool`, useful when transcoding media
-- **`mkv-remux-mp4`** – Remuxes every `.mkv` in the current directory to `.mp4` via ffmpeg stream copy
-- **`mp4-remux-mov`** – Remuxes `.mp4` files to `.mov` in place
-- **`mp4-transcode-webm`** – Transcodes `.mp4` files to `.webm` in place
 - **`svg-icon-normalize`** – Cleans SVG assets: optionally removes fixed dimensions, enforces `fill="currentColor"`, and processes files or directories recursively
 - **`svg-noun-clean`** – "Denoundify" text elements from SVG files and reoptimise them with `svgo`.[^2]
 - **`svg-noun-legacy`** – Legacy helper that strips `<text>` attribution blocks from `noun*.svg` files in the current directory
 - **`svg-optimize-all`** – Runs `svgo --multipass` across all SVGs in the working directory for batch optimisation
-- **`webp-convert-all`** – Converts `.jpg`, `.jpeg`, and `.png` images (recursively) to `.webp` with `cwebp`
 
 [^2]: Don't judge me.
 
@@ -156,3 +177,10 @@ Each skeleton is a Bash template that already sources `lib/bash/utils`, enables 
 - Prefer the common option parsing helpers (`script.parse_common` or the patterns shown in the skeletons) to deliver consistent `-h/--help` and `-v/--verbose` behaviour
 - Use the logging (`log.info`, `log.warn`, `log.error`), prompting, locking, and filesystem helpers from `lib/bash/utils` instead of reimplementing them
 - When creating new media or conversion scripts, follow the examples that operate on the current working directory and respect standard tools such as ffmpeg or svgo
+
+## TODO:
+
+- upload file to s3 public bucket and return the url to clipboard
+- backup to s3 and backup to dropbox w/ incremental changes
+- add-alias should support a flag to add to private bash_profile
+- script to show the installed OS and version

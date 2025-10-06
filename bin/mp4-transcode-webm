@@ -1,5 +1,0 @@
-#!/bin/sh
-#/ Transcode all .mp4 files under the working tree into .webm files.
-#/
-#/ Usage: mp4-transcode-webm
-find ./ -name '*.mp4' -exec bash -c 'ffmpeg -i "$0" -c:v libvpx -crf 10 -b:v 1M -c:a libvorbis "${0%%.mp4}.webm"' {} \;

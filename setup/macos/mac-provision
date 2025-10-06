@@ -1,288 +1,697 @@
-#!/bin/bash
-set -o errexit  # Exit on most errors (see the manual)
-set -o errtrace # Make sure any error trap is inherited
-set -o nounset  # Disallow expansion of unset variables
-set -o pipefail # Use last non-zero exit code in a pipeline
-#set -o xtrace          # Trace the execution of the script (debug)
-export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+#!/usr/bin/env bash
+#/ macOS system provisioning and configuration helper
+#/
+#/ Usage: $(basename "$0") [options]
+#/
+#/ Options:
+#/   -h, --help             Show this help and exit
+#/   -v, --verbose          Enable verbose logging
+#/   -y, --yes              Assume "yes" to interactive prompts
+#/       --non-interactive  Fail instead of prompting when input is required
+#/       --dry-run          Print the actions that would run without mutating the system
+#/       --update-brewfile  Regenerate setup/macos/Brewfile from the current Homebrew state
+#/       --update-defaults  Refresh setup/macos/defaults.conf using current macOS defaults
+#/       --update-only      Perform update actions and exit without running provisioning steps
+#/
+#/ Examples:
+#/   $(basename "$0")
+#/   $(basename "$0") --dry-run
+#/   $(basename "$0") --update-brewfile --update-defaults --update-only
 
-# shellcheck disable=SC2154
-trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-BREW_PREFIX="/usr/local"
-BREW_INSTALLER="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
-run_setup() {
-  SECONDS=0
-  request_root_privileges
-  setup_xcode
-  setup_brew
-  setup_duti
-  setup_default_file_associations
-  install_formulaes_from_brewfile
-  quit_system_preferences
-  setup_user_defaults
-  hide_vendor_directories
-  show_library_folder
-  install_pipx
+source "$(dirname "$0")/../../lib/bash/utils"
 
-  # shellcheck disable=SC2039
-  echo "✨  Done in $((SECONDS))s."
-  exit 0
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+repo_root=$(cd "$script_dir/../.." &>/dev/null && pwd -P)
+BREWFILE_PATH="$script_dir/Brewfile"
+DEFAULTS_FILE="$script_dir/defaults.conf"
+
+verbose=0
+assume_yes=0
+non_interactive=0
+dry_run=0
+update_brewfile=0
+update_defaults=0
+update_only=0
+
+declare -a SUMMARY_CHANGES=()
+declare -a SUMMARY_WARNINGS=()
+declare -a DEFAULTS_ENTRIES=()
+
+summary.add() {
+  SUMMARY_CHANGES+=("$1")
 }
 
-log() {
-  message="$1"
-  shift
-  # shellcheck disable=SC2059
-  printf "$message\n" "$@"
+summary.warn() {
+  SUMMARY_WARNINGS+=("$1")
 }
 
-get_dotfiles_path() {
-  fp=$(readlink -f "${0}")
-  dir=$(dirname "$fp")
-  cd "$dir" || exit 1
-  git rev-parse --show-toplevel
+summary.print() {
+  if (( ${#SUMMARY_CHANGES[@]} )); then
+    log.info "Summary of changes"
+    local item
+    for item in "${SUMMARY_CHANGES[@]}"; do
+      printf '  - %s\n' "$item"
+    done
+  fi
+
+  if (( ${#SUMMARY_WARNINGS[@]} )); then
+    log.warn "Items requiring attention"
+    local warn
+    for warn in "${SUMMARY_WARNINGS[@]}"; do
+      printf '    %s\n' "$warn"
+    done
+  fi
 }
 
-get_brewfile_path() {
-  echo "$(get_dotfiles_path)/setup/macos/Brewfile"
-}
-
-is_duti_installed() {
-  if command -v duti >/dev/null; then
-    return 0
+preferred_brew_prefix() {
+  local arch
+  arch=$(uname -m 2>/dev/null || echo "x86_64")
+  if [[ "$arch" == "arm64" ]]; then
+    echo "/opt/homebrew"
   else
+    echo "/usr/local"
+  fi
+}
+
+expand_path() {
+  local value="$1"
+  if [[ "$value" == ~* ]]; then
+    echo "${value/#\~/$HOME}"
+  else
+    echo "$value"
+  fi
+}
+
+compact_path() {
+  local value="$1"
+  if [[ "$value" == "$HOME"* ]]; then
+    echo "~${value#$HOME}"
+  else
+    echo "$value"
+  fi
+}
+
+macos_defaults_load() {
+  DEFAULTS_ENTRIES=()
+  if [[ ! -f "$DEFAULTS_FILE" ]]; then
+    summary.warn "Defaults config not found at $DEFAULTS_FILE"
     return 1
   fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "${line#\#}" != "$line" ]] && continue
+    DEFAULTS_ENTRIES+=("$line")
+  done <"$DEFAULTS_FILE"
 }
 
-install_duti() {
-  brew install duti
+macos_defaults_normalize() {
+  local type="$1" value="$2"
+  case "$type" in
+    bool)
+      case "$value" in
+        1|true|TRUE|yes|YES|on|ON) echo "true" ;;
+        0|false|FALSE|no|NO|off|OFF) echo "false" ;;
+        *) echo "$value" ;;
+      esac
+      ;;
+    string)
+      echo "$value"
+      ;;
+    int|float)
+      echo "$value"
+      ;;
+    *)
+      echo "$value"
+      ;;
+  esac
 }
 
-setup_duti() {
-  if ! is_duti_installed; then
-    log "Installing Duti ..."
-    install_duti
-  else
-    log "Duti is already installed. Skipping ..."
-  fi
-}
-
-install_formulaes_from_brewfile() {
-  brew update --force
-  brew bundle --file="$(get_brewfile_path)"
-}
-
-is_xcode_command_line_tools_installed() {
-  if xcode-select -p >/dev/null; then
-    return 0
-  else
+macos_defaults_read() {
+  local domain="$1" key="$2" type="$3" value
+  if ! value=$(defaults read "$domain" "$key" 2>/dev/null); then
     return 1
   fi
+  value=$(printf '%s' "$value" | tr -d '\n')
+  macos_defaults_normalize "$type" "$value"
 }
 
-install_xcode_command_line_tools() {
-  xcode-select --install >/dev/null
-  until xcode-select -p >/dev/null; do
-    sleep 5
+macos_defaults_write() {
+  local domain="$1" key="$2" type="$3" value="$4"
+  case "$type" in
+    bool)
+      local normalized
+      normalized=$(macos_defaults_normalize "$type" "$value")
+      defaults write "$domain" "$key" -bool "$normalized"
+      ;;
+    int)
+      defaults write "$domain" "$key" -int "$value"
+      ;;
+    float)
+      defaults write "$domain" "$key" -float "$value"
+      ;;
+    string)
+      local expanded
+      expanded=$(expand_path "$value")
+      defaults write "$domain" "$key" -string "$expanded"
+      ;;
+    raw)
+      # raw entries must contain the full command after the key
+      eval defaults write "$domain" "$key" $value
+      ;;
+    *)
+      log.warn "Unsupported defaults type '$type' for $domain $key"
+      return 1
+      ;;
+  esac
+}
+
+macos_defaults_update_file() {
+  if [[ ! -f "$DEFAULTS_FILE" ]]; then
+    log.warn "Cannot update defaults; $DEFAULTS_FILE missing"
+    return 1
+  fi
+
+  macos_defaults_load || return 1
+
+  local tmp
+  tmp=$(mktemp)
+
+  {
+    echo "# domain|key|type|value"
+    echo "# Updated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo
+  } >"$tmp"
+
+  local entry domain key type value current normalized
+  for entry in "${DEFAULTS_ENTRIES[@]}"; do
+    IFS='|' read -r domain key type value <<<"$entry"
+    if [[ -z "$domain" || -z "$key" ]]; then
+      echo "$entry" >>"$tmp"
+      continue
+    fi
+
+    case "$type" in
+      bool|int|float|string)
+        if current=$(macos_defaults_read "$domain" "$key" "$type"); then
+          if [[ "$type" == "string" ]]; then
+            current=$(compact_path "$current")
+          fi
+          printf '%s|%s|%s|%s\n' "$domain" "$key" "$type" "$current" >>"$tmp"
+        else
+          log.warn "Removing missing default: $domain $key"
+        fi
+        ;;
+      *)
+        printf '%s\n' "$entry" >>"$tmp"
+        ;;
+    esac
   done
-}
 
-is_xcode_eula_accepted() {
-  if sudo xcodebuild -license status; then
+  if (( dry_run )); then
+    log.info "[dry-run] Would update $DEFAULTS_FILE"
+    rm -f "$tmp"
     return 0
+  fi
+
+  mv "$tmp" "$DEFAULTS_FILE"
+  summary.add "Updated defaults config ($DEFAULTS_FILE)"
+  return 0
+}
+
+directory_is_hidden() {
+  local path="$1" flags
+  flags=$(ls -ldO "$path" 2>/dev/null | awk '{print $5}') || return 1
+  [[ "$flags" == "hidden" ]]
+}
+
+ensure_directory_flag() {
+  local path="$1" desired="$2"
+
+  if [[ ! -e "$path" ]]; then
+    summary.warn "Directory $path does not exist"
+    return
+  fi
+
+  if [[ "$desired" == "hidden" ]]; then
+    if directory_is_hidden "$path"; then
+      (( verbose )) && log.info "$path already hidden"
+      return
+    fi
+    summary.add "Hide $path"
+    if (( dry_run )); then
+      log.info "[dry-run] Would hide $path"
+      return
+    fi
+    chflags hidden "$path"
   else
-    return 1
+    if ! directory_is_hidden "$path"; then
+      (( verbose )) && log.info "$path already visible"
+      return
+    fi
+    summary.add "Unhide $path"
+    if (( dry_run )); then
+      log.info "[dry-run] Would unhide $path"
+      return
+    fi
+    chflags nohidden "$path"
   fi
 }
 
-accept_xcode_eula() {
-  sudo xcodebuild -license accept
+brew_exists() {
+  command -v brew >/dev/null 2>&1
 }
 
-setup_xcode() {
-  if ! is_xcode_command_line_tools_installed; then
-    log "Installing Xcode Command Line Tools ..."
-    install_xcode_command_line_tools
+brew_prefix_actual() {
+  if brew_exists; then
+    brew --prefix 2>/dev/null || preferred_brew_prefix
   else
-    log "XCode is already installed. Skipping ..."
-  fi
-
-  if ! is_xcode_eula_accepted; then
-    log "Accepting EULA ..."
-    accept_xcode_eula
-  else
-    log "XCode EULA Already Accepted. Skipping ..."
+    preferred_brew_prefix
   fi
 }
 
-is_brew_installed() {
-  if command -v brew >/dev/null; then
-    return 0
-  else
-    return 1
+ensure_homebrew_prefix_permissions() {
+  local prefix="$1"
+  if (( dry_run )); then
+    log.info "[dry-run] Would ensure permissions on $prefix"
+    return
   fi
-}
 
-install_brew() {
-  curl -fsSL "$BREW_INSTALLER" | bash
-  export PATH="/opt/homebrew/bin:$PATH"
-}
-
-install_pyenv() {
-  log "Installing pyenv ..."
-  rm -rf "$HOME/.pyenv"
-  # shellcheck disable=SC2317
-  curl -fsS "https://pyenv.run" | bash
-}
-
-install_pipx() {
-  log "Installing pipx ..."
-  # shellcheck disable=SC2317
-  brew install pipx
-  pipx ensurepath
-  sudo pipx --global ensurepath
-  pipx completions
-}
-
-setup_brew() {
-  if [ -d "$BREW_PREFIX" ]; then
-    if ! [ -r "$BREW_PREFIX" ]; then
-      sudo chown -R "$LOGNAME:admin" "$BREW_PREFIX"
+  if [[ -d "$prefix" ]]; then
+    if [[ ! -w "$prefix" ]]; then
+      sudo chown -R "$LOGNAME:admin" "$prefix"
     fi
   else
-    sudo mkdir "$BREW_PREFIX"
-    sudo chflags norestricted "$BREW_PREFIX"
-    sudo chown -R "$LOGNAME:admin" "$BREW_PREFIX"
+    sudo mkdir -p "$prefix"
+    sudo chflags norestricted "$prefix"
+    sudo chown -R "$LOGNAME:admin" "$prefix"
   fi
-  if ! is_brew_installed; then
-    log "Installing Homebrew ..."
-    install_brew
+}
+
+run_step() {
+  local label="$1" func="$2"
+  printf '\n'
+  if (( dry_run )); then
+    log.info "==> $label (dry-run)"
   else
-    log "Homebrew Already Installed. Skipping ..."
+    log.info "==> $label"
+  fi
+  "$func"
+}
+
+step_sudo_keepalive() {
+  if (( dry_run )); then
+    log.info "[dry-run] Would request sudo keep-alive"
+    return 0
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    summary.warn "sudo not available; continuing without privilege escalation"
+    return 0
+  fi
+
+  log.info "Requesting sudo credentials (you may be prompted)"
+  sudo -v
+  (
+    while true; do
+      sudo -n true >/dev/null 2>&1 || exit
+      sleep 60
+      kill -0 "$$" || exit
+    done
+  ) &
+}
+
+step_setup_xcode() {
+  local need_install=0
+  if ! xcode-select -p >/dev/null 2>&1; then
+    need_install=1
+  fi
+
+  if (( need_install )); then
+    summary.add "Install Xcode Command Line Tools"
+    if (( dry_run )); then
+      log.info "[dry-run] Would install Xcode Command Line Tools"
+    else
+      log.info "Triggering Xcode Command Line Tools installer"
+      xcode-select --install >/dev/null 2>&1 || log.warn "Installer may already be running"
+      until xcode-select -p >/dev/null 2>&1; do
+        sleep 10
+      done
+    fi
+  else
+    (( verbose )) && log.info "Xcode Command Line Tools already installed"
+  fi
+
+  if command -v xcodebuild >/dev/null 2>&1; then
+    if ! sudo xcodebuild -license status >/dev/null 2>&1; then
+      summary.add "Accept Xcode license"
+      if (( dry_run )); then
+        log.info "[dry-run] Would accept the Xcode license"
+      else
+        sudo xcodebuild -license accept
+      fi
+    fi
   fi
 }
 
-request_root_privileges() {
-  log "Requesting root privileges ..."
-  sudo -v
-  while true; do
-    sudo -n true
-    sleep 60
-    kill -0 "$$" || exit
-  done 2>/dev/null &
+step_setup_homebrew() {
+  if brew_exists; then
+    (( verbose )) && log.info "Homebrew detected at $(brew_prefix_actual)"
+    return 0
+  fi
+
+  local prefix installer="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+  prefix=$(preferred_brew_prefix)
+  summary.add "Install Homebrew into $prefix"
+
+  if (( dry_run )); then
+    log.info "[dry-run] Would install Homebrew and adjust PATH"
+    return 0
+  fi
+
+  ensure_homebrew_prefix_permissions "$prefix"
+  /bin/bash -c "$(curl -fsSL "$installer")"
+
+  if [[ -x "$prefix/bin/brew" ]]; then
+    PATH="$prefix/bin:$PATH"
+    export PATH
+  fi
 }
 
-setup_default_file_associations() {
-  log "Setting preferred default file associations ..."
-  curl "https://raw.githubusercontent.com/github/linguist/master/lib/linguist/languages.yml" \
-  | yq e "to_entries | (map(.value.extensions) | flatten) - [null] | unique | .[]" \
-  | xargs -L 1 -I "{}" duti -s com.todesktop.230313mzl4w4u92 {} all
+step_ensure_brew_bundle() {
+  if [[ ! -f "$BREWFILE_PATH" ]]; then
+    summary.warn "Brewfile missing at $BREWFILE_PATH; skipping bundle"
+    return 0
+  fi
+
+  if ! brew_exists; then
+    summary.warn "Homebrew not available; cannot apply Brewfile"
+    return 0
+  fi
+
+  local check_output
+  if check_output=$(brew bundle check --file="$BREWFILE_PATH" 2>&1); then
+    (( verbose )) && printf '%s\n' "$check_output"
+    return 0
+  fi
+
+  summary.add "Install missing Homebrew formulas from Brewfile"
+  printf '%s\n' "$check_output"
+
+  if (( dry_run )); then
+    log.info "[dry-run] Would run: brew bundle install --file=\"$BREWFILE_PATH\""
+    return 0
+  fi
+
+  brew bundle --file="$BREWFILE_PATH"
 }
 
-set_wallpaper() {
-  log "Setting wallpaper ..."
-#   osascript -e "
-# tell application \"System Events\"
-#     tell every desktop
-#         set picture to \"$HOME/github/dotfiles/os/darwin/wallpaper/The Cliffs.heic\"
-#     end tell
-# end tell"
+step_setup_default_file_associations() {
+  if ! command -v duti >/dev/null 2>&1; then
+    summary.warn "duti not installed; skipping file association setup"
+    return 0
+  fi
+
+  if (( dry_run )); then
+    log.info "[dry-run] Would refresh default file associations with duti"
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1 || ! command -v yq >/dev/null 2>&1; then
+    summary.warn "curl or yq missing; cannot rebuild default associations"
+    return 0
+  fi
+
+  summary.add "Refresh default file associations via duti"
+  if ! ui.loader.run "Refreshing file associations" -- bash -c '
+    set -euo pipefail
+    curl -fsSL "https://raw.githubusercontent.com/github/linguist/master/lib/linguist/languages.yml" \
+      | yq e "to_entries | (map(.value.extensions) | flatten) - [null] | unique | .[]" \
+      | xargs -L 1 -I {} duti -s com.todesktop.230313mzl4w4u92 {} all
+  ';
+  then
+    summary.warn "Failed to update file associations"
+  fi
 }
 
-quit_system_preferences() {
-  log "Quitting System Preferences ..."
-  osascript -e 'tell application "System Preferences" to quit'
+step_apply_user_defaults() {
+  macos_defaults_load || return 0
+
+  local entry domain key type value
+  local current normalized_current normalized_target
+  local -a apply_queue=()
+  local changes=0 dock_restart=0 finder_restart=0 ui_restart=0
+  local screenshot_dir=""
+
+  for entry in "${DEFAULTS_ENTRIES[@]}"; do
+    IFS='|' read -r domain key type value <<<"$entry"
+    [[ -z "$domain" || -z "$key" ]] && continue
+
+    normalized_target=$(macos_defaults_normalize "$type" "$value")
+    if current=$(macos_defaults_read "$domain" "$key" "$type"); then
+      normalized_current="$current"
+    else
+      normalized_current=""
+    fi
+
+    if [[ "$normalized_target" != "$normalized_current" ]]; then
+      summary.add "defaults: $domain $key -> $normalized_target (was ${normalized_current:-unset})"
+      log.info "defaults: $domain $key -> $normalized_target (was ${normalized_current:-unset})"
+      apply_queue+=("$domain|$key|$type|$value")
+      (( changes++ ))
+
+      case "$domain" in
+        com.apple.dock) dock_restart=1 ;;
+        com.apple.finder) finder_restart=1 ;;
+        com.apple.screencapture)
+          ui_restart=1
+          if [[ "$key" == "location" ]]; then
+            screenshot_dir=$(expand_path "$value")
+          fi
+          ;;
+      esac
+    else
+      (( verbose )) && log.info "defaults: $domain $key already $normalized_target"
+    fi
+  done
+
+  if (( changes == 0 )); then
+    log.info "macOS defaults already aligned"
+    return 0
+  fi
+
+  if (( dry_run )); then
+    log.info "[dry-run] Skipping defaults write for $changes keys"
+    if [[ -n "$screenshot_dir" ]]; then
+      log.info "[dry-run] Would ensure directory $screenshot_dir exists"
+    fi
+    return 0
+  fi
+
+  ui.loader.start "Applying macOS defaults"
+  local item
+  for item in "${apply_queue[@]}"; do
+    IFS='|' read -r domain key type value <<<"$item"
+    macos_defaults_write "$domain" "$key" "$type" "$value"
+  done
+  ui.loader.ok
+
+  if [[ -n "$screenshot_dir" ]]; then
+    mkdir -p "$screenshot_dir"
+  fi
+
+  if (( dock_restart )); then
+    killall Dock >/dev/null 2>&1 || true
+  fi
+  if (( finder_restart )); then
+    killall Finder >/dev/null 2>&1 || true
+  fi
+  if (( ui_restart )); then
+    killall SystemUIServer >/dev/null 2>&1 || true
+  fi
+  killall cfprefsd >/dev/null 2>&1 || true
 }
 
-disable_keypress_itunes() {
-  # Prevent the keyboard media controls from opening iTunes
-  launchctl unload -w /System/Library/LaunchAgents/com.apple.rcd.plist 2>/dev/null
+step_configure_directories() {
+  ensure_directory_flag "$HOME/Library" "visible"
+  ensure_directory_flag "$HOME/Music" "hidden"
+  ensure_directory_flag "$HOME/Movies" "hidden"
+  ensure_directory_flag "$HOME/Pictures" "hidden"
+  ensure_directory_flag "$HOME/Public" "hidden"
 }
 
-setup_user_defaults() {
-  log "Setting up user defaults ..."
-  defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1
+step_install_pipx() {
+  if command -v pipx >/dev/null 2>&1; then
+    if (( dry_run )); then
+      log.info "[dry-run] Would refresh pipx environment"
+      return 0
+    fi
+    pipx ensurepath >/dev/null 2>&1 || true
+    sudo pipx --global ensurepath >/dev/null 2>&1 || true
+    pipx completions >/dev/null 2>&1 || true
+    return 0
+  fi
 
-  # Always show expanded save panel
-  defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
-  defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode2 -bool true
+  summary.add "Install pipx via Homebrew"
+  if (( dry_run )); then
+    log.info "[dry-run] Would install pipx"
+    return 0
+  fi
 
-  # Always show expanded print panel
-  defaults write NSGlobalDomain PMPrintingExpandedStateForPrint -bool true
-  defaults write NSGlobalDomain PMPrintingExpandedStateForPrint2 -bool true
+  if ! brew_exists; then
+    summary.warn "Homebrew not available; cannot install pipx"
+    return 0
+  fi
 
-  # Automatically quit printer app once all jobs complete
-  defaults write com.apple.print.PrintingPrefs "Quit When Finished" -bool true
-
-  # Disable the "Are you sure you want to open this application?" dialog
-  defaults write com.apple.LaunchServices LSQuarantine -bool false
-
-  # Increase the Bluetooth sound quality
-  defaults write com.apple.BluetoothAudioAgent "Apple Bitpool Min (editable)" -int 40
-
-  # Disable the shadows in screenshots
-  defaults write com.apple.screencapture disable-shadow -bool true
-
-  # Keep folders on top when sorting by name
-  defaults write com.apple.finder _FXSortFoldersFirst -bool true
-
-  # Disable the file extension change warning
-  defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false
-
-  # Use the list view in all Finder windows by default
-  defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"
-
-  # Expand the "General", "Open with", and "Sharing & Permissions" in File Info
-  defaults write com.apple.finder FXInfoPanesExpanded -dict \
-    General -bool true \
-    OpenWith -bool true \
-    Privileges -bool true
-
-  # Minimize windows into their application icon
-  defaults write com.apple.dock minimize-to-application -bool true
-
-  # Disable show recent applications in Dock
-  defaults write com.apple.dock show-recents -bool false
-
-  # Start TextEdit in plain-text mode
-  defaults write com.apple.TextEdit RichText -int 0
-
-  # Launch Activity Monitor to main window
-  defaults write com.apple.ActivityMonitor OpenMainWindow -bool true
-
-  # Visualize CPU usage in Activity Monitor Dock icon
-  defaults write com.apple.ActivityMonitor IconType -int 5
-
-  # Show all processes in Activity Monitor
-  defaults write com.apple.ActivityMonitor ShowCategory -int 0
-
-  # Sort Activity Monitor results by CPU usage
-  defaults write com.apple.ActivityMonitor SortColumn -string "CPUUsage"
-  defaults write com.apple.ActivityMonitor SortDirection -int 0
-
-  # Set default dock size to 45 pixels
-  defaults write com.apple.dock "tilesize" -int "45" && killall Dock
-
-  # Enable AirDrop over Ethernet
-  defaults write com.apple.NetworkBrowser BrowseAllInterfaces -bool true
+  brew install pipx
+  pipx ensurepath >/dev/null 2>&1 || true
+  sudo pipx --global ensurepath >/dev/null 2>&1 || true
+  pipx completions >/dev/null 2>&1 || true
 }
 
-hide_vendor_directories() {
-  log "Hiding unused directories ..."
-  # Show ~/Library folder
-  chflags nohidden "$(realpath ~/Library)"
+step_enable_firewall() {
+  if ! command -v sudo >/dev/null 2>&1; then
+    summary.warn "sudo unavailable; skipping firewall configuration"
+    return 0
+  fi
 
-  # Hide unused app directories
-  chflags hidden "$HOME/Music"
-  chflags hidden "$HOME/Movies"
-  chflags hidden "$HOME/Pictures"
-  chflags hidden "$HOME/Public"
+  local status
+  status=$(sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null || true)
+  if [[ "$status" == *"State = 1"* ]]; then
+    (( verbose )) && log.info "Firewall already enabled"
+    return 0
+  fi
+
+  summary.add "Enable application firewall"
+  if (( dry_run )); then
+    log.info "[dry-run] Would enable the application firewall"
+    return 0
+  fi
+
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on >/dev/null 2>&1
 }
 
-show_library_folder() {
-  chflags nohidden "$(realpath "$HOME/Library")"
+step_quit_system_preferences() {
+  if (( dry_run )); then
+    log.info "[dry-run] Would quit System Preferences"
+    return 0
+  fi
+  osascript -e 'tell application "System Preferences" to quit' >/dev/null 2>&1 || true
 }
 
-run_setup
+update_brewfile_from_system() {
+  if ! brew_exists; then
+    summary.warn "Homebrew not installed; cannot update Brewfile"
+    return 1
+  fi
+
+  if (( dry_run )); then
+    log.info "[dry-run] Would run: brew bundle dump --file=\"$BREWFILE_PATH\" --force"
+    summary.add "Brewfile would be regenerated from current system"
+    return 0
+  fi
+
+  if ui.loader.run "Updating Brewfile" -- brew bundle dump --file="$BREWFILE_PATH" --force; then
+    summary.add "Brewfile updated from current system"
+  else
+    summary.warn "Failed to update Brewfile"
+    return 1
+  fi
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        verbose=1
+        ;;
+      -y|--yes)
+        assume_yes=1
+        ;;
+      --non-interactive)
+        non_interactive=1
+        ;;
+      --dry-run)
+        dry_run=1
+        ;;
+      --update-brewfile)
+        update_brewfile=1
+        ;;
+      --update-defaults)
+        update_defaults=1
+        ;;
+      --update-only)
+        update_only=1
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        log.error "Unexpected positional argument: $1"
+        script.usage 1
+        ;;
+    esac
+    shift
+  done
+
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected positional arguments: $*"
+    script.usage 1
+  fi
+}
+
+main() {
+  parse_args "$@"
+
+  if (( update_brewfile )); then
+    update_brewfile_from_system
+  fi
+
+  if (( update_defaults )); then
+    macos_defaults_update_file
+  fi
+
+  if (( update_only )); then
+    summary.print
+    return 0
+  fi
+
+  if ! prompt.ask_yes_no 'Proceed with macOS system provisioning?' "$assume_yes" "$non_interactive" "$verbose"; then
+    log.warn "Aborted by user"
+    return 1
+  fi
+
+  local start_time end_time duration
+  start_time=$(date +%s)
+
+  run_step "Request sudo keep-alive" step_sudo_keepalive
+  run_step "Install Xcode Command Line Tools" step_setup_xcode
+  run_step "Ensure Homebrew" step_setup_homebrew
+  run_step "Apply Brew bundle" step_ensure_brew_bundle
+  run_step "Refresh file associations" step_setup_default_file_associations
+  run_step "Apply macOS defaults" step_apply_user_defaults
+  run_step "Configure special directories" step_configure_directories
+  run_step "Quit System Preferences" step_quit_system_preferences
+  run_step "Ensure pipx" step_install_pipx
+  run_step "Enable firewall" step_enable_firewall
+
+  end_time=$(date +%s)
+  duration=$((end_time - start_time))
+
+  printf '\n'
+  summary.print
+  log.info "✨ Done in ${duration}s."
+}
+
+main "$@"

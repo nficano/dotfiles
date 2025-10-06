@@ -1,0 +1,376 @@
+#!/usr/bin/env bash
+#/ Manage packages via the first supported package manager detected on the system.
+#/
+#/ Usage: $(basename "$0") [options] <command> <package>
+#/
+#/ Commands:
+#/   install <package>    Install the package
+#/   update <package>     Update/upgrade the package
+#/   uninstall <package>  Remove the package (alias: remove)
+#/
+#/ Options:
+#/   -m, --manager NAME   Force use of a specific package manager
+#/   -l, --list-managers  Show detected package managers and exit
+#/       --dry-run        Print the command that would be executed
+#/   -h, --help           Show this help message and exit
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/utils"
+
+if (( BASH_VERSINFO[0] < 4 )) || (( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3 )); then
+  log.error "pkg-manage requires Bash 4.3 or newer"
+  exit 1
+fi
+
+declare -A MANAGER_LABEL=()
+declare -A MANAGER_DETECT=()
+declare -A MANAGER_INSTALL=()
+declare -A MANAGER_UPDATE=()
+declare -A MANAGER_REMOVE=()
+declare -A MANAGER_SUDO=()
+declare -A MANAGER_ALIASES=()
+declare -a MANAGER_KEYS=()
+MANAGER_DEFS_LOADED=0
+
+MANAGER_DEFINITIONS=$(cat <<'EOF'
+brew|Homebrew|detect=brew|install=brew install {pkg}|update=brew upgrade {pkg}|remove=brew uninstall {pkg}|sudo=0
+port|MacPorts|detect=port|install=port install {pkg}|update=port upgrade {pkg}|remove=port uninstall {pkg}|sudo=1
+apt_get|APT (apt-get)|detect=apt-get|install=apt-get install -y {pkg}|update=apt-get install --only-upgrade -y {pkg}|remove=apt-get remove -y {pkg}|sudo=1
+apt|APT (apt)|detect=apt|install=apt install -y {pkg}|update=apt install --only-upgrade -y {pkg}|remove=apt remove -y {pkg}|sudo=1
+dnf|DNF|detect=dnf|install=dnf install -y {pkg}|update=dnf upgrade -y {pkg}|remove=dnf remove -y {pkg}|sudo=1
+yum|YUM|detect=yum|install=yum install -y {pkg}|update=yum update -y {pkg}|remove=yum remove -y {pkg}|sudo=1
+pacman|pacman|detect=pacman|install=pacman -S --noconfirm --needed {pkg}|update=pacman -S --noconfirm {pkg}|remove=pacman -R --noconfirm {pkg}|sudo=1
+zypper|Zypper|detect=zypper|install=zypper install -y {pkg}|update=zypper update -y {pkg}|remove=zypper remove -y {pkg}|sudo=1
+apk|apk|detect=apk|install=apk add --no-cache {pkg}|update=apk add --no-cache --upgrade {pkg}|remove=apk del {pkg}|sudo=1
+emerge|Portage (emerge)|detect=emerge|install=emerge --ask=n {pkg}|update=emerge --ask=n --update {pkg}|remove=emerge --ask=n --depclean {pkg}|sudo=1
+xbps|XBPS|detect=xbps-install|install=xbps-install -y {pkg}|update=xbps-install -y {pkg}|remove=xbps-remove -y {pkg}|sudo=1
+snap|Snap|detect=snap|install=snap install {pkg}|update=snap refresh {pkg}|remove=snap remove {pkg}|sudo=1
+flatpak|Flatpak|detect=flatpak|install=flatpak install -y {pkg}|update=flatpak update -y {pkg}|remove=flatpak uninstall -y {pkg}|sudo=1
+nix_env|Nix (nix-env)|detect=nix-env|install=nix-env -i {pkg}|update=nix-env -u {pkg}|remove=nix-env -e {pkg}|sudo=0
+choco|Chocolatey|detect=choco|install=choco install -y {pkg}|update=choco upgrade -y {pkg}|remove=choco uninstall -y {pkg}|sudo=1
+winget|Winget|detect=winget|install=winget install --silent --accept-source-agreements --accept-package-agreements --id {pkg}|update=winget upgrade --silent --accept-source-agreements --accept-package-agreements --id {pkg}|remove=winget uninstall --silent --id {pkg}|sudo=0
+scoop|Scoop|detect=scoop|install=scoop install {pkg}|update=scoop update {pkg}|remove=scoop uninstall {pkg}|sudo=0
+pkg|pkg (FreeBSD)|detect=pkg|install=pkg install -y {pkg}|update=pkg upgrade -y {pkg}|remove=pkg delete -y {pkg}|sudo=1
+EOF
+)
+
+load_manager_definitions() {
+  (( MANAGER_DEFS_LOADED )) && return
+  MANAGER_DEFS_LOADED=1
+
+  local line key label rest
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^# ]] && continue
+
+    IFS='|' read -r key label rest <<<"$line"
+    [[ -z "$key" ]] && continue
+
+    MANAGER_KEYS+=("$key")
+    MANAGER_LABEL["$key"]="$label"
+    MANAGER_SUDO["$key"]=0
+
+    IFS='|' read -ra props <<<"$rest"
+    local prop name value
+    for prop in "${props[@]}"; do
+      [[ -z "$prop" ]] && continue
+      name=${prop%%=*}
+      value=${prop#*=}
+      case "$name" in
+        detect) MANAGER_DETECT["$key"]="$value" ;;
+        install) MANAGER_INSTALL["$key"]="$value" ;;
+        update) MANAGER_UPDATE["$key"]="$value" ;;
+        remove) MANAGER_REMOVE["$key"]="$value" ;;
+        sudo) MANAGER_SUDO["$key"]="$value" ;;
+        alias) MANAGER_ALIASES["$key"]="$value" ;;
+      esac
+    done
+  done <<<"$MANAGER_DEFINITIONS"
+}
+
+normalize_key() {
+  local input="$1"
+  local lowered
+  lowered=$(printf '%s' "$input" | tr '[:upper:]' '[:lower:]')
+  lowered=${lowered// /_}
+  lowered=${lowered//-/_}
+  echo "$lowered"
+}
+
+resolve_manager_key() {
+  local input="$1"
+  local normalized
+  normalized=$(normalize_key "$input")
+
+  local key
+  for key in "${MANAGER_KEYS[@]}"; do
+    if [[ "$normalized" == "$key" ]]; then
+      echo "$key"
+      return 0
+    fi
+
+    if [[ -n "${MANAGER_ALIASES[$key]:-}" ]]; then
+      IFS=',' read -ra alias_list <<<"${MANAGER_ALIASES[$key]}"
+      local alias
+      for alias in "${alias_list[@]}"; do
+        if [[ "$normalized" == "$(normalize_key "$alias")" ]]; then
+          echo "$key"
+          return 0
+        fi
+      done
+    fi
+
+    if [[ -n "${MANAGER_DETECT[$key]:-}" ]]; then
+      if [[ "$normalized" == "$(normalize_key "${MANAGER_DETECT[$key]}")" ]]; then
+        echo "$key"
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
+detect_available_managers() {
+  load_manager_definitions
+  local key detect_cmd
+  for key in "${MANAGER_KEYS[@]}"; do
+    detect_cmd=${MANAGER_DETECT["$key"]:-}
+    [[ -z "$detect_cmd" ]] && continue
+    if command -v "$detect_cmd" >/dev/null 2>&1; then
+      printf '%s\n' "$key"
+    fi
+  done
+}
+
+show_detected_managers() {
+  local -a available=()
+  mapfile -t available < <(detect_available_managers)
+  if (( ${#available[@]} == 0 )); then
+    printf 'No supported package managers detected.\n'
+    return 1
+  fi
+
+  printf 'Detected package managers:\n'
+  local key
+  for key in "${available[@]}"; do
+    printf ' - %s (%s) via `%s`\n' "$key" "${MANAGER_LABEL[$key]}" "${MANAGER_DETECT[$key]}"
+  done
+}
+
+select_manager() {
+  local preferred="$1"
+  local -a available=()
+  mapfile -t available < <(detect_available_managers)
+
+  if [[ -n "$preferred" ]]; then
+    if resolve_manager_key "$preferred" >/dev/null; then
+      local key
+      key=$(resolve_manager_key "$preferred")
+
+      local candidate
+      for candidate in "${available[@]}"; do
+        if [[ "$candidate" == "$key" ]]; then
+          echo "$key"
+          return 0
+        fi
+      done
+
+      log.error "Requested package manager '$preferred' is not available"
+      exit 1
+    fi
+    log.error "Unknown package manager '$preferred'"
+    exit 1
+  fi
+
+  if (( ${#available[@]} == 0 )); then
+    log.error "No supported package managers detected"
+    exit 1
+  fi
+
+  echo "${available[0]}"
+}
+
+command_requires_sudo() {
+  local manager="$1"
+  local require="${MANAGER_SUDO[$manager]:-0}"
+  if (( require == 0 )); then
+    return 1
+  fi
+  if [[ $(id -u) -eq 0 ]]; then
+    return 1
+  fi
+  command -v sudo >/dev/null 2>&1 || return 1
+  return 0
+}
+
+build_action_command() {
+  local manager="$1" action="$2" package="$3" output_ref="$4"
+  local template
+  case "$action" in
+    install) template="${MANAGER_INSTALL[$manager]:-}" ;;
+    update|upgrade) template="${MANAGER_UPDATE[$manager]:-}" ;;
+    uninstall|remove) template="${MANAGER_REMOVE[$manager]:-}" ;;
+    *)
+      log.error "Unsupported command '$action'"
+      exit 1
+      ;;
+  esac
+
+  if [[ -z "$template" ]]; then
+    log.error "${MANAGER_LABEL[$manager]} does not support '$action'"
+    exit 1
+  fi
+
+  if [[ -z "$package" ]]; then
+    log.error "A package name is required"
+    exit 1
+  fi
+
+  local -a parts
+  read -r -a parts <<<"$template"
+
+  local idx
+  for idx in "${!parts[@]}"; do
+    parts[$idx]="${parts[$idx]//\{pkg\}/$package}"
+  done
+
+  local -a cmd_parts=()
+  if command_requires_sudo "$manager"; then
+    cmd_parts+=(sudo)
+  fi
+  cmd_parts+=("${parts[@]}")
+
+  local -n out_ref=$output_ref
+  out_ref=("${cmd_parts[@]}")
+}
+
+run_action() {
+  local manager="$1" action="$2" package="$3" dry_run="$4"
+  local -a cmd_parts=()
+  build_action_command "$manager" "$action" "$package" cmd_parts
+
+  if (( dry_run )); then
+    local formatted=""
+    local part
+    for part in "${cmd_parts[@]}"; do
+      formatted+="$(printf '%q ' "$part")"
+    done
+    printf '%s\n' "${formatted% }"
+    return 0
+  fi
+
+  "${cmd_parts[@]}"
+}
+
+parse_args() {
+  local -n _action_ref=$1
+  local -n _package_ref=$2
+  local -n _manager_ref=$3
+  local -n _list_ref=$4
+  local -n _dry_run_ref=$5
+  shift 5
+
+  _list_ref=0
+  _dry_run_ref=0
+
+  local positional=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -l|--list-managers)
+        _list_ref=1
+        ;;
+      --dry-run)
+        _dry_run_ref=1
+        ;;
+      -m|--manager)
+        if [[ $# -lt 2 ]]; then
+          log.error "--manager requires a value"
+          script.usage 1
+        fi
+        _manager_ref=$2
+        shift
+        ;;
+      --)
+        shift
+        while [[ $# -gt 0 ]]; do
+          positional+=("$1")
+          shift
+        done
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        positional+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  if (( ${#positional[@]} >= 1 )); then
+    _action_ref="${positional[0]}"
+  fi
+
+  if (( ${#positional[@]} >= 2 )); then
+    _package_ref="${positional[1]}"
+  fi
+
+  if (( ${#positional[@]} > 2 )); then
+    log.error "Too many positional arguments"
+    script.usage 1
+  fi
+}
+
+main() {
+  load_manager_definitions
+
+  local action=""
+  local package=""
+  local manager=""
+  local list_only=0
+  local dry_run=0
+
+  parse_args action package manager list_only dry_run "$@"
+
+  if (( list_only )); then
+    show_detected_managers
+    exit $?
+  fi
+
+  if [[ -z "$action" ]]; then
+    log.error "A command is required"
+    script.usage 1
+  fi
+
+  case "$action" in
+    install|update|upgrade|uninstall|remove)
+      ;;
+    *)
+      log.error "Unsupported command '$action'"
+      script.usage 1
+      ;;
+  esac
+
+  if [[ -z "$package" ]]; then
+    log.error "A package name must be supplied"
+    script.usage 1
+  fi
+
+  local resolved_manager
+  resolved_manager=$(select_manager "$manager")
+
+  log.info "Using ${MANAGER_LABEL[$resolved_manager]}"
+
+  run_action "$resolved_manager" "$action" "$package" "$dry_run"
+}
+
+main "$@"

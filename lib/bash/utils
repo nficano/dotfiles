@@ -365,6 +365,63 @@ log.info()  { printf "$(log._color 1; log._color 34)[INFO]$(log._reset) %s\n" "$
 log.warn()  { printf "$(log._color 1; log._color 33)[WARN]$(log._reset) %s\n" "$*"; }
 log.error() { printf "$(log._color 1; log._color 31)[ERR ]$(log._reset) %s\n" "$*"; }
 
+# --- UI Helpers ------------------------------------------------------------
+_UI_LOADER_LOADED=0
+
+ui.loader.ensure() {
+    (( _UI_LOADER_LOADED )) && return 0
+    local loader_path
+    loader_path="$(dirname "${BASH_SOURCE[0]}")/ui/loaders"
+    if [[ ! -f "$loader_path" ]]; then
+        log.warn "ui.loader: loader script not found at $loader_path"
+        return 1
+    fi
+    shell.import "$loader_path" || return 1
+    _UI_LOADER_LOADED=1
+}
+
+ui.loader.start() {
+    ui.loader.ensure || return 1
+    spinner.start "$@"
+}
+
+ui.loader.ok() {
+    [[ ${_UI_LOADER_LOADED:-0} -eq 0 ]] && return 0
+    spinner.ok
+}
+
+ui.loader.fail() {
+    [[ ${_UI_LOADER_LOADED:-0} -eq 0 ]] && return 0
+    spinner.fail
+}
+
+ui.loader.run() { # ui.loader.run <label> -- <command ...>
+    ui.loader.ensure || return 1
+    spinner "$@"
+}
+
+# --- Command Helpers -------------------------------------------------------
+run.maybe() { # run.maybe <dry-run-flag> <description> <command...>
+    local dry_flag="$1" desc="$2"
+    shift 2 || true
+    if (( dry_flag )); then
+        if [[ -n "$desc" ]]; then
+            log.info "[dry-run] $desc"
+        fi
+        if (($#)); then
+            local formatted=""
+            local part
+            for part in "$@"; do
+                formatted+="$(printf '%q ' "$part")"
+            done
+            [[ -n "$formatted" ]] && log.info "          ${formatted% }"
+        fi
+        return 0
+    fi
+    (($#)) || return 0
+    "$@"
+}
+
 # --- Preconditions ---------------------------------------------------------
 require.cmd() { # fail if any command is missing
     local missing=0
@@ -375,6 +432,63 @@ require.cmd() { # fail if any command is missing
         fi
     done
     (( missing == 0 ))
+}
+
+ensure.cmds() { # ensure.cmds <cmd[:formula]>...
+    if (($# == 0)); then
+        log.error "ensure.cmds requires at least one command"
+        return 2
+    fi
+
+    local spec cmd formula
+    local -a missing_cmds=()
+    local -a missing_formulae=()
+
+    for spec in "$@"; do
+        cmd=${spec%%:*}
+        formula=${spec#*:}
+        if [[ "$spec" != *:* ]]; then
+            formula="$cmd"
+        fi
+
+        if sys.path.contains "$cmd"; then
+            continue
+        fi
+
+        missing_cmds+=("$cmd")
+        missing_formulae+=("$formula")
+    done
+
+    (( ${#missing_cmds[@]} )) || return 0
+
+    if ! os.platform.is_darwin; then
+        for cmd in "${missing_cmds[@]}"; do
+            log.error "Required command not found: $cmd"
+        done
+        return 1
+    fi
+
+    local brew_bin
+    brew_bin=$(command -v brew 2>/dev/null || true)
+    if [[ -z "$brew_bin" ]]; then
+        log.error "Homebrew is required to install: ${missing_cmds[*]}"
+        return 1
+    fi
+
+    log.info "Installing missing dependencies via Homebrew: ${missing_formulae[*]}"
+    if ! "$brew_bin" install "${missing_formulae[@]}"; then
+        log.error "Failed to install required dependencies via Homebrew"
+        return 1
+    fi
+
+    for cmd in "${missing_cmds[@]}"; do
+        if ! sys.path.contains "$cmd"; then
+            log.error "Command still missing after installation: $cmd"
+            return 1
+        fi
+    done
+
+    return 0
 }
 
 confirm.yesno() { # $1=prompt ; returns 0 for yes
