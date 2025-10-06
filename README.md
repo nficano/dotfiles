@@ -113,6 +113,7 @@ setup/macos/mac-provision --yes --non-interactive
 - **`macos-dns-flush`** – Flushes DNS caches via `dscacheutil` and `mDNSResponder`
 - **`macos-hostname-set`** – Updates the system hostname, LocalHostName, and related SMB settings in one step
 - **`macos-notifications-clear`** – Kills `NotificationCenter` to empty the notification list
+- **`pkg-manager`** - Manage packages via the first supported package manager detected on the system.
 - **`postgres-start` / `postgres-stop`** – Control Homebrew's PostgreSQL service via `brew services`
 
 ### Network and Diagnostics
