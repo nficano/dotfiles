@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-#/ Show a filtered, formatted, and sorted process list.
+#/ Render a colorful, grouped application process listing.
 #/
-#/ Usage: $(basename "$0") [-h] [-v] [-f] -p param_value arg1 [arg2...]
+#/ Usage: $(basename "$0") [-h] [-v]
 #/
 #/ Available options:
-#/    -h, --help      Print this help and exit
-#/    -v, --verbose   Enable verbose output
-#/    -f, --flag      Toggle example flag behavior
-#/    -p, --param     Required parameter value
+#/    -h, --help     Print this help and exit
+#/    -v, --verbose  Enable verbose output
 #/
-#/ Examples:
-#/    $(basename "$0") --help
-#/    $(basename "$0") -p value arg1 arg2
-
 set -Eeuo pipefail
 trap script.cleanup SIGINT SIGTERM ERR EXIT
 
@@ -21,32 +15,21 @@ source "$(dirname "$0")/../lib/bash/initrc"
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
 verbose=0
-flag=0
-param=""
-declare -a args=()
 
 parse_args() {
-  local opt
-  local -a transformed=()
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --flag) transformed+=('-f') ;;
-      --param)
-        [[ $# -gt 1 ]] || { log.error "--param requires a value"; script.usage 1; }
-        transformed+=('-p' "$2")
-        shift
+      -h|--help)
+        script.usage
         ;;
-      --param=*)
-        transformed+=('-p' "${1#*=}")
+      -v|--verbose)
+        verbose=1
         ;;
       --)
         shift
         break
         ;;
-      --*)
+      -*)
         log.error "Unknown option: $1"
         script.usage 1
         ;;
@@ -56,42 +39,138 @@ parse_args() {
     esac
     shift
   done
+}
 
-  transformed+=("$@")
-  set -- "${transformed[@]}"
+collect_process_lines() {
+  python3 <<'PYCODE'
+import ctypes
+import os
+import subprocess
+import sys
+from pathlib import Path
 
-  while getopts ':hvfp:' opt; do
-    case "$opt" in
-      h) script.usage ;;
-      v) verbose=1 ;;
-      f) flag=1 ;;
-      p) param="$OPTARG" ;;
-      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
-    esac
-  done
+HOME = os.path.expanduser("~")
+ROOTS = ["/Applications", HOME]
 
-  shift $((OPTIND - 1))
-  args=("$@")
+PROC_PIDPATHINFO_MAXSIZE = 4096
 
-  if [[ -z "$param" ]]; then
-    log.error "Missing required option --param"
-    script.usage 1
-  fi
+def iter_pids():
+    try:
+        output = subprocess.check_output(["ps", "-Ao", "pid="], text=True)
+    except subprocess.CalledProcessError:
+        return []
+    return [int(line) for line in output.splitlines() if line.strip().isdigit()]
 
-  if [[ ${#args[@]} -eq 0 ]]; then
-    log.error "Missing required positional arguments"
-    script.usage 1
-  fi
+if sys.platform.startswith("darwin"):
+    libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+
+    def get_exe(pid):
+        buf = ctypes.create_string_buffer(PROC_PIDPATHINFO_MAXSIZE)
+        ret = libproc.proc_pidpath(pid, buf, PROC_PIDPATHINFO_MAXSIZE)
+        if ret <= 0:
+            return ""
+        return buf.value.decode("utf-8", "ignore")
+elif sys.platform.startswith("linux"):
+    def get_exe(pid):
+        try:
+            return os.readlink(f"/proc/{pid}/exe")
+        except OSError:
+            return ""
+else:
+    def get_exe(pid):
+        return ""
+
+
+def path_under_roots(path: str) -> bool:
+    return any(
+        path == root or path.startswith(root + os.sep)
+        for root in ROOTS
+    )
+
+
+def derive_group(path: Path):
+    for part in path.parts:
+        if part.endswith(".app"):
+            return part[:-4]
+
+    try:
+        if str(path).startswith(HOME):
+            relative = path.relative_to(HOME)
+            if relative.parts:
+                first = relative.parts[0]
+                return first[:-4] if first.endswith(".app") else first
+            return path.name
+    except ValueError:
+        pass
+
+    name = path.stem
+    return name or None
+
+
+groups = {}
+
+for pid in iter_pids():
+    path_value = get_exe(pid)
+    if not path_value:
+        continue
+
+    try:
+        real_path = Path(os.path.realpath(path_value))
+    except OSError:
+        continue
+
+    path_str = str(real_path)
+    if not path_under_roots(path_str):
+        continue
+
+    group = derive_group(real_path)
+    if not group:
+        continue
+
+    name = real_path.name.rstrip("/")
+    if name.endswith(".app"):
+        name = name[:-4]
+
+    if name in {"Contents", "MacOS", "Frameworks", "Library", "Resources"}:
+        continue
+
+    groups.setdefault(group, []).append((pid, name))
+
+for group_name in sorted(groups):
+    entries = sorted(groups[group_name], key=lambda item: item[0])
+    for pid, proc_name in entries:
+        print(f"{group_name}\t{pid}\t{proc_name}")
+PYCODE
+}
+
+render_processes() {
+  local current_group=""
+  local found=0
+  local group pid name
+
+  while IFS=$'\t' read -r group pid name; do
+    [[ -z "${group:-}" ]] && continue
+
+    if [[ "$group" != "$current_group" ]]; then
+      [[ -n "$current_group" ]] && printf '\n'
+      current_group="$group"
+      printf '%s\n' "$(ui.ansi.wrap '1;34' "${group}:")"
+    fi
+
+    local pid_colored name_colored
+    pid_colored=$(ui.ansi.wrap '32' "$pid")
+    name_colored=$(ui.ansi.wrap '97' "$name")
+    printf '  %s %s\n' "$pid_colored" "$name_colored"
+    found=1
+  done < <(collect_process_lines)
+
+  (( found )) || log.warn "No matching processes under /Applications or $HOME"
 }
 
 main() {
-  (( verbose )) && log.info "Verbose mode enabled"
-
-  log.info "Flag set: $flag"
-  log.info "Param value: $param"
-  log.info "Arguments: ${args[*]}"
-  # TODO: implement script logic
+  require.cmd python3
+  (( verbose )) && log.info "Scanning active processes"
+  render_processes
 }
 
 parse_args "$@"
