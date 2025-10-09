@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+# Text and string manipulation helpers inspired by Python's string library.
+text.substr() {
+    echo "${1:$2:$3}"
+}
+
+text.repeat() {
+    local char="$1" count="${2:-0}"
+    (( count > 0 )) || return 0
+    local pad
+    printf -v pad '%*s' "$count" ""
+    printf '%s' "${pad// /$char}"
+}
+
+str.trim() {
+    local s="$*"
+    s="${s%%[[:space:]]*}"
+    s="${s##*[[:space:]]}"
+    echo "$s"
+}
+
+str.lower() {
+    tr '[:upper:]' '[:lower:]'
+}
+
+str.upper() {
+    tr '[:lower:]' '[:upper:]'
+}
+
+str.urlencode() {
+    # Minimal RFC 3986 encoder.
+    local LC_ALL=C
+    local s="$*"
+    local i c out=""
+    for (( i=0; i<${#s}; i++ )); do
+        c=${s:i:1}
+        case "$c" in
+            [a-zA-Z0-9._~-]) out+="$c" ;;
+            ' ') out+='%20' ;;
+            *) printf -v out '%s%%%02X' "$out" "'"$c ;;
+        esac
+    done
+    echo "$out"
+}
+
+str.urldecode() {
+    : "${*//+/ }"
+    echo -e "${_//%/\\x}"
+}

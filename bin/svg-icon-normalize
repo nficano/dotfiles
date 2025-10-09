@@ -15,7 +15,7 @@
 set -Eeuo pipefail
 trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-source "$(dirname "$0")/../lib/bash/utils"
+source "$(dirname "$0")/../lib/bash/initrc"
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 

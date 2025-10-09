@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+# OS and platform helpers similar in spirit to Python's os and sys modules.
+os.devnull() {
+    "$@" 2>/dev/null >/dev/null
+}
+
+os.setenv() {
+    export "${1}"="${2}"
+}
+
+os.getenv() {
+    env | grep "^$1=" | cut -d'=' -f2
+}
+
+sys.platform() {
+    uname -s | tr "[:upper:]" "[:lower:]"
+}
+
+os.platform.is_darwin() {
+    [[ $(sys.platform) == darwin ]]
+}
+
+os.platform.is_linux() {
+    [[ $(sys.platform) == linux ]]
+}
+
+os.path.exists() {
+    [[ -f "$1" ]]
+}
+
+sys.path.contains() {
+    os.devnull command -v "$1"
+}
+
+sys.path.prepend() {
+    [[ -d "$1" ]] && PATH="$1:${PATH}"
+}
+
+sys.path.append() {
+    [[ -d "$1" ]] && PATH="${PATH}:$1"
+}
+
+sys.path.prepend_many() {
+    local d
+    for d in "$@"; do
+        sys.path.prepend "$d"
+    done
+}
+
+sys.path.append_many() {
+    local d
+    for d in "$@"; do
+        sys.path.append "$d"
+    done
+}
+
+clip.copy() {
+    if os.platform.is_darwin; then
+        pbcopy
+    else
+        xclip -selection clipboard
+    fi
+}
+
+clip.paste() {
+    if os.platform.is_darwin; then
+        pbpaste
+    else
+        xclip -selection clipboard -o
+    fi
+}

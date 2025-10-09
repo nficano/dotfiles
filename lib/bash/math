@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+# Numeric helpers mirroring bits of Python's math utilities.
+math.seconds_to_microseconds() {
+    local seconds="${1:-0}"
+    awk -v value="$seconds" 'BEGIN {
+        if (value + 0 <= 0) {
+            printf "%d", 0
+        } else {
+            printf "%.0f", value * 1000000.0
+        }
+    }'
+}

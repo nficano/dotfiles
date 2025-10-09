@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# Prompting helpers paralleling Python's input utilities.
+confirm.yesno() {
+    local prompt=${1:-"Proceed?"}
+    read -r -p "$prompt [y/N] " reply
+    [[ $reply =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+prompt.ask_yes_no() {
+    local prompt="$1"
+    local assume_yes="${2:-0}"
+    local non_interactive="${3:-0}"
+    local verbose="${4:-0}"
+
+    if (( assume_yes )); then
+        (( verbose )) && printf 'Assuming yes: %s\n' "$prompt"
+        return 0
+    fi
+
+    if (( non_interactive )); then
+        log.error "Cannot prompt in non-interactive mode ($prompt)"
+        return 1
+    fi
+
+    local reply=""
+    read -r -p "$prompt [y/N]: " reply
+    case "$reply" in
+        [Yy]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+prompt.read_input() {
+    local prompt="$1"
+    local default="${2:-}"
+    local non_interactive="${3:-0}"
+    local env_var="${4:-}"
+
+    if (( non_interactive )); then
+        if [[ -n "$env_var" ]]; then
+            echo "${!env_var:-$default}"
+        else
+            echo "$default"
+        fi
+        return
+    fi
+
+    local input=""
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " input
+        echo "${input:-$default}"
+    else
+        read -r -p "$prompt: " input
+        echo "$input"
+    fi
+}
+
+prompt.read_required() {
+    local prompt="$1"
+    local non_interactive="${2:-0}"
+    local env_var="${3:-}"
+
+    local input
+    input=$(prompt.read_input "$prompt" "" "$non_interactive" "$env_var")
+
+    if [[ -z "$input" ]]; then
+        log.error "Input value must not be empty"
+        return 1
+    fi
+
+    echo "$input"
+}

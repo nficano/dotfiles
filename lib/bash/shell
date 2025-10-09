@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+# Shell primitives akin to Python's subprocess and importlib helpers.
+shell.defer() {
+    local wrap=0
+    if [[ "$1" == "--wrap" || "$1" == "--force" ]]; then
+        wrap=1; shift
+    fi
+
+    local tool="$1"; shift || true
+    if [[ -z "$tool" || $# -lt 1 ]]; then
+        log.error "shell.defer usage: shell.defer [--wrap] <tool> <init-cmd> [args...]"
+        return 2
+    fi
+
+    if (( wrap == 0 )) && command -v "$tool" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local init_call
+    if [[ $# -eq 1 ]]; then
+        local cmd_str="$1"
+        local q
+        printf -v q '%q' "$cmd_str"
+        init_call="eval -- $q"
+    else
+        local q
+        printf -v q '%q ' "$@"
+        init_call="$q"
+    fi
+
+    eval "
+${tool}() {
+  unset -f ${tool} 2>/dev/null
+  ${init_call}
+  if ! command -v ${tool} >/dev/null 2>&1; then
+    echo \"shell.defer: '${tool}' not available after initializer\" >&2
+    return 127
+  fi
+  ${tool} \"\$@\"
+}
+"
+}
+
+shell.setopt() {
+    sys.path.contains "shopt" && shopt -s "$1"
+}
+
+shell.import() {
+    if [[ "$1" == "--defer" ]]; then
+        local tool="$2" file="$3"
+        if [[ -z "$tool" || -z "$file" ]]; then
+            log.error "shell.import --defer <tool> <file>"
+            return 2
+        fi
+        shell.defer "$tool" shell.import "$file"
+        return
+    fi
+    [[ -f "$1" ]] && source "$1"
+}
+
+shell.eval() {
+    if [[ "$1" == "--defer" ]]; then
+        local tool="$2"; shift 2 || true
+        shell.defer "$tool" shell.eval "$1"
+        return
+    fi
+    eval "$($1)"
+}
+
+shell.setup_prompt() {
+    os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_path)\[\e[0m\] [\A] > "
+}
+
+shell.iterm2_style_path() {
+    IFS="/"
+    read -ra relpath <<<"$(dirs +0)"
+    buffer=""
+    dirname=$((${#relpath[*]} - 1))
+
+    local folder_name
+    for folder_name in "${relpath[@]}"; do
+        if [[ $folder_name != "${relpath[$dirname]}" ]]; then
+            buffer+="$(text.substr "$folder_name" 0 1)/"
+        fi
+    done
+    echo -n "$buffer${folder_name}"
+}

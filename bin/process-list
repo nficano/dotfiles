@@ -1,70 +1,98 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #/ Show a filtered, formatted, and sorted process list.
 #/
-#/ Usage:
-#/      process-list [-h] [--help]
-#/      process-list [--no-macos]
+#/ Usage: $(basename "$0") [-h] [-v] [-f] -p param_value arg1 [arg2...]
 #/
-#/ DESCRIPTION
-#/      This script provides a more readable version of the `ps aux` command output.
-#/      It filters out processes run by users whose usernames start with an underscore,
-#/      removes duplicate commands, and displays the username, PID, path, and command
-#/      in a nicely formatted table. The usernames are displayed in green, and the
-#/      output is sorted by the username. This script can be useful for quickly reviewing
-#/      system processes in a more user-friendly format.
-#/      The --no-macos flag hides processes that originate from /System paths (macOS specific).
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/    -f, --flag      Toggle example flag behavior
+#/    -p, --param     Required parameter value
 #/
+#/ Examples:
+#/    $(basename "$0") --help
+#/    $(basename "$0") -p value arg1 arg2
 
-set -o errexit # Exit on most errors (see the manual)
-set -o nounset # Disallow expansion of unset variables
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
 
-# Set up a variable to track if --no-macos flag is used
-NO_MACOS=false
+source "$(dirname "$0")/../lib/bash/initrc"
 
-usage() {
-  grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
-  exit 1
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+flag=0
+param=""
+declare -a args=()
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --flag) transformed+=('-f') ;;
+      --param)
+        [[ $# -gt 1 ]] || { log.error "--param requires a value"; script.usage 1; }
+        transformed+=('-p' "$2")
+        shift
+        ;;
+      --param=*)
+        transformed+=('-p' "${1#*=}")
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvfp:' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      f) flag=1 ;;
+      p) param="$OPTARG" ;;
+      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  args=("$@")
+
+  if [[ -z "$param" ]]; then
+    log.error "Missing required option --param"
+    script.usage 1
+  fi
+
+  if [[ ${#args[@]} -eq 0 ]]; then
+    log.error "Missing required positional arguments"
+    script.usage 1
+  fi
 }
 
-# Check for arguments
-for arg in "$@"; do
-  case "$arg" in
-  --no-macos)
-    NO_MACOS=true
-    ;;
-  -h | --help)
-    usage
-    ;;
-  *)
-    usage
-    ;;
-  esac
-done
+main() {
+  (( verbose )) && log.info "Verbose mode enabled"
 
-{
-  # Print the header with proper spacing
-  printf "%-9s %-10s %-50s %-s\n" "USER" "PID" "COMMAND" "PATH"
-
-  # Process the `ps aux` output, excluding certain users and duplicates
-  ps aux | awk -v green="$(tput setaf 2)" -v reset="$(tput sgr0)" -v no_macos="$NO_MACOS" '
-    NR>1 && $1 !~ /^_/ {
-        full_cmd = $11;
-        cmd = full_cmd;
-        path = "";
-
-        # Separate path and command
-        if (match(full_cmd, /[^\/]+$/)) {
-            cmd = substr(full_cmd, RSTART, RLENGTH);
-            path = substr(full_cmd, 1, RSTART - 1);
-        }
-
-        # Skip if --no-macos flag is set and the path starts with /System
-        if (no_macos == "true" && path ~ /^\/System/) {
-            next;
-        }
-
-        if (!seen[full_cmd]++) {
-            printf "%-20s %-10s %-50s %-s\n", green $1 reset, $2, cmd, path;
-        }
-    }' | sort -k3
+  log.info "Flag set: $flag"
+  log.info "Param value: $param"
+  log.info "Arguments: ${args[*]}"
+  # TODO: implement script logic
 }
+
+parse_args "$@"
+main

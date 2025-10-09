@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+# Filesystem utilities inspired by Python's pathlib and shutil modules.
+fs.isdir() { [[ -d "$1" ]]; }
+fs.isfile() { [[ -f "$1" ]]; }
+fs.exists() { [[ -e "$1" ]]; }
+
+fs.mkcd() {
+    mkdir -p -- "$1" && cd -- "$1" || return 1
+}
+
+fs.touchp() {
+    mkdir -p -- "$(dirname -- "$1")" && touch -- "$1"
+}
+
+fs.mktmp() {
+    local type=${1:-file} prefix=${2:-tmp}
+    if [[ $type == dir ]]; then
+        mktemp -d "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
+    else
+        mktemp "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
+    fi
+}
+
+fs.extract() {
+    local f="$1"
+    [[ -f $f ]] || { log.error "No such file: $f"; return 1; }
+    case "$f" in
+        *.tar.bz2)   tar xjf "$f" ;;
+        *.tar.gz)    tar xzf "$f" ;;
+        *.tar.xz)    tar xJf "$f" ;;
+        *.tbz2)      tar xjf "$f" ;;
+        *.tgz)       tar xzf "$f" ;;
+        *.zip)       unzip -q "$f" ;;
+        *.rar)       unrar x "$f" ;;
+        *.7z)        7z x "$f" ;;
+        *)           log.error "Unknown archive: $f"; return 2 ;;
+    esac
+}
+
+file.expand_globs() {
+    local -n paths_ref="$1"
+    local -a expanded=()
+
+    local previous_nullglob previous_dotglob
+    previous_nullglob=$(shopt -p nullglob 2>/dev/null || true)
+    previous_dotglob=$(shopt -p dotglob 2>/dev/null || true)
+    shopt -s nullglob dotglob
+
+    local path
+    for path in "${paths_ref[@]}"; do
+        local -a matches=()
+        while IFS= read -r match; do
+            matches+=("$match")
+        done < <(compgen -G "$path" 2>/dev/null || true)
+
+        if [[ ${#matches[@]} -eq 0 ]]; then
+            matches+=("$path")
+        fi
+
+        expanded+=("${matches[@]}")
+    done
+
+    if [[ -n "$previous_nullglob" ]]; then
+        eval "$previous_nullglob"
+    fi
+    if [[ -n "$previous_dotglob" ]]; then
+        eval "$previous_dotglob"
+    fi
+
+    paths_ref=("${expanded[@]}")
+}

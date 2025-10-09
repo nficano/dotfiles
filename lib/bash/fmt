@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+# Formatting helpers comparable to Python's humanize utilities.
+fmt.duration_us() {
+    local micros="${1:-0}"
+    if (( micros >= 1000000 )); then
+        awk -v value="$micros" 'BEGIN { printf "%.2fs", value / 1000000.0 }'
+    elif (( micros >= 1000 )); then
+        awk -v value="$micros" 'BEGIN { printf "%.1fms", value / 1000.0 }'
+    else
+        printf '%dus' "$micros"
+    fi
+}
+
+fmt.bytes() {
+    local bytes="${1:-0}"
+    awk -v value="$bytes" 'BEGIN {
+        if (value + 0 <= 0) {
+            printf "0 B"
+            exit
+        }
+        split("B KiB MiB GiB TiB PiB EiB", units, " ")
+        unit = 1
+        while (value >= 1024 && unit < length(units)) {
+            value /= 1024
+            unit++
+        }
+        if (value >= 100) {
+            printf "%.0f %s", value, units[unit]
+        } else if (value >= 10) {
+            printf "%.1f %s", value, units[unit]
+        } else {
+            printf "%.2f %s", value, units[unit]
+        }
+    }'
+}

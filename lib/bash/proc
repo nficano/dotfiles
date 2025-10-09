@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+# Process helpers loosely inspired by Python's multiprocessing utilities.
+proc.cpu_count() {
+    local count=4
+    if command -v getconf >/dev/null 2>&1; then
+        count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+    fi
+    if ! [[ $count =~ ^[0-9]+$ ]] || [[ $count -le 0 ]]; then
+        count=4
+    fi
+    echo "$count"
+}
+
+proc.wait_for_pids() {
+    local -n pids_ref="$1"
+    local had_failure_ref="${2:-}"
+    local had_failure=0
+
+    local pid
+    for pid in "${pids_ref[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            if ! wait "$pid"; then
+                had_failure=1
+            fi
+        fi
+    done
+
+    if [[ -n "$had_failure_ref" ]]; then
+        printf -v "$had_failure_ref" "%d" "$had_failure"
+    fi
+
+    pids_ref=()
+}

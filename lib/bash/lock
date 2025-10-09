@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+# File locking helpers akin to Python's fasteners module.
+lock.acquire() {
+    local lock_name="$1" verbose="${2:-0}"
+    local lock_file="${TMPDIR:-/tmp}/${lock_name}.lock"
+    local lock_fd=-1
+
+    if ! eval "exec {lock_fd}>\"$lock_file\""; then
+        log.error "Cannot open lock file $lock_file"
+        return 1
+    fi
+
+    if ! flock -n "$lock_fd"; then
+        (( verbose )) && log.warn "Another instance is already running (lock: $lock_file)"
+        eval "exec ${lock_fd}>&-"
+        return 1
+    fi
+
+    (( verbose )) && log.info "Acquired lock $lock_file"
+    echo "$lock_fd:$lock_file"
+}
+
+lock.release() {
+    local lock_spec="$1"
+    local lock_fd="${lock_spec%%:*}"
+    local lock_file="${lock_spec#*:}"
+
+    if [[ $lock_fd -ne -1 ]]; then
+        flock -u "$lock_fd" 2>/dev/null || true
+        eval "exec ${lock_fd}>&-" 2>/dev/null || true
+    fi
+
+    if [[ -n "$lock_file" ]]; then
+        rm -f -- "$lock_file"
+    fi
+}

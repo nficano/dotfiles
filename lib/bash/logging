@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+# Lightweight logging helpers with ANSI coloring support.
+log._color() {
+    echo "\e[${1}m"
+}
+
+log._reset() {
+    echo "\e[0m"
+}
+
+log.info() {
+    printf "$(log._color 1; log._color 34)[INFO]$(log._reset) %s\n" "$*"
+}
+
+log.warn() {
+    printf "$(log._color 1; log._color 33)[WARN]$(log._reset) %s\n" "$*"
+}
+
+log.error() {
+    printf "$(log._color 1; log._color 31)[ERR ]$(log._reset) %s\n" "$*"
+}

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# Aggregates the Bash standard library modules for dotfiles.
+if [[ -n "${__LIB_BASH_INITRC:-}" ]]; then
+    return 0
+fi
+
+__LIB_BASH_INITRC=1
+
+lib_bash_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+__lib_bash_source() {
+    # shellcheck source=/dev/null
+    source "${lib_bash_dir}/$1"
+}
+
+__lib_bash_source "logging"
+__lib_bash_source "strings"
+__lib_bash_source "math"
+__lib_bash_source "os"
+__lib_bash_source "fs"
+__lib_bash_source "shell"
+__lib_bash_source "cache"
+__lib_bash_source "state"
+__lib_bash_source "ssh_agent"
+__lib_bash_source "homebrew"
+__lib_bash_source "runtime"
+__lib_bash_source "alias"
+__lib_bash_source "prompt"
+__lib_bash_source "fmt"
+__lib_bash_source "ui/core"
+__lib_bash_source "time"
+__lib_bash_source "script"
+__lib_bash_source "lock"
+__lib_bash_source "proc"
+
+unset -f __lib_bash_source
+unset lib_bash_dir

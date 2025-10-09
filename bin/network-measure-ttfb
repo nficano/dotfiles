@@ -1,71 +1,168 @@
-#!/bin/bash
-#/ Measure connection timing metrics for a URL (DNS, TCP, TLS, TTFB, total).
+#!/usr/bin/env bash
+#/ Measure DNS, TCP, TLS, TTFB, and total request timing for a URL
 #/
-#/ Usage:
-#/      network-measure-ttfb [-h] [--help]
-#/      network-measure-ttfb <url>
-#/      See: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
+#/ Usage: $(basename "$0") [-h] [-v] <url>
 #/
-#/ DESCRIPTION
-#/      Measures and displays various connection timing metrics for a given URL.
-#/      This tool provides detailed timing information about different stages of
-#/      the HTTP/HTTPS connection process, which is useful for diagnosing
-#/      performance issues and network latency.
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
 #/
-#/      Arguments:
-#/          <url>    The URL to test (required)
+#/ Examples:
+#/    $(basename "$0") https://example.com
+#/    $(basename "$0") --verbose https://example.com
 #/
-#/      Output metrics:
-#/          - DNS Lookup time: Time to resolve the domain name
-#/          - TCP Connection time: Time to establish TCP connection
-#/          - TLS Handshake time: Time for SSL/TLS negotiation
-#/          - Pre-transfer time: Time before transfer begins
-#/          - Redirect time: Time spent following redirects
-#/          - First Byte time: Time to first byte of response
-#/          - Total time: Complete request duration
+#/ Notes:
+#/    - Colors respect NO_COLOR and UI_COLOR_MODE (auto|always|never).
+#/    - Follows redirects (up to 5) to capture the final response timings.
 
-# Function to show documentation
-show_help() {
-    grep '^#/' <"$0" | cut -c4-
-    exit 0
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+url=""
+
+metrics_dns_us=0
+metrics_connect_us=0
+metrics_appconnect_us=0
+metrics_pretransfer_us=0
+metrics_starttransfer_us=0
+metrics_total_us=0
+metrics_redirect_us=0
+metrics_size_download=0
+metrics_speed_download=0
+metrics_http_code=""
+metrics_url=""
+metrics_remote_ip=""
+metrics_num_redirects=0
+metrics_content_type=""
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -z "$remaining" ]]; then
+    log.error "URL argument is required"
+    script.usage 1
+  fi
+
+  # shellcheck disable=SC2206
+  local args=($remaining)
+  if (( ${#args[@]} != 1 )); then
+    log.error "Expected exactly one URL argument"
+    script.usage 1
+  fi
+
+  url="${args[0]}"
 }
 
-# Check arguments
-case $# in
-    0)  # No arguments
-        show_help
-        ;;
-    1)  # One argument
-        case "$1" in
-            -h|--help)
-                show_help
-                ;;
-            *)  # Store the URL from the first argument
-                URL=$1
-                ;;
-        esac
-        ;;
-    *)  # Too many arguments
-        echo "Error: Too many arguments" >&2
-        show_help
-        ;;
-esac
+collect_metrics() {
+  (( verbose )) && log.info "Collecting timing metrics for $url"
 
-# Define colors
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+  local write_out='%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_pretransfer}|%{time_starttransfer}|%{time_total}|%{time_redirect}|%{size_download}|%{speed_download}|%{http_code}|%{url_effective}|%{remote_ip}|%{num_redirects}|%{content_type}'
+  local response=""
 
-# Use curl to get timing metrics
-output=$(curl -s -o /dev/null -w "\
-${BLUE}DNS Lookup:     ${GREEN}%{time_namelookup}s${NC}\n\
-${BLUE}TCP Connection: ${GREEN}%{time_connect}s${NC}\n\
-${BLUE}TLS Handshake:  ${GREEN}%{time_appconnect}s${NC}\n\
-${BLUE}Pre-transfer:   ${GREEN}%{time_pretransfer}s${NC}\n\
-${BLUE}Redirect:       ${GREEN}%{time_redirect}s${NC}\n\
-${BLUE}First Byte:     ${GREEN}%{time_starttransfer}s${NC}\n\
-${BLUE}———————————————————————${NC}\n\
-${BLUE}Total Time:     ${GREEN}%{time_total}s${NC}\n" \
-"$URL")
+  if ! response=$(
+    curl \
+      --silent \
+      --show-error \
+      --location \
+      --max-redirs 5 \
+      --max-time 60 \
+      --output /dev/null \
+      --write-out "$write_out" \
+      "$url"
+  ); then
+    log.error "Failed to fetch timing information from $url"
+    return 1
+  fi
 
-echo -e "$output"
+  IFS='|' read -r time_namelookup time_connect time_appconnect time_pretransfer \
+    time_starttransfer time_total time_redirect size_download speed_download \
+    http_code url_effective remote_ip num_redirects content_type <<<"$response"
+
+  metrics_dns_us=$(math.seconds_to_microseconds "$time_namelookup")
+  metrics_connect_us=$(math.seconds_to_microseconds "$time_connect")
+  metrics_appconnect_us=$(math.seconds_to_microseconds "$time_appconnect")
+  metrics_pretransfer_us=$(math.seconds_to_microseconds "$time_pretransfer")
+  metrics_starttransfer_us=$(math.seconds_to_microseconds "$time_starttransfer")
+  metrics_total_us=$(math.seconds_to_microseconds "$time_total")
+  metrics_redirect_us=$(math.seconds_to_microseconds "$time_redirect")
+
+  metrics_size_download="${size_download:-0}"
+  metrics_speed_download="${speed_download:-0}"
+  metrics_http_code="${http_code:-}"
+  metrics_url="${url_effective:-$url}"
+  metrics_remote_ip="${remote_ip:-}"
+  metrics_num_redirects="${num_redirects:-0}"
+  metrics_content_type="${content_type:-}"
+}
+
+print_summary() {
+  printf 'Target : %s\n' "$metrics_url"
+  printf 'Status : %s\n' "${metrics_http_code:-n/a}"
+  [[ -n "$metrics_remote_ip" ]] && printf 'Remote : %s\n' "$metrics_remote_ip"
+  [[ -n "$metrics_content_type" ]] && printf 'Type   : %s\n' "$metrics_content_type"
+  printf 'TTFB   : %s\n' "$(fmt.duration_us "$metrics_starttransfer_us")"
+  printf 'Total  : %s\n' "$(fmt.duration_us "$metrics_total_us")"
+
+  if (( metrics_num_redirects > 0 )); then
+    printf 'Redirects : %s (elapsed %s)\n' \
+      "$metrics_num_redirects" \
+      "$(fmt.duration_us "$metrics_redirect_us")"
+  fi
+
+  printf 'Download: %s (avg %s/s)\n' \
+    "$(fmt.bytes "$metrics_size_download")" \
+    "$(fmt.bytes "$metrics_speed_download")"
+}
+
+render_timeline() {
+  local stage_dns_us=$metrics_dns_us
+  local stage_tcp_us=$(( metrics_connect_us - metrics_dns_us ))
+  (( stage_tcp_us < 0 )) && stage_tcp_us=0
+
+  local stage_tls_us=0
+  if (( metrics_appconnect_us > metrics_connect_us )); then
+    stage_tls_us=$(( metrics_appconnect_us - metrics_connect_us ))
+  fi
+
+  local setup_base_us=$metrics_appconnect_us
+  if (( setup_base_us <= metrics_connect_us )); then
+    setup_base_us=$metrics_connect_us
+  fi
+
+  local stage_prep_us=$(( metrics_pretransfer_us - setup_base_us ))
+  (( stage_prep_us < 0 )) && stage_prep_us=0
+
+  local stage_wait_us=$(( metrics_starttransfer_us - metrics_pretransfer_us ))
+  (( stage_wait_us < 0 )) && stage_wait_us=0
+
+  local stage_transfer_us=$(( metrics_total_us - metrics_starttransfer_us ))
+  (( stage_transfer_us < 0 )) && stage_transfer_us=0
+
+  local -a segments=(
+    "DNS Lookup|$stage_dns_us|38;5;110"
+    "TCP Connect|$stage_tcp_us|38;5;39"
+    "TLS Handshake|$stage_tls_us|38;5;177"
+    "Request Prep|$stage_prep_us|38;5;150"
+    "First Byte Wait|$stage_wait_us|38;5;214"
+    "Content Transfer|$stage_transfer_us|38;5;118"
+  )
+
+  printf '\n'
+  ui.timeline.render "Connection Timeline" segments "$metrics_total_us" 56
+}
+
+main() {
+  parse_args "$@"
+  require.cmd curl || exit 1
+  collect_metrics
+  print_summary
+  render_timeline
+}
+
+main "$@"

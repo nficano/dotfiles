@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# Alias helpers for consistent command behavior.
+alias.setup_ls() {
+    if os.platform.is_linux; then
+        alias ls='ls --color=auto -gXF'
+        alias ll='ls --color=auto -algX'
+    else
+        if sys.path.contains gls; then
+            alias ls='gls --color=auto -gXF'
+            alias ll='gls --color=auto -algX'
+        else
+            alias ls='ls -GF'
+            alias ll='ls -alG'
+        fi
+    fi
+}

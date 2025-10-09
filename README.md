@@ -6,10 +6,10 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 
 - **`bin/`** – Executable utilities referenced below; symlinked into `~/.bin` by `make setup-tree`
 - **`home/`** – Version-controlled copies of dotfiles such as `gitconfig`, `tmux.conf`, and `pip.conf`; `make setup-tree` links them into `$HOME`
-- **`lib/`** – Shared shell libraries. `lib/bash/utils` provides logging, prompting, filesystem helpers, deferred sourcing, locking, and other primitives consumed by the skeletons and shell profile. The scripts that implement the key/value datastore source `lib/envdb` for storing environment-like data.
+- **`lib/`** – Shared shell libraries. `lib/bash/initrc` bootstraps a Python-inspired stdlib composed of modules like `logging`, `strings`, `os`, `runtime`, and `ui/core`. Scripts import that aggregator for logging, prompting, filesystem helpers, deferred sourcing, locking, and other primitives, while specialised tools still pull in peers such as `lib/envdb` for the key/value datastore.
 - **`profiles/`** – Application-specific settings, currently an iTerm2 profile in `profiles/iterm2/profile.json`
 - **`setup/`** – Provisioning assets. `setup/macos/mac-provision` now supports dry-runs, change detection, config syncing, and Homebrew automation. `setup/macos/Brewfile` captures brew dependencies and `setup/macos/defaults.conf` records macOS `defaults` managed by the provisioner
-- **`shell/`** – Interactive shell entrypoints. `shell/bash/profile` exports environment variables, amends `PATH`, and lazy-loads tooling using the helpers from `lib/bash/utils`
+- **`shell/`** – Interactive shell entrypoints. `shell/bash/profile` exports environment variables, amends `PATH`, and lazy-loads tooling using the helpers from `lib/bash/initrc`
 - **`skel/`** – Bash script skeletons consumed by `bin/script-scaffold` when scaffolding new utilities
 - **`Makefile`** – Convenience tasks: `make install` runs the macOS provisioner, `make setup-tree` prepares directories and symlinks in the home directory, and the `deploy-*` targets bump the version tag
 
@@ -149,7 +149,7 @@ These scripts implement Redis-inspired operations backed by the helper sourced f
 
 ## Skeleton Files (`skel/`)
 
-Each skeleton is a Bash template that already sources `lib/bash/utils`, enables `set -Eeuo pipefail`, provides help text with `#/` comments, and wires in the shared logging/prompt helpers.
+Each skeleton is a Bash template that already sources `lib/bash/initrc`, enables `set -Eeuo pipefail`, provides help text with `#/` comments, and wires in the shared logging/prompt helpers.
 
 - **`skel/bash/noargs`** – Minimal command pattern with `-h/--help` and optional `--verbose`, intended for scripts with no positional arguments
 - **`skel/bash/args`** – Adds positional argument collection while preserving the common option parser
@@ -168,7 +168,7 @@ Each skeleton is a Bash template that already sources `lib/bash/utils`, enables 
 3. Supply a kebab-case script name (the helper enforces this) and a short description that replaces `{{ description }}` in the template
 4. Enter the summary text when prompted. The tool writes the new script into `bin/`, marks it executable, and opens it in `$EDITOR`
 5. Replace the `TODO` comments with your logic, keeping the `#/` documentation block accurate and the `set -Eeuo pipefail` directive intact
-6. When the script reuses shared facilities, keep sourcing `../lib/bash/utils` so you can call helpers such as `log.info`, `prompt.ask_yes_no`, `fs.mktmp`, `lock.acquire`, and `shell.defer`
+6. When the script reuses shared facilities, keep sourcing `../lib/bash/initrc` so you can call helpers such as `log.info`, `prompt.ask_yes_no`, `fs.mktmp`, `lock.acquire`, and `shell.defer`
 7. Use `bin/bin-list-scripts` to confirm the description renders nicely and consider running `bin/file-mark-executable` if you edit a script outside of `script-scaffold`
 
 ### Conventions to follow when authoring new scripts:
@@ -176,7 +176,7 @@ Each skeleton is a Bash template that already sources `lib/bash/utils`, enables 
 - Keep filenames in kebab-case and store executables under `bin/` so `shell/bash/profile` adds them to the `PATH`
 - Document usage with `#/` comment lines at the top so `script.usage` can emit help text automatically
 - Prefer the common option parsing helpers (`script.parse_common` or the patterns shown in the skeletons) to deliver consistent `-h/--help` and `-v/--verbose` behaviour
-- Use the logging (`log.info`, `log.warn`, `log.error`), prompting, locking, and filesystem helpers from `lib/bash/utils` instead of reimplementing them
+- Use the logging (`log.info`, `log.warn`, `log.error`), prompting, locking, and filesystem helpers from `lib/bash/initrc` instead of reimplementing them
 - When creating new media or conversion scripts, follow the examples that operate on the current working directory and respect standard tools such as ffmpeg or svgo
 
 ## TODO:

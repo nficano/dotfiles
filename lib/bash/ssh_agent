@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+# SSH agent helpers modelled after Python's subprocess-driven tooling.
+ssh_agent.active_sessions() {
+    pgrep -u "$USER" ssh-agent
+}
+
+ssh_agent.start() {
+    [[ -z "$1" ]] && return 1
+    os.devnull rm "$1"
+    ssh-agent | sed "s/^echo/#echo/" >"$1"
+    chmod 600 "$1"
+    shell.import "$1"
+}
+
+ssh_agent.init() {
+    local env="$1"
+    [[ -z "$env" ]] && return 1
+
+    touch "$env"
+    if ! os.devnull ssh_agent.active_sessions; then
+        ssh_agent.start "$env"
+    else
+        shell.import "$env"
+    fi
+
+    if ! os.devnull ssh-add -l; then
+        os.devnull ssh-add -k
+    fi
+}

@@ -20,7 +20,7 @@ fi
 
 # Source helper functions
 # shellcheck source=/dev/null
-source "${DOTFILES_ROOT}/../../lib/bash/utils"
+source "${DOTFILES_ROOT}/../../lib/bash/initrc"
 
 os.setenv "TERM" "xterm-256color"
 os.setenv "GPG_TTY" "$(tty)"

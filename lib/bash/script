@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+
+# Script utilities similar to Python's argparse helpers.
+script.usage() {
+    local exit_code="${1:-0}"
+    grep '^#/' < "${BASH_SOURCE[1]}" | cut -c4-
+    exit "$exit_code"
+}
+
+script.cleanup() {
+    trap - SIGINT SIGTERM ERR EXIT
+}
+
+script.parse_common() {
+    local opt
+    local -a transformed=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help) transformed+=('-h') ;;
+            --verbose) transformed+=('-v') ;;
+            --)
+                shift
+                break
+                ;;
+            --*)
+                log.error "Unknown option: $1"
+                script.usage 1
+                ;;
+            *)
+                break
+                ;;
+        esac
+        shift
+    done
+
+    transformed+=("$@")
+    set -- "${transformed[@]}"
+
+    while getopts ':hv' opt; do
+        case "$opt" in
+            h) script.usage ;;
+            v) verbose=1 ;;
+            \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+        esac
+    done
+
+    shift $((OPTIND - 1))
+    echo "$@"
+}
+
+script.validate_positive_int() {
+    local value="$1" name="$2"
+    if ! [[ $value =~ ^[0-9]+$ ]] || [[ $value -le 0 ]]; then
+        log.error "$name must be a positive integer"
+        script.usage 1
+    fi
+}
+
+script.require_args() {
+    local count="$1" description="$2"
+    if [[ $# -lt $((count + 2)) ]]; then
+        log.error "Missing required $description"
+        script.usage 1
+    fi
+}
