@@ -29,9 +29,15 @@ setup-tree:
 	mkdir -p ${HOME}/.pip
 	mkdir -p ${HOME}/.environment
 	rm -f ${HOME}/.bash_profile
+	rm -f ${HOME}/.zprofile
+	rm -f ${HOME}/.zshenv
+	rm -f ${HOME}/.zshrc
 	rm -f ${HOME}/.inputrc
 	rm -f ${HOME}/.bin
 	ln -fsn $(DOTFILES)/shell/bash/profile ${HOME}/.bash_profile
+	ln -fsn $(DOTFILES)/shell/zsh/profile ${HOME}/.zprofile
+	ln -fsn $(DOTFILES)/shell/zsh/env ${HOME}/.zshenv
+	ln -fsn $(DOTFILES)/shell/zsh/shrc ${HOME}/.zshrc
 	ln -fsn $(DOTFILES)/home/agrc ${HOME}/.agrc
 	ln -fsn $(DOTFILES)/home/dircolors ${HOME}/.dircolors
 	ln -fsn $(DOTFILES)/home/direnvrc ${HOME}/.direnvrc

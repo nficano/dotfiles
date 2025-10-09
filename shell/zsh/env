@@ -1,0 +1,20 @@
+#!/usr/bin/env zsh
+
+emulate -L zsh
+
+if [[ -n "${DOTFILES_ZSH_ENV:-}" ]]; then
+  return
+fi
+typeset -g DOTFILES_ZSH_ENV=1
+
+# Capture the Zsh configuration directory for reuse across sourced scripts.
+typeset -g DOTFILES_ZSH_DIR
+if [[ -z "${DOTFILES_ZSH_DIR:-}" ]]; then
+  DOTFILES_ZSH_DIR="${${(%):-%N}:A:h}"
+fi
+
+# Preserve compatibility with existing scripts that expect DOTFILES_ROOT.
+if [[ -z "${DOTFILES_ROOT:-}" ]]; then
+  DOTFILES_ROOT="${DOTFILES_ZSH_DIR}"
+  export DOTFILES_ROOT
+fi

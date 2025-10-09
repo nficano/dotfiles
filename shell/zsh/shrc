@@ -1,0 +1,141 @@
+#!/usr/bin/env zsh
+
+emulate -L zsh
+
+# Ensure the login layer has been processed before interactive tweaks.
+typeset -g DOTFILES_ZSH_DIR
+if [[ -z "${DOTFILES_ZSH_DIR:-}" ]]; then
+  DOTFILES_ZSH_DIR="${${(%):-%N}:A:h}"
+fi
+source "${DOTFILES_ZSH_DIR}/profile"
+
+if [[ -n "${DOTFILES_ZSH_SHRC:-}" ]]; then
+  return
+fi
+typeset -g DOTFILES_ZSH_SHRC=1
+
+[[ -o interactive ]] || return
+
+HISTFILE="${HISTFILE:-$HOME/.zsh_history}"
+SAVEHIST=200000
+HISTSIZE=200000
+
+setopt APPEND_HISTORY
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_FIND_NO_DUPS
+setopt HIST_REDUCE_BLANKS
+setopt HIST_IGNORE_SPACE
+setopt HIST_VERIFY
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt EXTENDED_HISTORY
+setopt AUTO_CD
+setopt AUTO_PUSHD
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT
+setopt NO_CASE_GLOB
+setopt CORRECT
+setopt COMPLETE_IN_WORD
+setopt CHECK_JOBS
+setopt LONG_LIST_JOBS
+setopt PROMPT_SUBST
+
+autoload -Uz compinit
+compinit
+autoload -Uz bashcompinit
+bashcompinit
+
+if [[ -f "$HOME/.docker/init-bash.sh" ]]; then
+  source "$HOME/.docker/init-bash.sh"
+fi
+
+if [[ -n "${HOMEBREW_CASKROOM:-}" ]]; then
+  if [[ -f "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc" ]]; then
+    source "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
+  fi
+fi
+
+if [[ -n "${BREW_PREFIX:-}" ]]; then
+  if [[ -f "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc" ]]; then
+    source "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+  fi
+
+  if [[ -f "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh" ]]; then
+    source "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+  fi
+
+  if [[ -f "$BREW_PREFIX/opt/nvm/nvm.sh" ]]; then
+    source "$BREW_PREFIX/opt/nvm/nvm.sh"
+  fi
+
+  if [[ -f "$BREW_PREFIX/opt/bash-completion/etc/bash_completion" ]]; then
+    source "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
+  fi
+fi
+
+if [[ -f "$HOME/.config/op/plugins.sh" ]]; then
+  source "$HOME/.config/op/plugins.sh"
+fi
+
+if [[ -f "$HOME/.iterm2_shell_integration.zsh" ]]; then
+  source "$HOME/.iterm2_shell_integration.zsh"
+fi
+
+if [[ -f "$HOME/.zsh_profile.local" ]]; then
+  source "$HOME/.zsh_profile.local"
+fi
+
+if command -v ngrok >/dev/null 2>&1; then
+  eval "$(ngrok completion)"
+fi
+
+if command -v aws >/dev/null 2>&1 && command -v aws_completer >/dev/null 2>&1; then
+  complete -C aws_completer aws
+fi
+
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi
+
+if command -v pyenv >/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
+fi
+
+if command -v rbenv >/dev/null 2>&1; then
+  eval "$(rbenv init -)"
+fi
+
+if command -v op >/dev/null 2>&1; then
+  eval "$(op completion zsh)"
+fi
+
+complete -cf sudo
+
+dotfiles_prompt_path() {
+  local path
+  path=$(dirs +0 2>/dev/null)
+  [[ -z "$path" ]] && path="${PWD/#$HOME/~}"
+
+  local -a parts
+  parts=(${(s:/:)path})
+  local last_index=$#parts
+
+  if (( last_index == 0 )); then
+    printf '/'
+    return
+  fi
+
+  local buffer=""
+  local i part
+  for (( i=1; i<last_index; i++ )); do
+    part="${parts[i]}"
+    [[ -z "$part" ]] && continue
+    buffer+="${part[1,1]}/"
+  done
+
+  printf '%s' "${buffer}${parts[last_index]}"
+}
+
+PROMPT='%m %F{green}$(dotfiles_prompt_path)%f [%D{%H:%M}] > '

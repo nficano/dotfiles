@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 
-# Terminate for non-interactive sessions.
-case $- in
-*i*) ;;
-*) return ;; esac
+# Exit early for non-interactive shells.
+[[ $- != *i* ]] && return
 
-# Resolve dotfiles root so sourcing works via symlinks
+# Resolve dotfiles root based on this profile location.
 if [[ -z "${DOTFILES_ROOT:-}" ]]; then
   __dotfiles_source="${BASH_SOURCE[0]}"
   while [[ -h "$__dotfiles_source" ]]; do
@@ -18,184 +16,131 @@ if [[ -z "${DOTFILES_ROOT:-}" ]]; then
   unset __dotfiles_dir __dotfiles_source
 fi
 
-# Source helper functions
-# shellcheck source=/dev/null
-source "${DOTFILES_ROOT}/../../lib/bash/initrc"
+shared_profile="${DOTFILES_ROOT}/../lib.sh"
+if [[ -f "$shared_profile" ]]; then
+  # shellcheck disable=SC1090
+  source "$shared_profile"
+fi
 
-os.setenv "TERM" "xterm-256color"
-os.setenv "GPG_TTY" "$(tty)"
-os.setenv "DOTFILES_VERSION" "4.2.0"
-os.setenv "DIRENV_LOG_FORMAT" ""
+# Bash-specific history behavior.
+export PROMPT_COMMAND="history -a; history -n; ${PROMPT_COMMAND:-}"
 
-# Python Shell Environment
-os.setenv "POETRY_VIRTUALENVS_PATH" "$HOME/.virtualenvs"
-os.setenv "PYENV_ROOT" "$HOME/.pyenv"
-os.setenv "PYTHONDONTWRITEBYTECODE" true
-os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
+# Enable useful Bash options.
+shopt -s cdspell
+shopt -s checkwinsize
+shopt -s cmdhist
+shopt -s histappend
+shopt -s hostcomplete
+shopt -s no_empty_cmd_completion
+shopt -s nocaseglob
+shopt -s histverify
 
-# Homebrew Shell Environment
-os.setenv "BREW_PREFIX" "$(brew.prefix)"
-os.setenv "HOMEBREW_CASKROOM" "$BREW_PREFIX/Caskroom"
-os.setenv "HOMEBREW_CELLAR" "$BREW_PREFIX/Cellar"
-os.setenv "HOMEBREW_REPOSITORY" "$BREW_PREFIX/Homebrew"
-os.setenv "HOMEBREW_SHELLENV_PREFIX" "$BREW_PREFIX"
-os.setenv "MANPATH" "$BREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
-os.setenv "INFOPATH" "$BREW_PREFIX/share/info:${INFOPATH:-}"
-os.setenv "HOMEBREW_NO_ENV_HINTS" 1
-os.setenv "ARCHFLAGS" "-arch $(uname -m)"
-os.setenv "BASH_SILENCE_DEPRECATION_WARNING" 1
-os.setenv "HSTR_CONFIG" "hicolor"
+# Completions and runtime integrations.
+if [[ -f "$HOME/.docker/init-bash.sh" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.docker/init-bash.sh"
+fi
 
-# Node.js Environment
-os.setenv "NODE_REPL_HISTORY" "$HOME/.node_history" # persistent REPL history
-os.setenv "NODE_REPL_HISTORY_SIZE" 32768            # allow 32³ entries
-os.setenv "NODE_REPL_MODE" "sloppy"                 # use non-strict mode code
-os.setenv "NVM_DIR" "$HOME/.nvm"
+if [[ -n "${HOMEBREW_CASKROOM:-}" ]]; then
+  if [[ -f "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc" ]]; then
+    # shellcheck disable=SC1090
+    source "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
+  fi
+fi
 
-# Shell Session Command History
-os.setenv "HISTCONTROL" "ignoredups:erasedups:ignoreboth"
-os.setenv "HISTFILESIZE" -1
-os.setenv "HISTSIZE" -1
+if [[ -n "${BREW_PREFIX:-}" ]]; then
+  if [[ -f "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc" ]]; then
+    # shellcheck disable=SC1090
+    source "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+  fi
 
-os.setenv "SHELL_SESSION_HISTORY" 0 # Save & reload history after each command
-os.setenv "PROMPT_COMMAND" "history -a; history -n; $PROMPT_COMMAND"
-os.setenv "MANPAGER" "less"
-os.setenv "VISUAL" "nano"
-os.setenv "EDITOR" "nano"
-os.setenv "HSTR_TIOCSTI" "y"
+  if [[ -f "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh" ]]; then
+    # shellcheck disable=SC1090
+    source "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+  fi
 
-os.setenv "LESS" "-R"
+  if [[ -f "$BREW_PREFIX/opt/nvm/nvm.sh" ]]; then
+    # shellcheck disable=SC1090
+    source "$BREW_PREFIX/opt/nvm/nvm.sh"
+  fi
 
-# Set various Bash options.
-shell.setopt "cdspell"      # directory name auto-correct during cd.
-shell.setopt "checkwinsize" # Update window size after each command.
-shell.setopt "cmdhist"      # Save multi-line commands as one.
-shell.setopt "histappend"   # Append command history instead of
-# clobbering.
-shell.setopt "hostcomplete"            # tab-complete hostnames.
-shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands
-# during tab completion.
-shell.setopt "nocaseglob" # Case-insensitive path expansion.
-shell.setopt "cdspell"    # Automatic spell-correct during
-# tab completion.
-shell.setopt "histverify" # !$ does not execute automatically.
-shell.setopt "histappend" # Append command history instead of clobbering.
+  if [[ -f "$BREW_PREFIX/opt/bash-completion/etc/bash_completion" ]]; then
+    # shellcheck disable=SC1090
+    source "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
+  fi
+fi
 
-# Untracked Shell Scripts (DO NOT SORT)
-sys.path.prepend "$HOME/.bin"
+if [[ -f "$HOME/.config/op/plugins.sh" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.config/op/plugins.sh"
+fi
 
-# Prefer GNU Utilities instead of FeeeBSD When Available
-sys.path.prepend_many \
-  "$BREW_PREFIX/opt/coreutils/libexec/gnubin" \
-  "$BREW_PREFIX/opt/findutils/libexec/gnubin" \
-  "$BREW_PREFIX/opt/gnu-getopt/libexec/gnubin" \
-  "$BREW_PREFIX/opt/gnu-sed/libexec/gnubin" \
-  "$BREW_PREFIX/opt/gnu-tar/libexec/gnubin" \
-  "$BREW_PREFIX/opt/gnu-time/libexec/gnubin" \
-  "$BREW_PREFIX/opt/gnu-which/libexec/gnubin" \
-  "$BREW_PREFIX/opt/grep/libexec/gnubin" \
-  "$BREW_PREFIX/opt/whois/bin" \
-  "$BREW_PREFIX/opt/icu4c/bin" \
-  "$BREW_PREFIX/opt/icu4c/sbin" \
-  "$BREW_PREFIX/opt/openssl/bin" \
-  "$BREW_PREFIX/opt/openjdk/bin" \
-  "$BREW_PREFIX/opt/e2fsprogs/bin" \
-  "$BREW_PREFIX/opt/e2fsprogs/sbin" \
-  "$BREW_PREFIX/bin" \
-  "$BREW_PREFIX/sbin" \
-  "$HOME/.local/bin" \
-  "$HOME/.docker/bin" \
-  "$HOME/.pyenv/bin"
+if [[ -f "$HOME/.iterm2_shell_integration.bash" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.iterm2_shell_integration.bash"
+fi
 
-shell.defer --wrap docker shell.import "$HOME/.docker/init-bash.sh"
-shell.defer --wrap gcloud shell.import "$BREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
-shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-shell.defer --wrap git shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-shell.defer --wrap nvm shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
-shell.defer --wrap op shell.import "$HOME/.config/op/plugins.sh"
-shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
-shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
-shell.import "$HOME/.iterm2_shell_integration.bash"
+if [[ -f "$HOME/.bash_profile.local" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.bash_profile.local"
+fi
 
-# Untracked Private Overrides (DO NOT SORT)
-shell.import "$HOME/.bash_profile.local"
+# Tool-specific enhancements.
+if command -v ngrok >/dev/null 2>&1; then
+  eval "$(ngrok completion)"
+fi
 
-# Use "most" for Manpages when available, otherwise use "less".
-sys.path.contains "most" && os.setenv "MANPAGER" "most"
+if command -v aws >/dev/null 2>&1 && command -v aws_completer >/dev/null 2>&1; then
+  complete -C aws_completer aws
+fi
 
-# Use "vscode" for text editing when available, otherwise use "nano".
-sys.path.contains "cursor" && os.setenv "VISUAL" "cursor"
-sys.path.contains "cursor" && os.setenv "EDITOR" "cursor"
-when.cmd ngrok  'shell.eval "ngrok completion"'
-when.cmd aws    'shell.eval "complete -C aws_completer aws"'
-when.cmd direnv 'shell.eval "direnv hook bash"'
-when.cmd pyenv  'shell.eval "pyenv init --path"'
-when.cmd pyenv  'shell.eval "pyenv init -"'
-when.cmd pyenv  'shell.eval "pyenv virtualenv-init -"'
-when.cmd rbenv  'shell.eval "rbenv init -"'
-when.cmd dircolors 'shell.eval "dircolors -b $HOME/.dircolors"'
-# sys.path.contains "conda" && shell.eval "conda shell.bash hook"
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook bash)"
+fi
 
-complete -cf sudo # enable sudo tab-complete
+if command -v pyenv >/dev/null 2>&1; then
+  eval "$(pyenv init --path)"
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
+fi
 
-alias ..="cd .."
-alias ...="cd ../.."
-alias ....="cd ../../.."
-alias .....="cd ../../../.."
-alias ~="cd ~/Desktop"
-alias ~~="cd ~/"
-alias -- -="cd -"
-alias r="cd ~/Repos"
-alias c="clear"
-alias code="code-insiders"
-alias g="git"
-alias cp="cp -i"
-alias l="ls"
-alias sl="ls"
-alias la="ll -la"
-alias grep="grep --color=auto"
-alias fgrep="fgrep --color=auto"
-alias egrep="egrep --color=auto"
-alias rsync="rsync -v -P"
-alias sudo="sudo "
-alias ga="git add"
-alias gd="git diff"
-alias gs="git status"
-alias map="xargs -n1"
-alias hh="hstr" # shell history viewer
-alias px2em="css-px-to-em"
-alias +x="file-mark-executable"
-alias dots="bin-list-scripts"
-alias resolve="path-resolve"
-alias copy="path-copy-clipboard"
-alias expand="path-expand-tilde"
-alias showdesk="finder-show-desktop"
-alias hidedesk="finder-hide-desktop"
-alias svgo*="svg-optimize-all"
-alias webp*="convert-to-webp"
-alias mp4*="convert-to-mp4"
-alias fe*="find-extension"
-alias fn*="find-filename"
-alias ip="network-info"
-alias add-alias="shell-add-alias"
-alias typo="espanso-add-typo"
-alias pid-on-port="network-pid-on-port"
-alias listeners="network-listeners"
-alias hgrep="history-grep"
-alias headers="http-show-headers"
+if command -v rbenv >/dev/null 2>&1; then
+  eval "$(rbenv init -)"
+fi
 
-when.darwin alias o="open ./"
+if command -v op >/dev/null 2>&1; then
+  eval "$(op completion bash)"
+fi
 
-# Create alias to cd to current working Finder directory.
-when.darwin alias f='cd "$(finder-front-path)" || exit 0'
-alias.setup_ls
+complete -cf sudo
 
-when.cmd rlwrap alias node="env NODE_NO_READLINE=1 rlwrap node"
-when.cmd bat alias cat="bat --style=\"plain\" --paging never"
-when.cmd op 'source <(op completion bash)'
+# Prompt configuration mimicking the previous Bash prompt behavior.
+__dotfiles_prompt_path() {
+  local path
+  path="$(dirs +0)"
 
-shell.setup_prompt
-ssh_agent.init "$HOME/.ssh-agent.env"
+  local IFS="/"
+  read -ra parts <<<"$path"
+  local last_index=$(( ${#parts[@]} - 1 ))
 
-# Late PATH additions
-sys.path.append "$HOME/Dropbox/.sbin"
+  if (( ${#parts[@]} == 0 )); then
+    printf '/'
+    return
+  fi
+
+  local buffer=""
+  local i
+  for (( i=0; i<last_index; i++ )); do
+    [[ -z "${parts[i]}" ]] && continue
+    buffer+="${parts[i]:0:1}/"
+  done
+
+  if [[ -z "${parts[last_index]}" ]]; then
+    printf '/'
+    return
+  fi
+
+  printf '%s' "${buffer}${parts[last_index]}"
+}
+
+PS1='\h \[\e[1;32m\]$(__dotfiles_prompt_path)\[\e[0m\] [\A] > '

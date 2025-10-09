@@ -1,0 +1,29 @@
+#!/usr/bin/env zsh
+
+emulate -L zsh
+
+# Determine the directory for the Zsh configuration assets.
+typeset -g DOTFILES_ZSH_DIR
+if [[ -z "${DOTFILES_ZSH_DIR:-}" ]]; then
+  DOTFILES_ZSH_DIR="${${(%):-%N}:A:h}"
+fi
+
+# Ensure the shared environment layer has been loaded.
+source "${DOTFILES_ZSH_DIR}/env"
+
+# Avoid reapplying login configuration multiple times.
+if [[ -n "${DOTFILES_ZSH_PROFILE:-}" ]]; then
+  return
+fi
+typeset -g DOTFILES_ZSH_PROFILE=1
+
+# Load the shared shell profile only for interactive sessions.
+typeset shared_profile="${DOTFILES_ZSH_DIR}/../lib.sh"
+if [[ -o interactive && -f "${shared_profile}" ]]; then
+  source "${shared_profile}"
+fi
+
+# Apply login-specific adjustments that expect to run before an interactive prompt.
+if [[ -o login ]] && command -v pyenv >/dev/null 2>&1; then
+  eval "$(pyenv init --path)"
+fi
