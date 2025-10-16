@@ -70,3 +70,25 @@ clip.paste() {
         xclip -selection clipboard -o
     fi
 }
+
+# Returns success if $HOME/.machine_id matches the current IOPlatformUUID.
+os.machine_id.matches_current() {
+    local machine_id_file="$HOME/.machine_id"
+    local stored hw_uuid
+
+    os.platform.is_darwin || return 1
+    sys.path.contains ioreg || return 1
+    [[ -f "$machine_id_file" ]] || return 1
+
+    stored=$(<"$machine_id_file")
+    stored=${stored//$'\n'/}
+    [[ -n "$stored" ]] || return 1
+
+    if ! hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
+        return 1
+    fi
+    hw_uuid=${hw_uuid//$'\n'/}
+    [[ -n "$hw_uuid" ]] || return 1
+
+    [[ "$stored" == "$hw_uuid" ]]
+}

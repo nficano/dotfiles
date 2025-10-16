@@ -35,6 +35,11 @@ when.linux() {
     "$@"
 }
 
+when.my_machine() {
+    os.machine_id.matches_current || return 1
+    "$@"
+}
+
 run.maybe() {
     local dry_flag="$1" desc="$2"
     shift 2 || true

@@ -523,6 +523,49 @@ step_configure_directories() {
   ensure_directory_flag "$HOME/Public" "hidden"
 }
 
+step_configure_shell_profiles() {
+  local profile_local="$HOME/.profile.local"
+  local machine_id_file="$HOME/.machine_id"
+
+  if [[ ! -f "$profile_local" ]]; then
+    summary.add "Create $profile_local"
+    if (( dry_run )); then
+      log.info "[dry-run] Would create $profile_local"
+    else
+      touch "$profile_local"
+    fi
+  fi
+
+  local machine_id
+  if ! machine_id=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
+    summary.warn "Unable to query IOPlatformUUID; skipping $machine_id_file update"
+    return 0
+  fi
+  machine_id=${machine_id//$'\n'/}
+
+  if [[ -z "$machine_id" ]]; then
+    summary.warn "IOPlatformUUID lookup returned empty result; skipping $machine_id_file update"
+    return 0
+  fi
+
+  local current=""
+  if [[ -f "$machine_id_file" ]]; then
+    current=$(<"$machine_id_file")
+    current=${current//$'\n'/}
+  fi
+
+  if [[ "$machine_id" != "$current" ]]; then
+    summary.add "Write machine identifier to $machine_id_file"
+    if (( dry_run )); then
+      log.info "[dry-run] Would write machine identifier to $machine_id_file"
+    else
+      printf '%s\n' "$machine_id" >"$machine_id_file"
+    fi
+  elif (( verbose )); then
+    log.info "$machine_id_file already contains current machine identifier"
+  fi
+}
+
 step_install_pipx() {
   if command -v pipx >/dev/null 2>&1; then
     if (( dry_run )); then
@@ -682,6 +725,7 @@ main() {
   run_step "Refresh file associations" step_setup_default_file_associations
   run_step "Apply macOS defaults" step_apply_user_defaults
   run_step "Configure special directories" step_configure_directories
+  run_step "Ensure shell profile files" step_configure_shell_profiles
   run_step "Quit System Preferences" step_quit_system_preferences
   run_step "Ensure pipx" step_install_pipx
   run_step "Enable firewall" step_enable_firewall

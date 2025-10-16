@@ -117,9 +117,6 @@ shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
 shell.import "$HOME/.iterm2_shell_integration.bash"
 
-# Untracked Private Overrides (DO NOT SORT)
-shell.import "$HOME/.bash_profile.local"
-
 # Use "most" for Manpages when available, otherwise use "less".
 sys.path.contains "most" && os.setenv "MANPAGER" "most"
 
@@ -199,3 +196,8 @@ ssh_agent.init "$HOME/.ssh-agent.env"
 
 # Late PATH additions
 sys.path.append "$HOME/Dropbox/.sbin"
+
+# Untracked Private Overrides
+shell.import "$HOME/.profile.local"
+
+when.my_machine sys.path.append "$HOME/.bin/personal"
