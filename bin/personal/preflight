@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+#/ Automates system configuration before a video call.
+#/
+#/ Usage: $(basename "$0") [-h] [-v]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") --verbose
+
+set -Eeuo pipefail
+
+source "$(dirname "$0")/../../lib/bash/initrc"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_args() {
+  local remaining_args
+  remaining_args=$(script.parse_common "$@")
+
+  if [[ -n "$remaining_args" ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
+}
+
+main() {
+  (( verbose )) && log.info "Verbose mode enabled"
+
+  if ! command -v SwitchAudioSource >/dev/null 2>&1; then
+    log.error "SwitchAudioSource is required but not installed"
+    exit 1
+  fi
+
+  if ! command -v osascript >/dev/null 2>&1; then
+    log.error "osascript is required but not available"
+    exit 1
+  fi
+
+  local app_name="RODE Connect"
+  (( verbose )) && log.info "Launching ${app_name} hidden"
+  if ! open -jga "${app_name}"; then
+    log.error "Failed to launch ${app_name}"
+    exit 1
+  fi
+  (( verbose )) && log.info "Waiting 5 seconds for ${app_name} to initialize"
+  sleep 5
+  (( verbose )) && log.info "Setting system output volume to 50%"
+  if ! osascript -e 'set volume output volume 50'; then
+    log.error "Failed to set system output volume"
+    exit 1
+  fi
+=
+  local output_uid="14-28-76-D6-53-FF:output"
+  local input_name="RØDE Connect Stream"
+
+  (( verbose )) && log.info "Setting audio output to UID ${output_uid}"
+  if ! SwitchAudioSource -t output -u "${output_uid}"; then
+    log.error "Failed to set audio output device (UID ${output_uid})"
+    exit 1
+  fi
+
+  (( verbose )) && log.info "Setting audio input to ${input_name}"
+  if ! SwitchAudioSource -t input -s "${input_name}"; then
+    log.error "Failed to set audio input device \"${input_name}\""
+    exit 1
+  fi
+
+  log.info "Audio devices configured for preflight"
+}
+
+parse_args "$@"
+main
