@@ -1,8 +1,5 @@
 .DS_Store
-.vscode
+.env
+.env.local
+.nuxt
 dist
-yakutils.egg-info
-\#*
-.\#*
-
-pubc

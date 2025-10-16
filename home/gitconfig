@@ -1,11 +1,12 @@
-[column]
-	ui = auto
-
-[include]
-	path = ~/.gitconfig.local
-
 [apply]
 	whitespace = nowarn
+
+[branch]
+	sort = -committerdate
+
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
 
 [color]
 	diff = auto
@@ -15,70 +16,6 @@
 	ui = true
 	pager = true
 
-[branch]
-	sort = -committerdate
-
-[merge]
-	summary = true
-	ff = false
-
-[diff]
-	tool = difftool
-	algorithm = histogram
-	colorMoved = plain
-	mnemonicPrefix = true
-	renames = true
-
-[diff]
-  tool = default-difftool
-
-[difftool "default-difftool"]
-  cmd = cursor --wait --diff $LOCAL $REMOTE
-
-[merge]
-  tool = cursor
-
-[mergetool "cursor"]
-  cmd = cursor --wait --merge $REMOTE $LOCAL $BASE $MERGED
-
-[help]
-	autocorrect = prompt
-
-[fetch]
-	prune = true
-	pruneTags = true
-	all = true
-
-[core]
-	editor = cursor --wait --new-window
-	excludesFile = ~/.gitignore-global
-	autoSquash = true
-	autoStash = true
-	updateRefs = true
-  fsmonitor = true
-  untrackedCache = true
-	excludesfile = ~/.gitignore
-	autocrlf = input
-	pager = diff-so-fancy | less --tabs=4 -RFX
-	editor = cursor --wait
-
-[push]
-	default = simple
-	autoSetupRemote = true
-	followTags = true
-
-[filter "lfs"]
-	clean = git-lfs clean -- %f
-	smudge = git-lfs smudge -- %f
-	required = true
-	process = git-lfs filter-process
-
-[color "diff-highlight"]
-	oldNormal = red bold
-	oldHighlight = red bold 52
-	newNormal = green bold
-	newHighlight = green bold 22
-
 [color "diff"]
 	meta = yellow
 	frag = magenta bold
@@ -87,38 +24,88 @@
 	new = green bold
 	whitespace = red reverse
 
-[pull]
-	rebase = true
+[color "diff-highlight"]
+	oldNormal = red bold
+	oldHighlight = red bold 52
+	newNormal = green bold
+	newHighlight = green bold 22
+
+[column]
+	ui = auto
 
 [commit]
 	template = ~/.gitmessage
 	verbose = true
+	gpgsign = true
 
-[rerere]
-	enabled = true
-	autoupdate = true
-	autoStash = true
+[core]
+	editor = cursor --wait
+	fsmonitor = true
+	untrackedCache = true
+	excludesfile = ~/.gitignore
+	autocrlf = input
+	pager = diff-so-fancy | less --tabs=4 -RFX
 
-[init]
-	defaultBranch = main
+[diff]
+	tool = default-difftool
+	algorithm = histogram
+	colorMoved = plain
+	mnemonicPrefix = true
+	renames = true
 
-[user]
-	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL6ai8bamgpoZWNZ8r//igEFc0Xdr86dJdm0C8xiwX7T
+[difftool "default-difftool"]
+	cmd = cursor --wait --diff $LOCAL $REMOTE
+
+[fetch]
+	prune = true
+	pruneTags = true
+
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	required = true
+	process = git-lfs filter-process
 
 [gpg]
 	format = ssh
 
-[gpg "ssh"]
-	program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+[help]
+	autocorrect = prompt
 
-[commit]
-	gpgsign = true
-	verbose = true
+[include]
+	path = ~/.gitconfig.local
+
+[init]
+	defaultBranch = main
+
+[merge]
+	summary = true
+	ff = false
+	tool = cursor
+
+[merge "ours"]
+	driver = true
+
+[mergetool "cursor"]
+	cmd = cursor --wait --merge $REMOTE $LOCAL $BASE $MERGED
+
+[pull]
+	rebase = true
+
+[push]
+	default = simple
+	autoSetupRemote = true
+	followTags = true
+
+[rebase]
+	autoStash = true
+	updateRefs = true
+	autosquash = true
+
+[rerere]
+	enabled = true
+	autoupdate = true
 
 [tag]
 	gpgSign = true
 	sort = version:refname
-
-[branch "main"]
-	remote = origin
-	merge = refs/heads/main
