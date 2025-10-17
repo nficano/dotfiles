@@ -7,15 +7,16 @@ case $- in
 
 # Resolve dotfiles root so sourcing works via symlinks
 if [[ -z "${DOTFILES_ROOT:-}" ]]; then
-  __dotfiles_source="${BASH_SOURCE[0]}"
-  while [[ -h "$__dotfiles_source" ]]; do
-    __dotfiles_dir="$(cd -P "$(dirname "$__dotfiles_source")" && pwd)"
-    __dotfiles_source="$(readlink "$__dotfiles_source")"
-    [[ $__dotfiles_source != /* ]] && __dotfiles_source="${__dotfiles_dir}/${__dotfiles_source}"
-  done
-  DOTFILES_ROOT="$(cd -P "$(dirname "$__dotfiles_source")" && pwd)"
+  DOTFILES_ROOT="$(
+    src="${BASH_SOURCE[0]}"
+    while [[ -h "$src" ]]; do
+      dir="$(cd -P -- "$(dirname -- "$src")" && pwd)"
+      src="$(readlink "$src")"
+      [[ $src != /* ]] && src="$dir/$src"
+    done
+    cd -P -- "$(dirname -- "$src")" && pwd
+  )"
   export DOTFILES_ROOT
-  unset __dotfiles_dir __dotfiles_source
 fi
 
 # Source helper functions
@@ -60,8 +61,8 @@ os.setenv "HISTSIZE" -1
 os.setenv "SHELL_SESSION_HISTORY" 0 # Save & reload history after each command
 os.setenv "PROMPT_COMMAND" "history -a; history -n; $PROMPT_COMMAND"
 os.setenv "MANPAGER" "less"
-os.setenv "VISUAL" "nano"
-os.setenv "EDITOR" "nano"
+os.setenv "VISUAL" "cursor"
+os.setenv "EDITOR" "cursor"
 os.setenv "HSTR_TIOCSTI" "y"
 
 os.setenv "LESS" "-R"
@@ -142,10 +143,6 @@ alias .....="cd ../../../.."
 alias ~="cd ~/Desktop"
 alias ~~="cd ~/"
 alias -- -="cd -"
-alias r="cd ~/Repos"
-alias c="clear"
-alias code="code-insiders"
-alias g="git"
 alias cp="cp -i"
 alias l="ls"
 alias sl="ls"
@@ -158,28 +155,7 @@ alias sudo="sudo "
 alias ga="git add"
 alias gd="git diff"
 alias gs="git status"
-alias map="xargs -n1"
-alias hh="hstr" # shell history viewer
-alias px2em="css-px-to-em"
-alias +x="file-mark-executable"
-alias dots="bin-list-scripts"
-alias resolve="path-resolve"
-alias copy="path-copy-clipboard"
-alias expand="path-expand-tilde"
-alias showdesk="finder-show-desktop"
-alias hidedesk="finder-hide-desktop"
-alias svgo*="svg-optimize-all"
-alias webp*="convert-to-webp"
-alias mp4*="convert-to-mp4"
-alias fe*="find-extension"
-alias fn*="find-filename"
-alias ip="network-info"
-alias add-alias="shell-add-alias"
-alias typo="espanso-add-typo"
-alias pid-on-port="network-pid-on-port"
-alias listeners="network-listeners"
-alias hgrep="history-grep"
-alias headers="http-show-headers"
+alias gl="git log --oneline --graph --decorate --all"
 
 when.darwin alias o="open ./"
 

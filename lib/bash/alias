@@ -7,11 +7,11 @@ alias.setup_ls() {
         alias ll='ls --color=auto -algX'
     else
         if sys.path.contains gls; then
-            alias ls='gls --color=auto -gXF'
-            alias ll='gls --color=auto -algX'
+            alias ls='gls --color=auto -gXF --group-directories-first --human-readable'
+            alias ll='gls --color=auto -algX --human-readable --group-directories-first'
         else
-            alias ls='ls -GF'
-            alias ll='ls -alG'
+            alias ls='ls -GF --group-directories-first --human-readable'
+            alias ll='ls -alG --group-directories-first --human-readable'
         fi
     fi
 }

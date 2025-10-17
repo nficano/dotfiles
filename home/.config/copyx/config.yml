@@ -1,0 +1,15 @@
+# Example configuration for the copyx utility.
+#
+# Configure the root destination for snapshots, the identifier for this
+# machine (used to create a sub-folder), and the list of paths or glob
+# expressions that should be replicated.
+# Use the optional `exclude` section to skip matching paths during syncs.
+
+backup_root: $HOME/Dropbox/mirrors
+
+sources:
+  - $HOME/Desktop
+  - /etc/hosts
+exclude:
+  - .DS_Store
+  - '*/node_modules'

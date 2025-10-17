@@ -1,0 +1,463 @@
+#!/usr/bin/env bash
+#/ Execute hourly incremental rsync backups based on a YAML configuration.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [-n] [-i seconds] [--config path] [--oneshot]
+#/
+#/ Available options:
+#/    -h, --help        Print this help and exit
+#/    -v, --verbose     Enable verbose output
+#/    -n, --dry-run     Run rsync in dry-run mode
+#/    -i, --interval    Seconds between iterations (default 3600)
+#/        --config      Path to YAML config (or COPYX_CONFIG env var)
+#/        --oneshot     Run a single iteration then exit
+#/
+#/ Examples:
+#/    $(basename "$0") --config ~/.config/copyx.yml
+#/    COPYX_CONFIG=~/.config/copyx.yml $(basename "$0") --oneshot
+#/
+#/ Config keys:
+#/    backup_root   Destination directory for synced data
+#/    machine_id    Optional machine identifier (hostname used if omitted)
+#/    sources       List of paths/globs to replicate
+#/    exclude       Optional list of rsync exclude patterns
+
+set -Eeuo pipefail
+trap 'should_exit=1; cleanup' SIGINT SIGTERM
+trap cleanup ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+verbose=0
+dry_run=0
+interval=3600
+oneshot=0
+should_exit=0
+config_path="${COPYX_CONFIG:-}"
+
+config_dir=""
+config_backup_root=""
+config_machine_id=""
+config_sources=()
+config_exclude_patterns=()
+expanded_sources=()
+
+expand_env_placeholders() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    printf '%s\n' "$value"
+    return
+  fi
+  if [[ "$value" == *'${HOME}'* ]]; then
+    value="${value//\$\{HOME\}/$HOME}"
+  fi
+  if [[ "$value" == *'$HOME'* ]]; then
+    value="${value//\$HOME/$HOME}"
+  fi
+  printf '%s\n' "$value"
+}
+
+config_pattern_to_glob() {
+  local pattern="$1"
+  pattern=$(expand_env_placeholders "$pattern")
+  if [[ -n "$pattern" && ${pattern:0:1} == '~' ]]; then
+    case "$pattern" in
+      "~") pattern="$HOME" ;;
+      ~/*) pattern="$HOME/${pattern:2}" ;;
+    esac
+  elif [[ "$pattern" != /* ]]; then
+    pattern="$config_dir/$pattern"
+  fi
+  printf '%s\n' "$pattern"
+}
+
+cleanup() {
+  script.cleanup
+}
+
+trim() {
+  local s=""
+  if (( $# )); then
+    s="$1"
+  else
+    s=$(cat)
+  fi
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+resolve_path() {
+  local path="$1" base_dir="${2:-$PWD}"
+  path=$(expand_env_placeholders "$path")
+  if [[ -n "$path" && ${path:0:1} == '~' ]]; then
+    case "$path" in
+      "~") path="$HOME" ;;
+      ~/*) path="$HOME/${path:2}" ;;
+    esac
+  fi
+  if [[ -n "$base_dir" && "$path" != /* ]]; then
+    path="$base_dir/$path"
+  fi
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$path" 2>/dev/null || printf '%s\n' "$path"
+    return
+  fi
+  local dir part
+  dir=$(dirname -- "$path")
+  part=$(basename -- "$path")
+  (
+    cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd)" "$part"
+  ) || printf '%s\n' "$path"
+}
+
+relative_dest_path() {
+  local path="$1" home_name
+  while [[ "$path" != "/" && "${path: -1}" == "/" ]]; do
+    path="${path%/}"
+  done
+  if [[ -n "$HOME" && "$path" == "$HOME"* ]]; then
+    home_name=$(basename -- "$HOME")
+    local rest="${path#"$HOME"}"
+    rest="${rest#/}"
+    if [[ -n "$rest" ]]; then
+      printf 'home/%s/%s\n' "$home_name" "$rest"
+    else
+      printf 'home/%s\n' "$home_name"
+    fi
+    return
+  fi
+  path="${path#/}"
+  if [[ -z "$path" ]]; then
+    printf 'root\n'
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
+resolve_machine_id() {
+  if [[ -n "$config_machine_id" ]]; then
+    return
+  fi
+
+  local machine_id_file="$HOME/.machine_id"
+  local candidate=""
+
+  if os.machine_id.matches_current; then
+    if [[ -f "$machine_id_file" ]]; then
+      candidate=$(<"$machine_id_file")
+      candidate=$(trim "$candidate")
+    fi
+    if [[ -n "$candidate" ]]; then
+      config_machine_id="$candidate"
+      log.info "Using machine identifier from $machine_id_file"
+      return
+    fi
+    log.info "Machine identifier lookup returned empty result; falling back to hostname"
+  fi
+
+  config_machine_id=$(hostname -s 2>/dev/null || hostname)
+  config_machine_id=$(trim "$config_machine_id")
+  log.info "Config did not specify 'machine_id'; using hostname '$config_machine_id'"
+}
+
+ensure_prerequisites() {
+  if ! command -v rsync >/dev/null 2>&1; then
+    log.error "rsync is required but not found in PATH"
+    exit 1
+  fi
+  if ! command -v yq >/dev/null 2>&1; then
+    log.error "yq is required but not found in PATH"
+    exit 1
+  fi
+}
+
+load_config() {
+  local file="$1"
+  [[ -f "$file" ]] || { log.error "Config file not found: $file"; return 1; }
+
+  config_dir=$(cd "$(dirname -- "$file")" && pwd -P)
+  config_backup_root=$(trim "$(yq eval -r '.backup_root // ""' "$file" 2>/dev/null)")
+  config_backup_root=$(expand_env_placeholders "$config_backup_root")
+  config_machine_id=$(trim "$(yq eval -r '.machine_id // ""' "$file" 2>/dev/null)")
+  config_machine_id=$(expand_env_placeholders "$config_machine_id")
+  config_sources=()
+  config_exclude_patterns=()
+
+  local sources_raw=""
+  if ! sources_raw=$(yq eval -r '.sources // [] | .[]' "$file" 2>/dev/null); then
+    log.error "Failed to parse 'sources' from config via yq"
+    return 1
+  fi
+
+  local item
+  if [[ -n "$sources_raw" ]]; then
+    while IFS= read -r item || [[ -n "$item" ]]; do
+      item=$(trim "$item")
+      [[ -n "$item" ]] && config_sources+=("$(expand_env_placeholders "$item")")
+    done <<<"$sources_raw"
+  fi
+
+  local exclude_raw=""
+  if ! exclude_raw=$(yq eval -r '.exclude // [] | .[]' "$file" 2>/dev/null); then
+    log.error "Failed to parse 'exclude' from config via yq"
+    return 1
+  fi
+
+  if [[ -n "$exclude_raw" ]]; then
+    while IFS= read -r item || [[ -n "$item" ]]; do
+      item=$(trim "$item")
+      [[ -n "$item" ]] && config_exclude_patterns+=("$(expand_env_placeholders "$item")")
+    done <<<"$exclude_raw"
+  fi
+
+  if [[ -z "$config_backup_root" ]]; then
+    log.error "Config missing required 'backup_root'"
+    return 1
+  fi
+
+  resolve_machine_id
+}
+
+expand_sources() {
+  expanded_sources=()
+  local -a patterns=("${config_sources[@]}")
+  if [[ ${#patterns[@]} -eq 0 ]]; then
+    return
+  fi
+
+  local pattern prepared
+  for pattern in "${patterns[@]}"; do
+    prepared=$(config_pattern_to_glob "$pattern")
+    local -a matches=()
+    while IFS= read -r match; do
+      matches+=("$match")
+    done < <(compgen -G "$prepared" 2>/dev/null || true)
+    if [[ ${#matches[@]} -eq 0 ]]; then
+      matches+=("$prepared")
+    fi
+    local match resolved
+    for match in "${matches[@]}"; do
+      if [[ -d "$match" || -f "$match" ]]; then
+        resolved=$(resolve_path "$match")
+        expanded_sources+=("$resolved")
+      else
+        log.warn "Source not found: $pattern (resolved to $match)"
+      fi
+    done
+  done
+}
+
+perform_backup_iteration() {
+  local config_file="$1"
+  load_config "$config_file" || return 1
+
+  local backup_root_abs
+  backup_root_abs=$(resolve_path "$config_backup_root" "$config_dir")
+  local machine_dir="$backup_root_abs/$config_machine_id"
+
+  expand_sources
+  local -a sources=("${expanded_sources[@]}")
+
+  if [[ ${#sources[@]} -eq 0 ]]; then
+    log.warn "No valid sources to back up; skipping iteration"
+    return 0
+  fi
+
+  local -a rsync_args=(--archive --delete --human-readable --partial --compress)
+  (( verbose )) && rsync_args+=(-v)
+  (( verbose || dry_run )) && rsync_args+=(--itemize-changes)
+  (( dry_run )) && rsync_args+=(--dry-run)
+  local pattern
+  for pattern in "${config_exclude_patterns[@]-}"; do
+    rsync_args+=("--exclude=$pattern")
+  done
+
+  if (( ! dry_run )); then
+    mkdir -p "$machine_dir"
+  fi
+
+  local src dest_rel dest_dir dest_parent
+  local -a failed=()
+  for src in "${sources[@]}"; do
+    dest_rel=$(relative_dest_path "$src")
+    if [[ -d "$src" ]]; then
+      dest_dir="$machine_dir/$dest_rel"
+      if (( ! dry_run )); then
+        mkdir -p "$dest_dir"
+      fi
+      local -a args=("${rsync_args[@]}")
+      args+=("$src/" "$dest_dir/")
+      if ! rsync "${args[@]}"; then
+        log.error "rsync failed for directory: $src"
+        failed+=("$src")
+      fi
+    else
+      dest_parent=$(dirname -- "$dest_rel")
+      if [[ "$dest_parent" == "." ]]; then
+        dest_dir="$machine_dir"
+      else
+        dest_dir="$machine_dir/$dest_parent"
+      fi
+      if (( ! dry_run )); then
+        mkdir -p "$dest_dir"
+      fi
+      local -a args=("${rsync_args[@]}")
+      args+=("$src" "$dest_dir/")
+      if ! rsync "${args[@]}"; then
+        log.error "rsync failed for file: $src"
+        failed+=("$src")
+      fi
+    fi
+  done
+
+  if (( dry_run )); then
+    log.info "Dry run complete; backup would sync to $machine_dir"
+    return 0
+  fi
+
+  local timestamp
+  timestamp=$(date +"%Y%m%dT%H%M%S")
+  local log_dir="$machine_dir/logs"
+  mkdir -p "$log_dir"
+  printf '%s|sources=%d|status=%s\n' "$timestamp" "${#sources[@]}" "$([[ ${#failed[@]} -eq 0 ]] && echo success || echo failure)" >>"$log_dir/history.log"
+
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    log.error "Iteration completed with ${#failed[@]} failed rsync operations"
+    return 1
+  fi
+
+  log.info "Backup synced to $machine_dir"
+}
+
+sleep_with_interrupt() {
+  sleep "$1" &
+  local sleep_pid=$!
+  if ! wait "$sleep_pid"; then
+    (( verbose )) && log.info "Sleep interrupted"
+  fi
+}
+
+parse_args() {
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help) transformed+=('-h') ;;
+      --verbose) transformed+=('-v') ;;
+      --interval)
+        shift
+        [[ $# -gt 0 ]] || { log.error "--interval requires a value"; script.usage 1; }
+        transformed+=('-i' "$1")
+        shift
+        continue
+        ;;
+      --interval=*)
+        transformed+=('-i' "${1#*=}")
+        shift
+        continue
+        ;;
+      --config)
+        shift
+        [[ $# -gt 0 ]] || { log.error "--config requires a path"; script.usage 1; }
+        config_path="$1"
+        shift
+        continue
+        ;;
+      --config=*)
+        config_path="${1#*=}"
+        shift
+        continue
+        ;;
+      --dry-run)
+        transformed+=('-n')
+        ;;
+      --oneshot)
+        oneshot=1
+        shift
+        continue
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  while getopts ':hvni:' opt; do
+    case "$opt" in
+      h) script.usage ;;
+      v) verbose=1 ;;
+      n) dry_run=1 ;;
+      i) interval="$OPTARG" ;;
+      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
+      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+
+  if [[ $# -gt 0 ]]; then
+    log.error "Unexpected positional arguments"
+    script.usage 1
+  fi
+
+  script.validate_positive_int "$interval" "--interval"
+}
+
+main() {
+  ensure_prerequisites
+
+  if [[ -z "$config_path" ]]; then
+    log.error "No config provided; use --config or set COPYX_CONFIG"
+    exit 1
+  fi
+
+  config_path=$(resolve_path "$config_path" "$PWD")
+
+  if [[ ! -f "$config_path" ]]; then
+    log.error "Config path not found: $config_path"
+    exit 1
+  fi
+
+  local iteration=0
+
+  while :; do
+    iteration=$((iteration + 1))
+    (( verbose )) && log.info "Iteration $iteration starting"
+
+    if ! perform_backup_iteration "$config_path"; then
+      log.error "Iteration $iteration failed"
+    fi
+
+    if (( oneshot )); then
+      break
+    fi
+
+    if (( should_exit )); then
+      (( verbose )) && log.info "Exit requested; stopping loop"
+      break
+    fi
+
+    sleep_with_interrupt "$interval"
+
+    if (( should_exit )); then
+      (( verbose )) && log.info "Exit requested after sleep"
+      break
+    fi
+  done
+}
+
+parse_args "$@"
+main
