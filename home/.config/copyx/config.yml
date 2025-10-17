@@ -11,6 +11,10 @@ sources:
   - $HOME/Desktop
   - /etc/hosts
   - $HOME/.bash_history
+  - $HOME/.gitconfig.local
+  - $HOME/.profile.local
+  - $HOME/sandbox
 exclude:
   - .DS_Store
   - '*/node_modules'
+  - '*/.git'
