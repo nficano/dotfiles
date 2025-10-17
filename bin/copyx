@@ -10,6 +10,8 @@
 #/    -i, --interval    Seconds between iterations (default 3600)
 #/        --config      Path to YAML config (or COPYX_CONFIG env var)
 #/        --oneshot     Run a single iteration then exit
+#/        --launchd-load    Write LaunchAgent plist and load via launchctl
+#/        --launchd-unload  Unload LaunchAgent via launchctl
 #/
 #/ Examples:
 #/    $(basename "$0") --config ~/.config/copyx.yml
@@ -33,6 +35,10 @@ interval=3600
 oneshot=0
 should_exit=0
 config_path="${COPYX_CONFIG:-}"
+launchd_action=""
+
+readonly LAUNCHD_LABEL="com.nficano.copyx"
+readonly LAUNCHD_PATH_VALUE="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 config_dir=""
 config_backup_root=""
@@ -68,6 +74,16 @@ config_pattern_to_glob() {
     pattern="$config_dir/$pattern"
   fi
   printf '%s\n' "$pattern"
+}
+
+xml_escape() {
+  local value="$1"
+  value="${value//&/&amp;}"
+  value="${value//</&lt;}"
+  value="${value//>/&gt;}"
+  value="${value//\"/&quot;}"
+  value="${value//\'/&apos;}"
+  printf '%s\n' "$value"
 }
 
 cleanup() {
@@ -158,6 +174,169 @@ resolve_machine_id() {
   config_machine_id=$(hostname -s 2>/dev/null || hostname)
   config_machine_id=$(trim "$config_machine_id")
   log.info "Config did not specify 'machine_id'; using hostname '$config_machine_id'"
+}
+
+launchd_domain() {
+  printf 'gui/%s\n' "$(id -u)"
+}
+
+launchd_plist_path() {
+  printf '%s/Library/LaunchAgents/%s.plist\n' "$HOME" "$LAUNCHD_LABEL"
+}
+
+launchd_logs_dir() {
+  printf '%s/Library/Logs/copyx\n' "$HOME"
+}
+
+launchd_prepare_plist() {
+  local config_file="$1" start_interval="$2"
+  local plist_path log_dir script_path script_source script_dir
+  plist_path=$(launchd_plist_path)
+  log_dir=$(launchd_logs_dir)
+  script_source="${BASH_SOURCE[0]}"
+  script_dir=$(cd "$(dirname -- "$script_source")" && pwd -P)
+  script_path=$(resolve_path "$(basename -- "$script_source")" "$script_dir")
+
+  local script_xml config_xml path_xml stdout_xml stderr_xml stdout_path stderr_path
+  script_xml=$(xml_escape "$script_path")
+  config_xml=$(xml_escape "$config_file")
+  path_xml=$(xml_escape "$LAUNCHD_PATH_VALUE")
+  stdout_path="$log_dir/stdout.log"
+  stderr_path="$log_dir/stderr.log"
+  stdout_xml=$(xml_escape "$stdout_path")
+  stderr_xml=$(xml_escape "$stderr_path")
+
+  mkdir -p "$(dirname "$plist_path")" "$log_dir"
+
+  cat >"$plist_path" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${script_xml}</string>
+        <string>--config</string>
+        <string>${config_xml}</string>
+        <string>--oneshot</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>${path_xml}</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>${start_interval}</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${stdout_xml}</string>
+    <key>StandardErrorPath</key>
+    <string>${stderr_xml}</string>
+</dict>
+</plist>
+EOF
+
+  chmod 0644 "$plist_path"
+
+  if command -v plutil >/dev/null 2>&1; then
+    if ! plutil -lint "$plist_path" >/dev/null 2>&1; then
+      log.warn "plutil validation failed for $plist_path"
+    fi
+  fi
+
+  printf '%s\n' "$plist_path"
+}
+
+launchd_handle_load() {
+  if ! command -v launchctl >/dev/null 2>&1; then
+    log.error "launchctl is required to manage LaunchAgents"
+    exit 1
+  fi
+
+  local config="${config_path:-}"
+  if [[ -z "$config" ]]; then
+    config="$HOME/.config/copyx/config.yml"
+    log.info "No config provided; defaulting to $config"
+  fi
+
+  config=$(resolve_path "$config" "$PWD")
+
+  if [[ ! -f "$config" ]]; then
+    log.error "Config path not found: $config"
+    exit 1
+  fi
+
+  config_path="$config"
+
+  local plist_path
+  plist_path=$(launchd_prepare_plist "$config" "$interval")
+
+  local domain
+  domain=$(launchd_domain)
+
+  if launchctl print "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
+    if launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1; then
+      (( verbose )) && log.info "Unloaded existing LaunchAgent $LAUNCHD_LABEL"
+    else
+      log.warn "Failed to unload existing LaunchAgent $LAUNCHD_LABEL; attempting to continue"
+    fi
+  fi
+
+  if ! launchctl bootstrap "$domain" "$plist_path"; then
+    log.error "launchctl bootstrap failed for $plist_path"
+    exit 1
+  fi
+
+  launchctl enable "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1 || true
+
+  if launchctl kickstart -k "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
+    (( verbose )) && log.info "LaunchAgent $LAUNCHD_LABEL started"
+  else
+    log.warn "launchctl kickstart failed; agent will start on the next scheduled interval"
+  fi
+
+  log.info "LaunchAgent $LAUNCHD_LABEL loaded from $plist_path"
+  return 0
+}
+
+launchd_handle_unload() {
+  if ! command -v launchctl >/dev/null 2>&1; then
+    log.error "launchctl is required to manage LaunchAgents"
+    exit 1
+  fi
+
+  local plist_path
+  plist_path=$(launchd_plist_path)
+
+  local domain
+  domain=$(launchd_domain)
+
+  if launchctl print "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
+    if launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1; then
+      log.info "LaunchAgent $LAUNCHD_LABEL unloaded"
+    elif launchctl bootout "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
+      log.info "LaunchAgent $LAUNCHD_LABEL unloaded"
+    else
+      log.error "Failed to unload LaunchAgent $LAUNCHD_LABEL"
+      exit 1
+    fi
+  else
+    log.info "LaunchAgent $LAUNCHD_LABEL not currently loaded"
+  fi
+
+  launchctl disable "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1 || true
+
+  if [[ -f "$plist_path" ]]; then
+    if (( verbose )); then
+      log.info "LaunchAgent plist remains at $plist_path"
+    fi
+  else
+    log.warn "LaunchAgent plist not found at $plist_path"
+  fi
+  return 0
 }
 
 ensure_prerequisites() {
@@ -377,6 +556,24 @@ parse_args() {
         shift
         continue
         ;;
+      --launchd-load)
+        if [[ -n "$launchd_action" ]]; then
+          log.error "Multiple launchd actions specified"
+          script.usage 1
+        fi
+        launchd_action="load"
+        shift
+        continue
+        ;;
+      --launchd-unload)
+        if [[ -n "$launchd_action" ]]; then
+          log.error "Multiple launchd actions specified"
+          script.usage 1
+        fi
+        launchd_action="unload"
+        shift
+        continue
+        ;;
       --)
         shift
         break
@@ -417,6 +614,16 @@ parse_args() {
 }
 
 main() {
+  if [[ "$launchd_action" == "load" ]]; then
+    launchd_handle_load
+    return
+  fi
+
+  if [[ "$launchd_action" == "unload" ]]; then
+    launchd_handle_unload
+    return
+  fi
+
   ensure_prerequisites
 
   if [[ -z "$config_path" ]]; then
