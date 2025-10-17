@@ -28,9 +28,11 @@ setup-tree:
 	mkdir -p ${HOME}/Repos
 	mkdir -p ${HOME}/.pip
 	mkdir -p ${HOME}/.environment
+	mkdir -p ${HOME}/.config/copyx
 	rm -f ${HOME}/.bash_profile
 	rm -f ${HOME}/.inputrc
 	rm -f ${HOME}/.bin
+	ln -fsn $(DOTFILES)/home/.config/copyx/config.yml ${HOME}/.config/copyx/config.yml
 	ln -fsn $(DOTFILES)/shell/bash/profile ${HOME}/.bash_profile
 	ln -fsn $(DOTFILES)/home/agrc ${HOME}/.agrc
 	ln -fsn $(DOTFILES)/home/dircolors ${HOME}/.dircolors

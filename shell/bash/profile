@@ -33,7 +33,7 @@ os.setenv "POETRY_VIRTUALENVS_PATH" "$HOME/.virtualenvs"
 os.setenv "PYENV_ROOT" "$HOME/.pyenv"
 os.setenv "PYTHONDONTWRITEBYTECODE" true
 os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
-
+os.setenv "COPYX_CONFIG" "$HOME/.config/copyx/config.yml"
 # Homebrew Shell Environment
 os.setenv "BREW_PREFIX" "$(brew.prefix)"
 os.setenv "HOMEBREW_CASKROOM" "$BREW_PREFIX/Caskroom"

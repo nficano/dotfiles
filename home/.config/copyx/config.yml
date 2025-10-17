@@ -10,6 +10,7 @@ backup_root: $HOME/Dropbox/backups
 sources:
   - $HOME/Desktop
   - /etc/hosts
+  - $HOME/.bash_history
 exclude:
   - .DS_Store
   - '*/node_modules'
