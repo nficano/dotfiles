@@ -595,6 +595,28 @@ step_install_pipx() {
   pipx completions >/dev/null 2>&1 || true
 }
 
+step_configure_copyx_launchd() {
+  local copyx_bin="$repo_root/bin/copyx"
+
+  if [[ ! -x "$copyx_bin" ]]; then
+    summary.warn "copyx helper missing at $copyx_bin; skipping LaunchAgent setup"
+    return 0
+  fi
+
+  if (( dry_run )); then
+    log.info "[dry-run] Would run: $copyx_bin --launchd-load"
+    summary.add "Load copyx LaunchAgent"
+    return 0
+  fi
+
+  if "$copyx_bin" --launchd-load; then
+    summary.add "Loaded copyx LaunchAgent"
+  else
+    summary.warn "Failed to load copyx LaunchAgent"
+    return 1
+  fi
+}
+
 step_enable_firewall() {
   if ! command -v sudo >/dev/null 2>&1; then
     summary.warn "sudo unavailable; skipping firewall configuration"
@@ -728,6 +750,7 @@ main() {
   run_step "Ensure shell profile files" step_configure_shell_profiles
   run_step "Quit System Preferences" step_quit_system_preferences
   run_step "Ensure pipx" step_install_pipx
+  run_step "Load copyx LaunchAgent" step_configure_copyx_launchd
   run_step "Enable firewall" step_enable_firewall
 
   end_time=$(date +%s)

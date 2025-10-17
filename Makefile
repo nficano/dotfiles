@@ -1,6 +1,7 @@
 DOTFILES := $(PWD)
 
 install:
+	setup-tree
 	bash $(DOTFILES)/setup/macos/mac-provision
 
 deploy-patch:
