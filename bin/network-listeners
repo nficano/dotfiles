@@ -28,7 +28,6 @@ else
   CLR_RESET=""; CLR_DIM=""; CLR_BOLD=""; CLR_RED=""; CLR_GREEN=""; CLR_YELLOW=""; CLR_BLUE=""; CLR_MAGENTA=""; CLR_CYAN="";
 fi
 
-hdr()   { printf "%b\n" "${CLR_BLUE}${CLR_BOLD}$*${CLR_RESET}"; }
 label() { printf "%b"   "${CLR_BLUE}$*${CLR_RESET}"; }
 val()   { printf "%b\n" "${CLR_GREEN}$*${CLR_RESET}"; }
 warn()  { printf "%b\n" "${CLR_YELLOW}$*${CLR_RESET}"; }

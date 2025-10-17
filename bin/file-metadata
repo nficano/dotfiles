@@ -46,4 +46,3 @@ elif is_installed "mediainfo"; then
 else
     err "No known show file metadata command for $(os)"
 fi
-

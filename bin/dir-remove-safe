@@ -28,4 +28,4 @@ if [ ! -d "$1" ]; then
 fi
 
 # Execute rm -rf on the specified directory
-exec rm -rf "$1" 
+exec rm -rf "$1"

@@ -5,7 +5,7 @@
 # expressions that should be replicated.
 # Use the optional `exclude` section to skip matching paths during syncs.
 
-backup_root: $HOME/Dropbox/mirrors
+backup_root: $HOME/Dropbox/backups
 
 sources:
   - $HOME/Desktop

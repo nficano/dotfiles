@@ -1,111 +1,111 @@
 [apply]
-	whitespace = nowarn
+    whitespace = nowarn
 
 [branch]
-	sort = -committerdate
+    sort = -committerdate
 
 [branch "main"]
-	remote = origin
-	merge = refs/heads/main
+    remote = origin
+    merge = refs/heads/main
 
 [color]
-	diff = auto
-	status = auto
-	branch = auto
-	interactive = auto
-	ui = true
-	pager = true
+    diff = auto
+    status = auto
+    branch = auto
+    interactive = auto
+    ui = true
+    pager = true
 
 [color "diff"]
-	meta = yellow
-	frag = magenta bold
-	commit = yellow bold
-	old = red bold
-	new = green bold
-	whitespace = red reverse
+    meta = yellow
+    frag = magenta bold
+    commit = yellow bold
+    old = red bold
+    new = green bold
+    whitespace = red reverse
 
 [color "diff-highlight"]
-	oldNormal = red bold
-	oldHighlight = red bold 52
-	newNormal = green bold
-	newHighlight = green bold 22
+    oldNormal = red bold
+    oldHighlight = red bold 52
+    newNormal = green bold
+    newHighlight = green bold 22
 
 [column]
-	ui = auto
+    ui = auto
 
 [commit]
-	template = ~/.gitmessage
-	verbose = true
-	gpgsign = true
+    template = ~/.gitmessage
+    verbose = true
+    gpgsign = true
 
 [core]
-	editor = cursor --wait
-	fsmonitor = true
-	untrackedCache = true
-	excludesfile = ~/.gitignore
-	autocrlf = input
-	pager = diff-so-fancy | less --tabs=4 -RFX
+    editor = cursor --wait
+    fsmonitor = true
+    untrackedCache = true
+    excludesfile = ~/.gitignore
+    autocrlf = input
+    pager = diff-so-fancy | less --tabs=4 -RFX
 
 [diff]
-	tool = default-difftool
-	algorithm = histogram
-	colorMoved = plain
-	mnemonicPrefix = true
-	renames = true
+    tool = default-difftool
+    algorithm = histogram
+    colorMoved = plain
+    mnemonicPrefix = true
+    renames = true
 
 [difftool "default-difftool"]
-	cmd = cursor --wait --diff $LOCAL $REMOTE
+    cmd = cursor --wait --diff $LOCAL $REMOTE
 
 [fetch]
-	prune = true
-	pruneTags = true
+    prune = true
+    pruneTags = true
 
 [filter "lfs"]
-	clean = git-lfs clean -- %f
-	smudge = git-lfs smudge -- %f
-	required = true
-	process = git-lfs filter-process
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    required = true
+    process = git-lfs filter-process
 
 [gpg]
-	format = ssh
+    format = ssh
 
 [help]
-	autocorrect = prompt
+    autocorrect = prompt
 
 [include]
-	path = ~/.gitconfig.local
+    path = ~/.gitconfig.local
 
 [init]
-	defaultBranch = main
+    defaultBranch = main
 
 [merge]
-	summary = true
-	ff = false
-	tool = cursor
+    summary = true
+    ff = false
+    tool = cursor
 
 [merge "ours"]
-	driver = true
+    driver = true
 
 [mergetool "cursor"]
-	cmd = cursor --wait --merge $REMOTE $LOCAL $BASE $MERGED
+    cmd = cursor --wait --merge $REMOTE $LOCAL $BASE $MERGED
 
 [pull]
-	rebase = true
+    rebase = true
 
 [push]
-	default = simple
-	autoSetupRemote = true
-	followTags = true
+    default = simple
+    autoSetupRemote = true
+    followTags = true
 
 [rebase]
-	autoStash = true
-	updateRefs = true
-	autosquash = true
+    autoStash = true
+    updateRefs = true
+    autosquash = true
 
 [rerere]
-	enabled = true
-	autoupdate = true
+    enabled = true
+    autoupdate = true
 
 [tag]
-	gpgSign = true
-	sort = version:refname
+    gpgSign = true
+    sort = version:refname
