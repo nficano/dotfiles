@@ -5,7 +5,7 @@
 # expressions that should be replicated.
 # Use the optional `exclude` section to skip matching paths during syncs.
 
-backup_root: $HOME/Dropbox/backups
+#backup_root:
 
 sources:
   - $HOME/Desktop
@@ -13,8 +13,25 @@ sources:
   - $HOME/.bash_history
   - $HOME/.gitconfig.local
   - $HOME/.profile.local
+  - $HOME/.ssh
+  - $HOME/.gnupg
+  - $HOME/.config
   - $HOME/sandbox
+  - $HOME/code
 exclude:
   - .DS_Store
   - '*/node_modules'
   - '*/.git'
+  - '*/.venv'
+  - '*.pyc'
+  - '__pycache__'
+  - '*/.idea'
+  - '*/.vscode'
+  - '*/.terraform'
+  - '*/.cache'
+  - '*/.mypy_cache'
+  - '*/.pytest_cache'
+  - '*/Library/Caches'
+  - '*/Library/Logs'
+  - '*/Library/Saved Application State'
+  - '*/Library/Containers/*/Data/Library/Caches'

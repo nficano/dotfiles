@@ -18,7 +18,7 @@
 #/    COPYX_CONFIG=~/.config/copyx.yml $(basename "$0") --oneshot
 #/
 #/ Config keys:
-#/    backup_root   Destination directory for synced data
+#/    backup_root   Destination directory (path or s3:// URI) for synced data
 #/    machine_id    Optional machine identifier (hostname used if omitted)
 #/    sources       List of paths/globs to replicate
 #/    exclude       Optional list of rsync exclude patterns
@@ -46,110 +46,11 @@ config_machine_id=""
 config_sources=()
 config_exclude_patterns=()
 expanded_sources=()
-
-expand_env_placeholders() {
-  local value="$1"
-  if [[ -z "$value" ]]; then
-    printf '%s\n' "$value"
-    return
-  fi
-  if [[ "$value" == *'${HOME}'* ]]; then
-    value="${value//\$\{HOME\}/$HOME}"
-  fi
-  if [[ "$value" == *'$HOME'* ]]; then
-    value="${value//\$HOME/$HOME}"
-  fi
-  printf '%s\n' "$value"
-}
-
-config_pattern_to_glob() {
-  local pattern="$1"
-  pattern=$(expand_env_placeholders "$pattern")
-  if [[ -n "$pattern" && ${pattern:0:1} == '~' ]]; then
-    case "$pattern" in
-      "~") pattern="$HOME" ;;
-      ~/*) pattern="$HOME/${pattern:2}" ;;
-    esac
-  elif [[ "$pattern" != /* ]]; then
-    pattern="$config_dir/$pattern"
-  fi
-  printf '%s\n' "$pattern"
-}
-
-xml_escape() {
-  local value="$1"
-  value="${value//&/&amp;}"
-  value="${value//</&lt;}"
-  value="${value//>/&gt;}"
-  value="${value//\"/&quot;}"
-  value="${value//\'/&apos;}"
-  printf '%s\n' "$value"
-}
+backup_backend=""
 
 cleanup() {
   script.cleanup
 }
-
-trim() {
-  local s=""
-  if (( $# )); then
-    s="$1"
-  else
-    s=$(cat)
-  fi
-  s="${s#"${s%%[![:space:]]*}"}"
-  s="${s%"${s##*[![:space:]]}"}"
-  printf '%s' "$s"
-}
-
-resolve_path() {
-  local path="$1" base_dir="${2:-$PWD}"
-  path=$(expand_env_placeholders "$path")
-  if [[ -n "$path" && ${path:0:1} == '~' ]]; then
-    case "$path" in
-      "~") path="$HOME" ;;
-      ~/*) path="$HOME/${path:2}" ;;
-    esac
-  fi
-  if [[ -n "$base_dir" && "$path" != /* ]]; then
-    path="$base_dir/$path"
-  fi
-  if command -v realpath >/dev/null 2>&1; then
-    realpath "$path" 2>/dev/null || printf '%s\n' "$path"
-    return
-  fi
-  local dir part
-  dir=$(dirname -- "$path")
-  part=$(basename -- "$path")
-  (
-    cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd)" "$part"
-  ) || printf '%s\n' "$path"
-}
-
-relative_dest_path() {
-  local path="$1" home_name
-  while [[ "$path" != "/" && "${path: -1}" == "/" ]]; do
-    path="${path%/}"
-  done
-  if [[ -n "$HOME" && "$path" == "$HOME"* ]]; then
-    home_name=$(basename -- "$HOME")
-    local rest="${path#"$HOME"}"
-    rest="${rest#/}"
-    if [[ -n "$rest" ]]; then
-      printf 'home/%s/%s\n' "$home_name" "$rest"
-    else
-      printf 'home/%s\n' "$home_name"
-    fi
-    return
-  fi
-  path="${path#/}"
-  if [[ -z "$path" ]]; then
-    printf 'root\n'
-  else
-    printf '%s\n' "$path"
-  fi
-}
-
 resolve_machine_id() {
   if [[ -n "$config_machine_id" ]]; then
     return
@@ -161,7 +62,7 @@ resolve_machine_id() {
   if os.machine_id.matches_current; then
     if [[ -f "$machine_id_file" ]]; then
       candidate=$(<"$machine_id_file")
-      candidate=$(trim "$candidate")
+      candidate=$(copyx.trim "$candidate")
     fi
     if [[ -n "$candidate" ]]; then
       config_machine_id="$candidate"
@@ -172,7 +73,7 @@ resolve_machine_id() {
   fi
 
   config_machine_id=$(hostname -s 2>/dev/null || hostname)
-  config_machine_id=$(trim "$config_machine_id")
+  config_machine_id=$(copyx.trim "$config_machine_id")
   log.info "Config did not specify 'machine_id'; using hostname '$config_machine_id'"
 }
 
@@ -195,16 +96,16 @@ launchd_prepare_plist() {
   log_dir=$(launchd_logs_dir)
   script_source="${BASH_SOURCE[0]}"
   script_dir=$(cd "$(dirname -- "$script_source")" && pwd -P)
-  script_path=$(resolve_path "$(basename -- "$script_source")" "$script_dir")
+  script_path=$(copyx.resolve_path "$(basename -- "$script_source")" "$script_dir")
 
   local script_xml config_xml path_xml stdout_xml stderr_xml stdout_path stderr_path
-  script_xml=$(xml_escape "$script_path")
-  config_xml=$(xml_escape "$config_file")
-  path_xml=$(xml_escape "$LAUNCHD_PATH_VALUE")
+  script_xml=$(copyx.xml_escape "$script_path")
+  config_xml=$(copyx.xml_escape "$config_file")
+  path_xml=$(copyx.xml_escape "$LAUNCHD_PATH_VALUE")
   stdout_path="$log_dir/stdout.log"
   stderr_path="$log_dir/stderr.log"
-  stdout_xml=$(xml_escape "$stdout_path")
-  stderr_xml=$(xml_escape "$stderr_path")
+  stdout_xml=$(copyx.xml_escape "$stdout_path")
+  stderr_xml=$(copyx.xml_escape "$stderr_path")
 
   mkdir -p "$(dirname "$plist_path")" "$log_dir"
 
@@ -262,7 +163,7 @@ launchd_handle_load() {
     log.info "No config provided; defaulting to $config"
   fi
 
-  config=$(resolve_path "$config" "$PWD")
+  config=$(copyx.resolve_path "$config" "$PWD")
 
   if [[ ! -f "$config" ]]; then
     log.error "Config path not found: $config"
@@ -340,10 +241,6 @@ launchd_handle_unload() {
 }
 
 ensure_prerequisites() {
-  if ! command -v rsync >/dev/null 2>&1; then
-    log.error "rsync is required but not found in PATH"
-    exit 1
-  fi
   if ! command -v yq >/dev/null 2>&1; then
     log.error "yq is required but not found in PATH"
     exit 1
@@ -355,10 +252,13 @@ load_config() {
   [[ -f "$file" ]] || { log.error "Config file not found: $file"; return 1; }
 
   config_dir=$(cd "$(dirname -- "$file")" && pwd -P)
-  config_backup_root=$(trim "$(yq eval -r '.backup_root // ""' "$file" 2>/dev/null)")
-  config_backup_root=$(expand_env_placeholders "$config_backup_root")
-  config_machine_id=$(trim "$(yq eval -r '.machine_id // ""' "$file" 2>/dev/null)")
-  config_machine_id=$(expand_env_placeholders "$config_machine_id")
+  config_backup_root=$(copyx.trim "$(yq eval -r '.backup_root // ""' "$file" 2>/dev/null)")
+  config_backup_root=$(copyx.expand_env "$config_backup_root")
+  if [[ -n "${COPYX_BACKUP_ROOT:-}" ]]; then
+    config_backup_root=$(copyx.expand_env "$COPYX_BACKUP_ROOT")
+  fi
+  config_machine_id=$(copyx.trim "$(yq eval -r '.machine_id // ""' "$file" 2>/dev/null)")
+  config_machine_id=$(copyx.expand_env "$config_machine_id")
   config_sources=()
   config_exclude_patterns=()
 
@@ -371,8 +271,8 @@ load_config() {
   local item
   if [[ -n "$sources_raw" ]]; then
     while IFS= read -r item || [[ -n "$item" ]]; do
-      item=$(trim "$item")
-      [[ -n "$item" ]] && config_sources+=("$(expand_env_placeholders "$item")")
+      item=$(copyx.trim "$item")
+      [[ -n "$item" ]] && config_sources+=("$(copyx.expand_env "$item")")
     done <<<"$sources_raw"
   fi
 
@@ -384,8 +284,8 @@ load_config() {
 
   if [[ -n "$exclude_raw" ]]; then
     while IFS= read -r item || [[ -n "$item" ]]; do
-      item=$(trim "$item")
-      [[ -n "$item" ]] && config_exclude_patterns+=("$(expand_env_placeholders "$item")")
+      item=$(copyx.trim "$item")
+      [[ -n "$item" ]] && config_exclude_patterns+=("$(copyx.expand_env "$item")")
     done <<<"$exclude_raw"
   fi
 
@@ -406,7 +306,7 @@ expand_sources() {
 
   local pattern prepared
   for pattern in "${patterns[@]}"; do
-    prepared=$(config_pattern_to_glob "$pattern")
+    prepared=$(copyx.pattern_to_glob "$pattern" "$config_dir")
     local -a matches=()
     while IFS= read -r match; do
       matches+=("$match")
@@ -417,7 +317,7 @@ expand_sources() {
     local match resolved
     for match in "${matches[@]}"; do
       if [[ -d "$match" || -f "$match" ]]; then
-        resolved=$(resolve_path "$match")
+        resolved=$(copyx.resolve_path "$match")
         expanded_sources+=("$resolved")
       else
         log.warn "Source not found: $pattern (resolved to $match)"
@@ -430,9 +330,25 @@ perform_backup_iteration() {
   local config_file="$1"
   load_config "$config_file" || return 1
 
+  backup_backend=$(copyx.backend_for_root "$config_backup_root")
+  copyx.ensure_backend_prerequisites "$backup_backend"
+
+  if copyx.on_battery_power; then
+    log.info "Skipping backup while running on battery power"
+    return 0
+  fi
+
   local backup_root_abs
-  backup_root_abs=$(resolve_path "$config_backup_root" "$config_dir")
-  local machine_dir="$backup_root_abs/$config_machine_id"
+  if [[ "$backup_backend" == "s3" ]]; then
+    backup_root_abs=$(copyx.strip_trailing_slashes "$config_backup_root")
+  else
+    backup_root_abs=$(copyx.resolve_path "$config_backup_root" "$config_dir")
+    backup_root_abs=$(copyx.strip_trailing_slashes "$backup_root_abs")
+  fi
+
+  local machine_dir
+  machine_dir=$(copyx.join_paths "$backup_root_abs" "$config_machine_id")
+  machine_dir=$(copyx.strip_trailing_slashes "$machine_dir")
 
   expand_sources
   local -a sources=("${expanded_sources[@]}")
@@ -442,49 +358,77 @@ perform_backup_iteration() {
     return 0
   fi
 
-  local -a rsync_args=(--archive --delete --human-readable --partial --compress)
-  (( verbose )) && rsync_args+=(-v)
-  (( verbose || dry_run )) && rsync_args+=(--itemize-changes)
-  (( dry_run )) && rsync_args+=(--dry-run)
-  local pattern
-  for pattern in "${config_exclude_patterns[@]-}"; do
-    rsync_args+=("--exclude=$pattern")
-  done
+  local -a failed=()
 
-  if (( ! dry_run )); then
-    mkdir -p "$machine_dir"
+  local -a rsync_args=()
+  local -a s3_common_opts=()
+  local pattern
+  if [[ "$backup_backend" == "local" ]]; then
+    rsync_args=(--archive --delete --human-readable --partial --compress)
+    (( verbose )) && rsync_args+=(-v)
+    (( verbose || dry_run )) && rsync_args+=(--itemize-changes)
+    (( dry_run )) && rsync_args+=(--dry-run)
+    for pattern in "${config_exclude_patterns[@]-}"; do
+      rsync_args+=("--exclude=$pattern")
+    done
+    if (( ! dry_run )); then
+      mkdir -p "$machine_dir"
+    fi
+  else
+    (( dry_run )) && s3_common_opts+=(--dryrun)
+    (( ! verbose )) && s3_common_opts+=(--only-show-errors)
+    (( verbose )) && s3_common_opts+=(--debug)
   fi
 
   local src dest_rel dest_dir dest_parent
-  local -a failed=()
   for src in "${sources[@]}"; do
-    dest_rel=$(relative_dest_path "$src")
-    if [[ -d "$src" ]]; then
-      dest_dir="$machine_dir/$dest_rel"
-      if (( ! dry_run )); then
-        mkdir -p "$dest_dir"
-      fi
-      local -a args=("${rsync_args[@]}")
-      args+=("$src/" "$dest_dir/")
-      if ! rsync "${args[@]}"; then
-        log.error "rsync failed for directory: $src"
-        failed+=("$src")
+    dest_rel=$(copyx.relative_dest_path "$src")
+    if [[ "$backup_backend" == "local" ]]; then
+      if [[ -d "$src" ]]; then
+        dest_dir=$(copyx.join_paths "$machine_dir" "$dest_rel")
+        if (( ! dry_run )); then
+          mkdir -p "$dest_dir"
+        fi
+        local -a args=("${rsync_args[@]}")
+        args+=("$src/" "$dest_dir/")
+        if ! rsync "${args[@]}"; then
+          log.error "rsync failed for directory: $src"
+          failed+=("$src")
+        fi
+      else
+        dest_parent=$(dirname -- "$dest_rel")
+        if [[ "$dest_parent" == "." ]]; then
+          dest_dir="$machine_dir"
+        else
+          dest_dir=$(copyx.join_paths "$machine_dir" "$dest_parent")
+        fi
+        if (( ! dry_run )); then
+          mkdir -p "$dest_dir"
+        fi
+        local -a args=("${rsync_args[@]}")
+        args+=("$src" "$dest_dir/")
+        if ! rsync "${args[@]}"; then
+          log.error "rsync failed for file: $src"
+          failed+=("$src")
+        fi
       fi
     else
-      dest_parent=$(dirname -- "$dest_rel")
-      if [[ "$dest_parent" == "." ]]; then
-        dest_dir="$machine_dir"
+      local dest_uri
+      dest_uri=$(copyx.join_paths "$machine_dir" "$dest_rel")
+      if [[ -d "$src" ]]; then
+        local -a sync_opts=("${s3_common_opts[@]}" --delete --exact-timestamps)
+        for pattern in "${config_exclude_patterns[@]-}"; do
+          sync_opts+=(--exclude "$pattern")
+        done
+        if ! aws s3 sync "$src/" "$dest_uri/" "${sync_opts[@]}"; then
+          log.error "aws s3 sync failed for directory: $src"
+          failed+=("$src")
+        fi
       else
-        dest_dir="$machine_dir/$dest_parent"
-      fi
-      if (( ! dry_run )); then
-        mkdir -p "$dest_dir"
-      fi
-      local -a args=("${rsync_args[@]}")
-      args+=("$src" "$dest_dir/")
-      if ! rsync "${args[@]}"; then
-        log.error "rsync failed for file: $src"
-        failed+=("$src")
+        if ! aws s3 cp "$src" "$dest_uri" "${s3_common_opts[@]}"; then
+          log.error "aws s3 cp failed for file: $src"
+          failed+=("$src")
+        fi
       fi
     fi
   done
@@ -494,14 +438,28 @@ perform_backup_iteration() {
     return 0
   fi
 
-  local timestamp
+  local timestamp status entry
   timestamp=$(date +"%Y%m%dT%H%M%S")
-  local log_dir="$machine_dir/logs"
-  mkdir -p "$log_dir"
-  printf '%s|sources=%d|status=%s\n' "$timestamp" "${#sources[@]}" "$([[ ${#failed[@]} -eq 0 ]] && echo success || echo failure)" >>"$log_dir/history.log"
+
+  if [[ ${#failed[@]} -eq 0 ]]; then
+    status="success"
+  else
+    status="failure"
+  fi
+
+  entry="$timestamp|sources=${#sources[@]}|status=$status"
+
+  if [[ "$backup_backend" == "local" ]]; then
+    local log_dir
+    log_dir=$(copyx.join_paths "$machine_dir" "logs")
+    mkdir -p "$log_dir"
+    printf '%s\n' "$entry" >>"$(copyx.join_paths "$log_dir" "history.log")"
+  else
+    copyx.update_s3_history_log "$machine_dir" "$entry"
+  fi
 
   if [[ ${#failed[@]} -gt 0 ]]; then
-    log.error "Iteration completed with ${#failed[@]} failed rsync operations"
+    log.error "Iteration completed with ${#failed[@]} failed ${backup_backend} operations"
     return 1
   fi
 
@@ -631,7 +589,7 @@ main() {
     exit 1
   fi
 
-  config_path=$(resolve_path "$config_path" "$PWD")
+  config_path=$(copyx.resolve_path "$config_path" "$PWD")
 
   if [[ ! -f "$config_path" ]]; then
     log.error "Config path not found: $config_path"

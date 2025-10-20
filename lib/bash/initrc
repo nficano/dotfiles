@@ -31,6 +31,7 @@ __lib_bash_source "fmt"
 __lib_bash_source "ui/core"
 __lib_bash_source "time"
 __lib_bash_source "script"
+__lib_bash_source "copyx"
 __lib_bash_source "lock"
 __lib_bash_source "proc"
 
