@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+
+# Path manipulation utilities for working with filesystem and URI-like strings.
+path.strip_trailing_slashes() {
+    local value="$1"
+    while [[ -n "$value" && "$value" != "/" && ${value: -1} == '/' ]]; do
+        value="${value%/}"
+    done
+    printf '%s\n' "$value"
+}
+
+path.join() {
+    local base="$1" suffix="$2"
+    if [[ -z "$suffix" ]]; then
+        printf '%s\n' "$base"
+        return
+    fi
+    if [[ -z "$base" ]]; then
+        printf '%s\n' "$suffix"
+        return
+    fi
+    if [[ ${base: -1} == '/' ]]; then
+        printf '%s%s\n' "$base" "$suffix"
+    else
+        printf '%s/%s\n' "$base" "$suffix"
+    fi
+}
+
+path.expand_env() {
+    local value="$1"
+    if [[ -z "$value" ]]; then
+        printf '%s\n' "$value"
+        return
+    fi
+    if [[ "$value" == *'${HOME}'* ]]; then
+        value="${value//\$\{HOME\}/$HOME}"
+    fi
+    if [[ "$value" == *'$HOME'* ]]; then
+        value="${value//\$HOME/$HOME}"
+    fi
+    printf '%s\n' "$value"
+}
+
+path.expand_user() {
+    local value="$1"
+    if [[ -n "$value" && ${value:0:1} == '~' ]]; then
+        case "$value" in
+            "~") value="$HOME" ;;
+            ~/*) value="$HOME/${value:2}" ;;
+        esac
+    fi
+    printf '%s\n' "$value"
+}
+
+path.resolve() {
+    local path="$1" base_dir="${2:-$PWD}"
+    path=$(path.expand_env "$path")
+    path=$(path.expand_user "$path")
+    if [[ -n "$base_dir" && "$path" != /* && "$path" != s3://* ]]; then
+        path="$base_dir/$path"
+    fi
+    if command -v realpath >/dev/null 2>&1; then
+        realpath "$path" 2>/dev/null || printf '%s\n' "$path"
+        return
+    fi
+    local dir part
+    dir=$(dirname -- "$path")
+    part=$(basename -- "$path")
+    (
+        cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd)" "$part"
+    ) || printf '%s\n' "$path"
+}
+
+path.pattern_to_glob() {
+    local pattern="$1" base_dir="$2"
+    pattern=$(path.expand_env "$pattern")
+    pattern=$(path.expand_user "$pattern")
+    if [[ -n "$base_dir" && "$pattern" != /* && "$pattern" != s3://* ]]; then
+        pattern="$base_dir/$pattern"
+    fi
+    printf '%s\n' "$pattern"
+}
+
+# Determine whether a path should be skipped based on exclusion patterns.
+path.is_excluded() {
+    local candidate="$1"
+    local root="${2:-}"
+    local patterns_ref_name="$3"
+    if ! array._has_var "$patterns_ref_name"; then
+        return 1
+    fi
+    eval "local -a __patterns_ref=(\"\${$patterns_ref_name[@]}\")"
+
+    local relative="$candidate"
+    if [[ -n "$root" ]]; then
+        relative="${relative#"$root"}"
+    fi
+    relative="${relative#/}"
+    relative="${relative%/}"
+    [[ -z "$relative" ]] && return 1
+
+    local pattern trimmed
+    for pattern in "${__patterns_ref[@]-}"; do
+        trimmed="${pattern%/}"
+
+        if [[ "$relative" == "$trimmed" || "$relative" == $trimmed/* ]]; then
+            return 0
+        fi
+
+        if [[ "$trimmed" != */* ]]; then
+            if [[ "/$relative/" == *"/$trimmed/"* ]]; then
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
+
+# Produce a stable backup label for a filesystem path.
+path.backup_label() {
+    local source_path="$1"
+    local home_path="${2:-$HOME}"
+    local home_prefix="${3:-home}"
+    local root_label="${4:-root}"
+
+    source_path=$(path.strip_trailing_slashes "$source_path")
+    if [[ -n "$home_path" ]]; then
+        home_path=$(path.strip_trailing_slashes "$home_path")
+    fi
+
+    if [[ -n "$home_path" && "$source_path" == "$home_path"* ]]; then
+        local home_name rest
+        home_name=$(basename -- "$home_path")
+        rest="${source_path#"$home_path"}"
+        rest="${rest#/}"
+        if [[ -n "$rest" ]]; then
+            printf '%s/%s/%s\n' "$home_prefix" "$home_name" "$rest"
+        else
+            printf '%s/%s\n' "$home_prefix" "$home_name"
+        fi
+        return
+    fi
+
+    local without_root="${source_path#/}"
+    if [[ -z "$without_root" ]]; then
+        printf '%s\n' "$root_label"
+    else
+        printf '%s\n' "$without_root"
+    fi
+}

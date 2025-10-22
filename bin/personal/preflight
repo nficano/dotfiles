@@ -55,7 +55,7 @@ main() {
     log.error "Failed to set system output volume"
     exit 1
   fi
-=
+
   local output_uid="14-28-76-D6-53-FF:output"
   local input_name="RØDE Connect Stream"
 

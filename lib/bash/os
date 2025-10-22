@@ -92,3 +92,40 @@ os.machine_id.matches_current() {
 
     [[ "$stored" == "$hw_uuid" ]]
 }
+
+os.on_battery_power() {
+    if command -v pmset >/dev/null 2>&1; then
+        local status
+        status=$(pmset -g batt 2>/dev/null | head -n 1 || true)
+        if [[ "$status" == *"Battery Power"* ]]; then
+            return 0
+        fi
+        if [[ "$status" == *"AC Power"* ]]; then
+            return 1
+        fi
+    elif command -v upower >/dev/null 2>&1; then
+        local battery state_line state
+        battery=$(upower -e 2>/dev/null | grep -m1 battery || true)
+        if [[ -n "$battery" ]]; then
+            state_line=$(upower -i "$battery" 2>/dev/null | grep -i 'state' | head -n1 || true)
+            state=${state_line##*: }
+            state=$(printf '%s' "$state" | tr '[:upper:]' '[:lower:]')
+            if [[ "$state" == "discharging" ]]; then
+                return 0
+            fi
+            if [[ "$state" == "charging" || "$state" == "fully-charged" ]]; then
+                return 1
+            fi
+        fi
+    elif command -v acpi >/dev/null 2>&1; then
+        local acpi_out
+        acpi_out=$(acpi -a 2>/dev/null | head -n1 || true)
+        if [[ "$acpi_out" == *"off-line"* ]]; then
+            return 0
+        fi
+        if [[ "$acpi_out" == *"on-line"* ]]; then
+            return 1
+        fi
+    fi
+    return 1
+}

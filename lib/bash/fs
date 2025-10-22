@@ -5,6 +5,18 @@ fs.isdir() { [[ -d "$1" ]]; }
 fs.isfile() { [[ -f "$1" ]]; }
 fs.exists() { [[ -e "$1" ]]; }
 
+fs.file_size_bytes() {
+    local path="$1"
+    [[ -f "$path" ]] || return 1
+    if stat -f%z "$path" 2>/dev/null; then
+        return 0
+    fi
+    if stat -c%s "$path" 2>/dev/null; then
+        return 0
+    fi
+    wc -c <"$path" 2>/dev/null
+}
+
 fs.mkcd() {
     mkdir -p -- "$1" && cd -- "$1" || return 1
 }
@@ -39,7 +51,11 @@ fs.extract() {
 }
 
 file.expand_globs() {
-    local -n paths_ref="$1"
+    local paths_ref_name="$1"
+    if ! array._has_var "$paths_ref_name"; then
+        return 0
+    fi
+    eval "local -a paths_ref=(\"\${$paths_ref_name[@]}\")"
     local -a expanded=()
 
     local previous_nullglob previous_dotglob
@@ -68,5 +84,9 @@ file.expand_globs() {
         eval "$previous_dotglob"
     fi
 
-    paths_ref=("${expanded[@]}")
+    array.empty "$paths_ref_name"
+    local value
+    for value in "${expanded[@]}"; do
+        array.push "$paths_ref_name" "$value"
+    done
 }

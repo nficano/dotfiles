@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# Array helpers that remain compatible with the macOS system Bash (3.2).
+
+array._has_var() {
+    local name="$1"
+    declare -p "$name" >/dev/null 2>&1
+}
+
+array.empty() {
+    local name="$1"
+    eval "$name=()"
+}
+
+array.push() {
+    local name="$1"; shift || true
+    local value
+    for value in "$@"; do
+        eval "$name+=(\"\$value\")"
+    done
+}
+
+array.copy() {
+    local dest="$1" src="$2"
+    if array._has_var "$src"; then
+        eval "local __count=\${#$src[@]}"
+        if (( __count > 0 )); then
+            eval "$dest=(\"\${$src[@]}\")"
+        else
+            eval "$dest=()"
+        fi
+    else
+        eval "$dest=()"
+    fi
+}
+
+array.sort() {
+    local name="$1"
+    shift || true
+
+    if ! array._has_var "$name"; then
+        return 0
+    fi
+
+    eval "local __count=\${#$name[@]}"
+    local -a __array_tmp=()
+    if (( __count > 0 )); then
+        eval "__array_tmp=(\"\${$name[@]}\")"
+    fi
+    (( ${#__array_tmp[@]} )) || return 0
+
+    eval "$name=()"
+    local line
+    while IFS= read -r line; do
+        eval "$name+=(\"\$line\")"
+    done < <(printf '%s\n' "${__array_tmp[@]}" | sort "$@")
+}

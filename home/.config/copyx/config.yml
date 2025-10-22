@@ -4,8 +4,10 @@
 # machine (used to create a sub-folder), and the list of paths or glob
 # expressions that should be replicated.
 # Use the optional `exclude` section to skip matching paths during syncs.
+# Set `max_size_bytes` to skip files larger than the specified number of bytes.
 
 #backup_root:
+max_size_bytes: 52428800  # 50 MiB
 
 sources:
   - $HOME/Desktop
@@ -15,23 +17,27 @@ sources:
   - $HOME/.profile.local
   - $HOME/.ssh
   - $HOME/.gnupg
-  - $HOME/.config
   - $HOME/sandbox
   - $HOME/code
 exclude:
-  - .DS_Store
-  - '*/node_modules'
-  - '*/.git'
-  - '*/.venv'
+  - '*.log'
+  - '*.log.*'
+  - '*.old'
   - '*.pyc'
-  - '__pycache__'
-  - '*/.idea'
-  - '*/.vscode'
-  - '*/.terraform'
-  - '*/.cache'
-  - '*/.mypy_cache'
-  - '*/.pytest_cache'
-  - '*/Library/Caches'
-  - '*/Library/Logs'
-  - '*/Library/Saved Application State'
-  - '*/Library/Containers/*/Data/Library/Caches'
+  - '*.sock'
+  - '*.sockets'
+  - '**/.cache'
+  - '**/.DS_Store'
+  - '**/.dump'
+  - '**/.git'
+  - '**/.idea'
+  - '**/.mypy_cache'
+  - '**/.pytest_cache'
+  - '**/.terraform'
+  - '**/.venv'
+  - '**/.vscode'
+  - '**/.next'
+  - '**/.nuxt'
+  - '**/.output'
+  - '**/node_modules'
+  - '**/tmp'

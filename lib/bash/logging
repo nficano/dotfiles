@@ -2,21 +2,69 @@
 
 # Lightweight logging helpers with ANSI coloring support.
 log._color() {
-    echo "\e[${1}m"
+    printf '\e[%sm' "$1"
 }
 
 log._reset() {
-    echo "\e[0m"
+    printf '\e[0m'
+}
+
+log._emit_line() {
+    local level="$1" color="$2" message="$3"
+    local spinner_paused=0
+    if declare -F loader.spinner_pause >/dev/null; then
+        if [[ "${loader_spinner_active:-0}" -eq 1 ]]; then
+            loader.spinner_pause
+            spinner_paused=1
+        fi
+    fi
+    printf '%b[%s]%b %s\n' "$(log._color 1; log._color "$color")" "$level" "$(log._reset)" "$message" >&2
+    if (( spinner_paused )); then
+        loader.spinner_resume
+    fi
 }
 
 log.info() {
-    printf "$(log._color 1; log._color 34)[INFO]$(log._reset) %s\n" "$*"
+    log._emit_line "INFO" 34 "$*"
 }
 
 log.warn() {
-    printf "$(log._color 1; log._color 33)[WARN]$(log._reset) %s\n" "$*"
+    log._emit_line "WARN" 33 "$*"
 }
 
 log.error() {
-    printf "$(log._color 1; log._color 31)[ERR ]$(log._reset) %s\n" "$*"
+    log._emit_line "ERR " 31 "$*"
+}
+
+log.debug() {
+    if [[ -n "${LOG_DEBUG:-}" ]]; then
+        log._emit_line "DBG" 36 "$*"
+    fi
+}
+
+log.success() {
+    log._emit_line "OK  " 32 "$*"
+}
+
+: "${__log_block_depth:=0}"
+
+log.block_start() {
+    local title="$1"
+    if (( __log_block_depth == 0 )); then
+        log.info "$title"
+    else
+        printf '%*s%b└─%b %b%s%b\n' $(((__log_block_depth - 1) * 2)) "" "$(log._color 90)" "$(log._reset)" "$(log._color 94)" "$title" "$(log._reset)" >&2
+    fi
+    __log_block_depth=$((__log_block_depth + 1))
+}
+
+log.block() {
+    local message="$1"
+    local depth=$__log_block_depth
+    (( depth )) || depth=1
+    printf '%*s%b│%b  %s\n' $(((depth - 1) * 2)) "" "$(log._color 90)" "$(log._reset)" "$message" >&2
+}
+
+log.block_end() {
+    (( __log_block_depth > 0 )) && __log_block_depth=$((__log_block_depth - 1))
 }

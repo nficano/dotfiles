@@ -81,11 +81,7 @@ setup/macos/mac-provision --yes --non-interactive
 - **`convert-to-webp`** - Converts common image/video formats to `.webp` via ffmpeg
 - **`exif-copy-tags`** - Copies all EXIF metadata from one file to another via `exiftool`, useful when transcoding media
 - **`svg-icon-normalize`** - Cleans SVG assets: optionally removes fixed dimensions, enforces `fill="currentColor"`, and processes files or directories recursively
-- **`svg-noun-clean`** - "Denoundify" text elements from SVG files and reoptimise them with `svgo`.[^2]
-- **`svg-noun-legacy`** - Legacy helper that strips `<text>` attribution blocks from `noun*.svg` files in the current directory
 - **`svg-optimize-all`** - Runs `svgo --multipass` across all SVGs in the working directory for batch optimisation
-
-[^2]: Don't judge me.
 
 ### Git and Project Utilities
 
@@ -113,7 +109,7 @@ setup/macos/mac-provision --yes --non-interactive
 - **`macos-dns-flush`** - Flushes DNS caches via `dscacheutil` and `mDNSResponder`
 - **`macos-hostname-set`** - Updates the system hostname, LocalHostName, and related SMB settings in one step
 - **`macos-notifications-clear`** - Kills `NotificationCenter` to empty the notification list
-- **`pkg-manager`** - Manage packages via the first supported package manager detected on the system.
+- **`pkg-manager`** - Manage packages via the first supported package manager detected on the system. (wip)
 - **`postgres-start` / `postgres-stop`** - Control Homebrew's PostgreSQL service via `brew services`
 
 ### Network and Diagnostics
@@ -147,6 +143,17 @@ These scripts implement Redis-inspired operations backed by the helper sourced f
 - **`css-px-to-em`** - Converts a pixel value to `em` units for a given base font size and copies the result to the clipboard
 - **`time-epoch`** - Prints the current Unix epoch timestamp
 
+## Copyx Backups
+
+`bin/copyx` runs incremental backups on an interval using a YAML configuration. `make setup-tree` symlinks `home/.config/copyx/config.yml` into `~/.config/copyx/config.yml`, and `shell/bash/profile` exports `COPYX_CONFIG` so the script picks it up without extra flags.
+
+- **Configuration** - The config supports `backup_root` (local path or `s3://` URI), optional `machine_id`, `sources`, `exclude` patterns, and `max_size_bytes` to skip files above a byte threshold. When `backup_root` targets the filesystem, `copyx` shells out to `rsync`; S3 destinations use `aws s3 sync/cp` with the same include/exclude semantics.
+- **Machine scoping** - If `machine_id` is omitted, the helper reads `~/.machine_id` (populated by `setup/macos/mac-provision`) and falls back to the current hostname. Each run writes into a `<machine_id>/` subdirectory so multiple hosts can share the same backup bucket.
+- **Scheduling** - `copyx --interval <seconds>` keeps a loop running (default 3600s). `copyx --launchd-load` generates `~/Library/LaunchAgents/com.nficano.copyx.plist`, bootstraps it with `launchctl`, and tails logs under `~/Library/Logs/copyx`. Use `--launchd-unload` to tear it down.
+- **Spot runs** - `copyx --oneshot` executes a single pass; add `--dry-run` or `--verbose` to inspect the planned rsync/S3 operations before committing.
+- **Inspection tools** - `copyx --preview /path/to/dir` prints the files from that subtree that would be included or skipped after applying exclude rules. `--show-files` emits the same include/skip summary for every configured source before syncing (override the default 200-line cap with `--show-files=all` or `COPYX_SHOW_FILES_LIMIT`).
+- **Progress & cleanup** - `--progress` enables per-file progress output for both rsync and S3. `--purge-backup --yes` wipes the current machine’s destination directory or bucket prefix, with `--dry-run` available for a safety check.
+
 ## Skeleton Files (`skel/`)
 
 Each skeleton is a Bash template that already sources `lib/bash/initrc`, enables `set -Eeuo pipefail`, provides help text with `#/` comments, and wires in the shared logging/prompt helpers.
@@ -179,9 +186,18 @@ Each skeleton is a Bash template that already sources `lib/bash/initrc`, enables
 - Use the logging (`log.info`, `log.warn`, `log.error`), prompting, locking, and filesystem helpers from `lib/bash/initrc` instead of reimplementing them
 - When creating new media or conversion scripts, follow the examples that operate on the current working directory and respect standard tools such as ffmpeg or svgo
 
+## Machine-specific Shell Hooks
+
+`lib/bash/runtime` introduces `when.my_machine`, a guard that only runs its command list when `~/.machine_id` matches the current Mac's hardware UUID (queried via `ioreg`). `setup/macos/mac-provision` writes that file during provisioning, and `shell/bash/profile` uses it to add private content such as `~/.bin/personal`:
+
+```bash
+when.my_machine sys.path.append "$HOME/.bin/personal"
+```
+
+If you bootstrap a new host outside the provisioner, populate `~/.machine_id` manually with `ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}'` so the guard succeeds on that machine.
+
 ## TODO
 
 - upload file to s3 public bucket and return the url to clipboard
-- backup to s3 and backup to dropbox w/ incremental changes
 - add-alias should support a flag to add to private bash_profile
 - script to show the installed OS and version

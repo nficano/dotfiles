@@ -7,7 +7,7 @@
 #/    -h, --help        Print this help and exit
 #/    -v, --verbose     Enable verbose output
 #/    -n, --dry-run     Run rsync in dry-run mode
-#/    -i, --interval    Seconds between iterations (default 3600)
+#/    -i, --interval    Seconds between iterations (default 5 hours)
 #/        --config      Path to YAML config (or COPYX_CONFIG env var)
 #/        --oneshot     Run a single iteration then exit
 #/        --launchd-load    Write LaunchAgent plist and load via launchctl
@@ -21,21 +21,21 @@
 #/    backup_root   Destination directory (path or s3:// URI) for synced data
 #/    machine_id    Optional machine identifier (hostname used if omitted)
 #/    sources       List of paths/globs to replicate
-#/    exclude       Optional list of rsync exclude patterns
+#/    exclude       Optional list of rsync/s3 exclude patterns
+#/    max_size_bytes  Optional per-file size limit; larger files are skipped
 
 set -Eeuo pipefail
-trap 'should_exit=1; cleanup' SIGINT SIGTERM
-trap cleanup ERR EXIT
-
 source "$(dirname "$0")/../lib/bash/initrc"
 
 verbose=0
 dry_run=0
-interval=3600
+interval=18000
 oneshot=0
 should_exit=0
 config_path="${COPYX_CONFIG:-}"
 launchd_action=""
+interrupt_count=0
+interrupted=0
 
 readonly LAUNCHD_LABEL="com.nficano.copyx"
 readonly LAUNCHD_PATH_VALUE="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -43,512 +43,589 @@ readonly LAUNCHD_PATH_VALUE="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr
 config_dir=""
 config_backup_root=""
 config_machine_id=""
-config_sources=()
-config_exclude_patterns=()
-expanded_sources=()
+declare -a config_sources=()
+declare -a config_exclude_patterns=()
 backup_backend=""
+machine_dir=""
+config_max_size_bytes=0
+declare -a rsync_exclude_patterns=()
+declare -a s3_exclude_patterns=()
 
 cleanup() {
   script.cleanup
 }
-resolve_machine_id() {
-  if [[ -n "$config_machine_id" ]]; then
+
+proc.interrupt_handler_init \
+  cleanup \
+  should_exit \
+  interrupted \
+  interrupt_count \
+  '[WARN] %s received; finishing current work then exiting. Press Ctrl+C again to force quit.' \
+  '[ERROR] Second %s received; terminating immediately.'
+
+trap cleanup ERR EXIT
+trap proc.handle_sigint SIGINT
+trap proc.handle_sigterm SIGTERM
+
+# Choose the storage backend based on the destination root.
+detect_backup_backend() {
+  local destination="$1"
+  if [[ "$destination" == s3://* ]]; then
+    printf 's3\n'
+  else
+    printf 'local\n'
+  fi
+}
+
+verify_backend_dependencies() {
+  local backend="$1"
+  case "$backend" in
+    local)
+      if when.not_cmd rsync; then
+        printf '[ERROR] rsync is required for local backups but not found in PATH\n'
+        exit 1
+      fi
+      ;;
+    s3)
+      if when.not_cmd aws; then
+        printf '[ERROR] aws CLI is required for S3 backups but not found in PATH\n'
+        exit 1
+      fi
+      ;;
+  esac
+}
+
+update_s3_history_log() {
+  local destination_root="$1" entry="$2"
+  local log_object tmp
+  log_object=$(path.join "$destination_root" "logs/history.log")
+  tmp=$(mktemp) || return 1
+  if aws s3 cp "$log_object" "$tmp" --only-show-errors >/dev/null 2>&1; then :; fi
+  printf '%s\n' "$entry" >>"$tmp"
+  if ! aws s3 cp "$tmp" "$log_object" --only-show-errors >/dev/null 2>&1; then
+    printf '[WARN] Failed to update history log at %s\n' "$log_object"
+  fi
+  rm -f "$tmp"
+}
+
+# Resolve a machine identifier with fallbacks for portability.
+determine_machine_identifier() {
+  local configured="$1"
+  if [[ -n "$configured" ]]; then printf '%s\n' "$configured"; return; fi
+
+  local machine_id_file="$HOME/.machine_id" candidate=""
+  if os.machine_id.matches_current; then
+    if [[ -f "$machine_id_file" ]]; then
+      candidate=$(<"$machine_id_file"); candidate=$(str.trim "$candidate")
+    fi
+    if [[ -n "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+    printf '[INFO] Machine identifier lookup empty; falling back to hostname\n'
+  fi
+  candidate=$(hostname -s 2>/dev/null || hostname); candidate=$(str.trim "$candidate")
+  printf '[INFO] Config did not specify machine_id; using hostname "%s"\n' "$candidate"
+  printf '%s\n' "$candidate"
+}
+
+# Expand high-level exclude patterns for rsync and S3 compatibility.
+expand_exclude_patterns() {
+  local patterns_ref_name="$1" rsync_ref_name="$2" s3_ref_name="$3"
+  array.empty "$rsync_ref_name"
+  array.empty "$s3_ref_name"
+  if ! array._has_var "$patterns_ref_name"; then
+    return
+  fi
+  eval "local pattern_count=\${#$patterns_ref_name[@]}"
+  (( pattern_count > 0 )) || return
+
+  eval "local -a src_patterns=(\"\${$patterns_ref_name[@]}\")"
+  local pattern trimmed last_component
+  for pattern in "${src_patterns[@]}"; do
+    trimmed="${pattern%/}"; [[ -z "$trimmed" ]] && trimmed="$pattern"
+    array.push "$rsync_ref_name" "$trimmed"
+    array.push "$s3_ref_name" "$trimmed"
+    last_component="${trimmed##*/}"
+    # If last component has no glob chars, generate subtree variants
+    if [[ "$last_component" != *'*'* && "$last_component" != *'?'* && "$last_component" != *'['* ]]; then
+      # Root-relative subtree variants
+      array.push "$rsync_ref_name" "$trimmed/***"
+      array.push "$s3_ref_name" "$trimmed/*" "$trimmed/**"
+      # If the pattern is a single path segment (no '/'), also exclude that name anywhere in the tree
+      if [[ "$trimmed" != */* ]]; then
+        array.push "$rsync_ref_name" "**/$trimmed/***"
+        array.push "$s3_ref_name" "**/$trimmed" "**/$trimmed/*" "**/$trimmed/**"
+      fi
+    fi
+  done
+}
+
+# Determine backend and canonical destination directories.
+initialize_backup_paths() {
+  local backup_root="$1" base_dir="$2" machine_id="$3" backend_ref_name="$4" machine_dir_ref_name="$5"
+  local backend
+  backend=$(detect_backup_backend "$backup_root")
+  verify_backend_dependencies "$backend"
+
+  local resolved_root
+  if [[ "$backend" == "s3" ]]; then
+    resolved_root=$(path.strip_trailing_slashes "$backup_root")
+  else
+    resolved_root=$(path.resolve "$backup_root" "$base_dir")
+    resolved_root=$(path.strip_trailing_slashes "$resolved_root")
+  fi
+
+  local machine_path
+  machine_path=$(path.join "$resolved_root" "$machine_id")
+  machine_path=$(path.strip_trailing_slashes "$machine_path")
+
+  eval "$backend_ref_name=\"\$backend\""
+  eval "$machine_dir_ref_name=\"\$machine_path\""
+}
+
+build_rsync_args() {
+  local out_name="$1"
+  local force_dry_run="${2:-0}"
+  array.empty "$out_name"
+  array.push "$out_name" --archive --delete --human-readable --partial --compress
+  (( verbose )) && array.push "$out_name" -v
+  if (( verbose || dry_run || force_dry_run )); then array.push "$out_name" --itemize-changes; fi
+  if (( dry_run || force_dry_run )); then array.push "$out_name" --dry-run; fi
+  if (( config_max_size_bytes > 0 )); then array.push "$out_name" "--max-size=${config_max_size_bytes}"; fi
+  local pattern
+  for pattern in "${rsync_exclude_patterns[@]-}"; do
+    array.push "$out_name" "--exclude=$pattern"
+  done
+}
+
+build_s3_common_opts() {
+  local out_name="$1"
+  local force_dry_run="${2:-0}"
+  array.empty "$out_name"
+  array.push "$out_name" --no-follow-symlinks
+  if (( dry_run || force_dry_run )); then array.push "$out_name" --dryrun; fi
+  if (( ! verbose )); then array.push "$out_name" --only-show-errors --no-progress; fi
+  (( verbose )) && array.push "$out_name" --debug
+  local pattern
+  for pattern in "${s3_exclude_patterns[@]-}"; do
+    array.push "$out_name" --exclude "$pattern"
+  done
+}
+
+build_source_inventory() {
+  # Depth-first traversal used for S3 max_size filtering when needed.
+  local root="$1" target="${2:-$1}" include_ref_name="$3" skip_ref_name="$4" oversize_ref_name="$5" patterns_ref_name="$6" max_size="${7:-0}"
+
+  array.empty "$include_ref_name"
+  array.empty "$skip_ref_name"
+  array.empty "$oversize_ref_name"
+  [[ ! -e "$target" ]] && return 1
+
+  if path.is_excluded "$target" "$root" "$patterns_ref_name"; then
+    array.push "$skip_ref_name" "."
+    return 0
+  fi
+
+  local exclude_regex=""
+  if ! exclude_regex=$(yaml.glob_patterns_regex "$patterns_ref_name" 2>/dev/null); then
+    exclude_regex=""
+  fi
+
+  if [[ -n "$exclude_regex" ]] && [[ "$target" =~ $exclude_regex ]]; then
+    array.push "$skip_ref_name" "."
+    return 0
+  fi
+
+  local rel size
+  if [[ -d "$target" ]]; then
+    array.push "$include_ref_name" "./"
+  elif [[ -f "$target" ]]; then
+    if (( max_size > 0 )); then
+      size=$(fs.file_size_bytes "$target" 2>/dev/null || true)
+      if [[ "$size" =~ ^[0-9]+$ ]] && (( size > max_size )); then
+        array.push "$oversize_ref_name" ".|$size"
+      else
+        array.push "$include_ref_name" "."
+      fi
+    else
+      array.push "$include_ref_name" "."
+    fi
+  fi
+
+  local current
+  local -a find_args=(-mindepth 1 -print)
+  if [[ -n "$exclude_regex" ]]; then
+    while IFS= read -r current; do
+      [[ -z "$current" ]] && continue
+      rel="${current#"$root"/}"
+      rel="${rel#/}"
+      [[ -z "$rel" ]] && rel="."
+
+      if path.is_excluded "$current" "$root" "$patterns_ref_name"; then
+        array.push "$skip_ref_name" "$rel"
+        continue
+      fi
+
+      if [[ -d "$current" ]]; then
+        array.push "$include_ref_name" "${rel%/}/"
+        continue
+      fi
+
+      if [[ -f "$current" ]]; then
+        if (( max_size > 0 )); then
+          size=$(fs.file_size_bytes "$current" 2>/dev/null || true)
+          if [[ "$size" =~ ^[0-9]+$ ]] && (( size > max_size )); then
+            array.push "$oversize_ref_name" "$rel|$size"
+            continue
+          fi
+        fi
+        array.push "$include_ref_name" "$rel"
+      fi
+    done < <(find "$target" "${find_args[@]}" | grep -Ev -- "$exclude_regex")
+  else
+    while IFS= read -r current; do
+      [[ -z "$current" ]] && continue
+      rel="${current#"$root"/}"
+      rel="${rel#/}"
+      [[ -z "$rel" ]] && rel="."
+
+      if path.is_excluded "$current" "$root" "$patterns_ref_name"; then
+        array.push "$skip_ref_name" "$rel"
+        continue
+      fi
+
+      if [[ -d "$current" ]]; then
+        array.push "$include_ref_name" "${rel%/}/"
+        continue
+      fi
+
+      if [[ -f "$current" ]]; then
+        if (( max_size > 0 )); then
+          size=$(fs.file_size_bytes "$current" 2>/dev/null || true)
+          if [[ "$size" =~ ^[0-9]+$ ]] && (( size > max_size )); then
+            array.push "$oversize_ref_name" "$rel|$size"
+            continue
+          fi
+        fi
+        array.push "$include_ref_name" "$rel"
+      fi
+    done < <(find "$target" "${find_args[@]}")
+  fi
+
+  array.sort "$include_ref_name"
+  array.sort "$skip_ref_name"
+  array.sort "$oversize_ref_name"
+  return 0
+}
+
+sync_local_source() {
+  local src="$1" dest_rel="$2" machine_root="$3" rsync_args_ref_name="$4" dry_run_flag="$5" failed_ref_name="$6"
+  eval "local rsync_count=\${#$rsync_args_ref_name[@]}"
+  local -a rsync_args_ref=()
+  if (( rsync_count > 0 )); then
+    eval "rsync_args_ref=(\"\${$rsync_args_ref_name[@]}\")"
+  fi
+
+  local dest_dir dest_parent
+  if [[ -d "$src" ]]; then
+    dest_dir=$(path.join "$machine_root" "$dest_rel")
+    (( ! dry_run_flag )) && mkdir -p "$dest_dir"
+    local -a args=("${rsync_args_ref[@]}" "$src/" "$dest_dir/")
+    printf '[INFO] rsync %s → %s/\n' "$src" "$dest_dir"
+    if ! rsync "${args[@]}"; then
+      printf '[ERROR] rsync failed for directory: %s\n' "$src"
+      array.push "$failed_ref_name" "$src"
+    else
+      printf '[OK] Synced directory: %s → %s/\n' "$src" "$dest_dir"
+    fi
+  else
+    dest_parent=$(dirname -- "$dest_rel")
+    if [[ "$dest_parent" == "." ]]; then dest_dir="$machine_root"; else dest_dir=$(path.join "$machine_root" "$dest_parent"); fi
+    (( ! dry_run_flag )) && mkdir -p "$dest_dir"
+    local -a args=("${rsync_args_ref[@]}" "$src" "$dest_dir/")
+    printf '[INFO] rsync %s → %s/\n' "$src" "$dest_dir"
+    if ! rsync "${args[@]}"; then
+      printf '[ERROR] rsync failed for file: %s\n' "$src"
+      array.push "$failed_ref_name" "$src"
+    else
+      printf '[OK] Synced file: %s → %s/\n' "$src" "$dest_dir"
+    fi
+  fi
+}
+
+sync_s3_source() {
+  local src="$1" dest_rel="$2" machine_root="$3" s3_opts_ref_name="$4" max_size="$5" listing_ready="$6" oversize_ref_name="$7" verbose_flag="$8" failed_ref_name="$9"
+  eval "local -a s3_opts_ref=(\"\${$s3_opts_ref_name[@]}\")"
+  eval "local oversize_count=\${#$oversize_ref_name[@]}"
+  local -a oversize_ref=()
+  if (( oversize_count > 0 )); then
+    eval "oversize_ref=(\"\${$oversize_ref_name[@]}\")"
+  fi
+
+  local dest_uri; dest_uri=$(path.join "$machine_root" "$dest_rel")
+
+  if [[ -d "$src" ]]; then
+    local -a sync_opts=("${s3_opts_ref[@]}" --delete --exact-timestamps)
+    if (( max_size > 0 && listing_ready && oversize_count > 0 )); then
+      local entry path_only
+      for entry in "${oversize_ref[@]}"; do
+        path_only="${entry%%|*}"
+        [[ -n "$path_only" ]] && sync_opts+=(--exclude "$path_only")
+      done
+      (( ${#oversize_ref[@]} > 0 )) && printf '[INFO] Excluding %d oversized file(s) (> %s B) from %s\n' "${#oversize_ref[@]}" "$max_size" "$src"
+    fi
+
+    printf '[INFO] aws s3 sync %s → %s/\n' "$src" "$dest_uri"
+    if ! aws s3 sync "$src/" "$dest_uri/" "${sync_opts[@]}"; then
+      printf '[ERROR] aws s3 sync failed: %s → %s/\n' "$src" "$dest_uri"
+      array.push "$failed_ref_name" "$src"
+    else
+      (( verbose_flag )) && printf '[INFO] S3 sync debug completed\n'
+      printf '[OK] S3 sync complete: %s → %s/\n' "$src" "$dest_uri"
+    fi
     return
   fi
 
-  local machine_id_file="$HOME/.machine_id"
-  local candidate=""
-
-  if os.machine_id.matches_current; then
-    if [[ -f "$machine_id_file" ]]; then
-      candidate=$(<"$machine_id_file")
-      candidate=$(copyx.trim "$candidate")
-    fi
-    if [[ -n "$candidate" ]]; then
-      config_machine_id="$candidate"
-      log.info "Using machine identifier from $machine_id_file"
+  if (( max_size > 0 )); then
+    local file_size; file_size=$(fs.file_size_bytes "$src" 2>/dev/null || true)
+    if [[ "$file_size" =~ ^[0-9]+$ ]] && (( file_size > max_size )); then
+      printf '[INFO] Skipping oversized file (> %s B): %s\n' "$max_size" "$src"
       return
     fi
-    log.info "Machine identifier lookup returned empty result; falling back to hostname"
   fi
 
-  config_machine_id=$(hostname -s 2>/dev/null || hostname)
-  config_machine_id=$(copyx.trim "$config_machine_id")
-  log.info "Config did not specify 'machine_id'; using hostname '$config_machine_id'"
-}
-
-launchd_domain() {
-  printf 'gui/%s\n' "$(id -u)"
-}
-
-launchd_plist_path() {
-  printf '%s/Library/LaunchAgents/%s.plist\n' "$HOME" "$LAUNCHD_LABEL"
-}
-
-launchd_logs_dir() {
-  printf '%s/Library/Logs/copyx\n' "$HOME"
-}
-
-launchd_prepare_plist() {
-  local config_file="$1" start_interval="$2"
-  local plist_path log_dir script_path script_source script_dir
-  plist_path=$(launchd_plist_path)
-  log_dir=$(launchd_logs_dir)
-  script_source="${BASH_SOURCE[0]}"
-  script_dir=$(cd "$(dirname -- "$script_source")" && pwd -P)
-  script_path=$(copyx.resolve_path "$(basename -- "$script_source")" "$script_dir")
-
-  local script_xml config_xml path_xml stdout_xml stderr_xml stdout_path stderr_path
-  script_xml=$(copyx.xml_escape "$script_path")
-  config_xml=$(copyx.xml_escape "$config_file")
-  path_xml=$(copyx.xml_escape "$LAUNCHD_PATH_VALUE")
-  stdout_path="$log_dir/stdout.log"
-  stderr_path="$log_dir/stderr.log"
-  stdout_xml=$(copyx.xml_escape "$stdout_path")
-  stderr_xml=$(copyx.xml_escape "$stderr_path")
-
-  mkdir -p "$(dirname "$plist_path")" "$log_dir"
-
-  cat >"$plist_path" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>${LAUNCHD_LABEL}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${script_xml}</string>
-        <string>--config</string>
-        <string>${config_xml}</string>
-        <string>--oneshot</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>${path_xml}</string>
-    </dict>
-    <key>StartInterval</key>
-    <integer>${start_interval}</integer>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>${stdout_xml}</string>
-    <key>StandardErrorPath</key>
-    <string>${stderr_xml}</string>
-</dict>
-</plist>
-EOF
-
-  chmod 0644 "$plist_path"
-
-  if command -v plutil >/dev/null 2>&1; then
-    if ! plutil -lint "$plist_path" >/dev/null 2>&1; then
-      log.warn "plutil validation failed for $plist_path"
-    fi
-  fi
-
-  printf '%s\n' "$plist_path"
-}
-
-launchd_handle_load() {
-  if ! command -v launchctl >/dev/null 2>&1; then
-    log.error "launchctl is required to manage LaunchAgents"
-    exit 1
-  fi
-
-  local config="${config_path:-}"
-  if [[ -z "$config" ]]; then
-    config="$HOME/.config/copyx/config.yml"
-    log.info "No config provided; defaulting to $config"
-  fi
-
-  config=$(copyx.resolve_path "$config" "$PWD")
-
-  if [[ ! -f "$config" ]]; then
-    log.error "Config path not found: $config"
-    exit 1
-  fi
-
-  config_path="$config"
-
-  local plist_path
-  plist_path=$(launchd_prepare_plist "$config" "$interval")
-
-  local domain
-  domain=$(launchd_domain)
-
-  if launchctl print "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
-    if launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1; then
-      (( verbose )) && log.info "Unloaded existing LaunchAgent $LAUNCHD_LABEL"
-    else
-      log.warn "Failed to unload existing LaunchAgent $LAUNCHD_LABEL; attempting to continue"
-    fi
-  fi
-
-  if ! launchctl bootstrap "$domain" "$plist_path"; then
-    log.error "launchctl bootstrap failed for $plist_path"
-    exit 1
-  fi
-
-  launchctl enable "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1 || true
-
-  if launchctl kickstart -k "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
-    (( verbose )) && log.info "LaunchAgent $LAUNCHD_LABEL started"
+  printf '[INFO] aws s3 cp %s → %s\n' "$src" "$dest_uri"
+  if ! aws s3 cp "$src" "$dest_uri" "${s3_opts_ref[@]}"; then
+    printf '[ERROR] aws s3 cp failed: %s → %s\n' "$src" "$dest_uri"
+    array.push "$failed_ref_name" "$src"
   else
-    log.warn "launchctl kickstart failed; agent will start on the next scheduled interval"
+    (( verbose_flag )) && printf '[INFO] S3 copy debug completed\n'
+    printf '[OK] S3 copy complete: %s → %s\n' "$src" "$dest_uri"
   fi
-
-  log.info "LaunchAgent $LAUNCHD_LABEL loaded from $plist_path"
-  return 0
 }
 
-launchd_handle_unload() {
-  if ! command -v launchctl >/dev/null 2>&1; then
-    log.error "launchctl is required to manage LaunchAgents"
-    exit 1
+build_listing_if_needed() {
+  # Enumerate contents only when S3 + max_size filtering requires it.
+  local src="$1" backend="$2" max_size="$3" patterns_ref_name="$4" include_ref_name="$5" skip_ref_name="$6" oversize_ref_name="$7"
+  array.empty "$include_ref_name"
+  array.empty "$skip_ref_name"
+  array.empty "$oversize_ref_name"
+
+  local need_listing=0
+  if (( max_size > 0 )) && [[ "$backend" == "s3" ]]; then need_listing=1; fi
+  (( ! need_listing )) && return 10
+
+  if build_source_inventory "$src" "$src" "$include_ref_name" "$skip_ref_name" "$oversize_ref_name" "$patterns_ref_name" "$max_size"; then
+    return 0
   fi
-
-  local plist_path
-  plist_path=$(launchd_plist_path)
-
-  local domain
-  domain=$(launchd_domain)
-
-  if launchctl print "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
-    if launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1; then
-      log.info "LaunchAgent $LAUNCHD_LABEL unloaded"
-    elif launchctl bootout "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
-      log.info "LaunchAgent $LAUNCHD_LABEL unloaded"
-    else
-      log.error "Failed to unload LaunchAgent $LAUNCHD_LABEL"
-      exit 1
-    fi
-  else
-    log.info "LaunchAgent $LAUNCHD_LABEL not currently loaded"
-  fi
-
-  launchctl disable "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1 || true
-
-  if [[ -f "$plist_path" ]]; then
-    if (( verbose )); then
-      log.info "LaunchAgent plist remains at $plist_path"
-    fi
-  else
-    log.warn "LaunchAgent plist not found at $plist_path"
-  fi
-  return 0
+  return 11
 }
 
-ensure_prerequisites() {
-  if ! command -v yq >/dev/null 2>&1; then
-    log.error "yq is required but not found in PATH"
+verify_tooling_prerequisites() {
+  if when.not_cmd yq; then
+    printf '[ERROR] yq is required but not found in PATH\n'
     exit 1
   fi
 }
 
 load_config() {
   local file="$1"
-  [[ -f "$file" ]] || { log.error "Config file not found: $file"; return 1; }
+  [[ -f "$file" ]] || { printf '[ERROR] Config file not found: %s\n' "$file"; return 1; }
 
   config_dir=$(cd "$(dirname -- "$file")" && pwd -P)
-  config_backup_root=$(copyx.trim "$(yq eval -r '.backup_root // ""' "$file" 2>/dev/null)")
-  config_backup_root=$(copyx.expand_env "$config_backup_root")
+
+  config_backup_root=$(yaml.read_string "$file" '.backup_root')
+  config_backup_root=$(str.trim "$config_backup_root")
+  config_backup_root=$(path.expand_env "$config_backup_root")
   if [[ -n "${COPYX_BACKUP_ROOT:-}" ]]; then
-    config_backup_root=$(copyx.expand_env "$COPYX_BACKUP_ROOT")
+    config_backup_root=$(path.expand_env "$COPYX_BACKUP_ROOT")
   fi
-  config_machine_id=$(copyx.trim "$(yq eval -r '.machine_id // ""' "$file" 2>/dev/null)")
-  config_machine_id=$(copyx.expand_env "$config_machine_id")
-  config_sources=()
-  config_exclude_patterns=()
 
-  local sources_raw=""
-  if ! sources_raw=$(yq eval -r '.sources // [] | .[]' "$file" 2>/dev/null); then
-    log.error "Failed to parse 'sources' from config via yq"
+  config_machine_id=$(yaml.read_string "$file" '.machine_id')
+  config_machine_id=$(str.trim "$config_machine_id")
+  config_machine_id=$(path.expand_env "$config_machine_id")
+
+  config_max_size_bytes=0
+
+  if ! yaml.read_list "$file" '.sources' config_sources; then
+    printf '[ERROR] Failed to parse "sources" from config\n'
     return 1
   fi
 
-  local item
-  if [[ -n "$sources_raw" ]]; then
-    while IFS= read -r item || [[ -n "$item" ]]; do
-      item=$(copyx.trim "$item")
-      [[ -n "$item" ]] && config_sources+=("$(copyx.expand_env "$item")")
-    done <<<"$sources_raw"
-  fi
-
-  local exclude_raw=""
-  if ! exclude_raw=$(yq eval -r '.exclude // [] | .[]' "$file" 2>/dev/null); then
-    log.error "Failed to parse 'exclude' from config via yq"
+  if ! yaml.read_list "$file" '.exclude' config_exclude_patterns; then
+    printf '[ERROR] Failed to parse "exclude" from config\n'
     return 1
   fi
 
-  if [[ -n "$exclude_raw" ]]; then
-    while IFS= read -r item || [[ -n "$item" ]]; do
-      item=$(copyx.trim "$item")
-      [[ -n "$item" ]] && config_exclude_patterns+=("$(copyx.expand_env "$item")")
-    done <<<"$exclude_raw"
+  local max_size_raw=""
+  if ! max_size_raw=$(yaml.read_int "$file" '.max_size_bytes'); then
+    printf '[ERROR] Config value \"max_size_bytes\" must be an integer number of bytes\n'
+    return 1
+  fi
+  max_size_raw=$(str.trim "$max_size_raw")
+  if [[ -n "$max_size_raw" ]]; then
+    config_max_size_bytes="$max_size_raw"
   fi
 
   if [[ -z "$config_backup_root" ]]; then
-    log.error "Config missing required 'backup_root'"
+    printf '[ERROR] Config missing required \"backup_root\"\n'
     return 1
   fi
 
-  resolve_machine_id
+  config_machine_id=$(determine_machine_identifier "$config_machine_id")
+  expand_exclude_patterns config_exclude_patterns rsync_exclude_patterns s3_exclude_patterns
 }
 
-expand_sources() {
-  expanded_sources=()
-  local -a patterns=("${config_sources[@]}")
-  if [[ ${#patterns[@]} -eq 0 ]]; then
+# Expand configured source patterns into concrete filesystem paths.
+resolve_config_sources() {
+  local out_ref_name="$1" patterns_ref_name="$2" base_dir="$3"
+  array.empty "$out_ref_name"
+  if ! array._has_var "$patterns_ref_name"; then
     return
   fi
 
+  eval "local pattern_count=\${#$patterns_ref_name[@]}"
+  (( pattern_count > 0 )) || return
+  eval "local -a patterns_ref=(\"\${$patterns_ref_name[@]}\")"
   local pattern prepared
-  for pattern in "${patterns[@]}"; do
-    prepared=$(copyx.pattern_to_glob "$pattern" "$config_dir")
+  for pattern in "${patterns_ref[@]}"; do
+    prepared=$(path.pattern_to_glob "$pattern" "$base_dir")
     local -a matches=()
-    while IFS= read -r match; do
-      matches+=("$match")
-    done < <(compgen -G "$prepared" 2>/dev/null || true)
-    if [[ ${#matches[@]} -eq 0 ]]; then
-      matches+=("$prepared")
-    fi
+    while IFS= read -r match; do matches+=("$match"); done < <(compgen -G "$prepared" 2>/dev/null || true)
+    if [[ ${#matches[@]} -eq 0 ]]; then matches+=("$prepared"); fi
     local match resolved
     for match in "${matches[@]}"; do
       if [[ -d "$match" || -f "$match" ]]; then
-        resolved=$(copyx.resolve_path "$match")
-        expanded_sources+=("$resolved")
+        resolved=$(path.resolve "$match")
+        array.push "$out_ref_name" "$resolved"
       else
-        log.warn "Source not found: $pattern (resolved to $match)"
+        printf '[WARN] Source not found: %s (resolved to %s)\n' "$pattern" "$match"
       fi
     done
   done
 }
 
-perform_backup_iteration() {
+# Execute one backup cycle using the loaded configuration.
+run_backup_iteration() {
   local config_file="$1"
   load_config "$config_file" || return 1
 
-  backup_backend=$(copyx.backend_for_root "$config_backup_root")
-  copyx.ensure_backend_prerequisites "$backup_backend"
+  initialize_backup_paths "$config_backup_root" "$config_dir" "$config_machine_id" \
+    backup_backend machine_dir
 
-  if copyx.on_battery_power; then
-    log.info "Skipping backup while running on battery power"
-    return 0
-  fi
-
-  local backup_root_abs
-  if [[ "$backup_backend" == "s3" ]]; then
-    backup_root_abs=$(copyx.strip_trailing_slashes "$config_backup_root")
-  else
-    backup_root_abs=$(copyx.resolve_path "$config_backup_root" "$config_dir")
-    backup_root_abs=$(copyx.strip_trailing_slashes "$backup_root_abs")
-  fi
-
-  local machine_dir
-  machine_dir=$(copyx.join_paths "$backup_root_abs" "$config_machine_id")
-  machine_dir=$(copyx.strip_trailing_slashes "$machine_dir")
-
-  expand_sources
-  local -a sources=("${expanded_sources[@]}")
-
+  local -a expanded_sources=()
+  resolve_config_sources expanded_sources config_sources "$config_dir"
+  local -a sources=()
+  array.copy sources expanded_sources
   if [[ ${#sources[@]} -eq 0 ]]; then
-    log.warn "No valid sources to back up; skipping iteration"
+    printf '[WARN] No valid sources to back up; skipping iteration\n'
     return 0
   fi
 
   local -a failed=()
-
   local -a rsync_args=()
   local -a s3_common_opts=()
-  local pattern
   if [[ "$backup_backend" == "local" ]]; then
-    rsync_args=(--archive --delete --human-readable --partial --compress)
-    (( verbose )) && rsync_args+=(-v)
-    (( verbose || dry_run )) && rsync_args+=(--itemize-changes)
-    (( dry_run )) && rsync_args+=(--dry-run)
-    for pattern in "${config_exclude_patterns[@]-}"; do
-      rsync_args+=("--exclude=$pattern")
-    done
-    if (( ! dry_run )); then
-      mkdir -p "$machine_dir"
-    fi
+    build_rsync_args rsync_args 0
+    (( ! dry_run )) && mkdir -p "$machine_dir"
   else
-    (( dry_run )) && s3_common_opts+=(--dryrun)
-    (( ! verbose )) && s3_common_opts+=(--only-show-errors)
-    (( verbose )) && s3_common_opts+=(--debug)
+    build_s3_common_opts s3_common_opts 0
   fi
 
-  local src dest_rel dest_dir dest_parent
+  local src dest_rel
   for src in "${sources[@]}"; do
-    dest_rel=$(copyx.relative_dest_path "$src")
+    (( interrupted )) && break
+    dest_rel=$(path.backup_label "$src")
+
+    local listing_ready=0
+    local -a include_list=() skip_list=() oversize_list=()
+    build_listing_if_needed "$src" "$backup_backend" "$config_max_size_bytes" \
+      config_exclude_patterns include_list skip_list oversize_list
+    local listing_code=$?
+    case "$listing_code" in
+      0) listing_ready=1 ;;
+      10) listing_ready=0 ;;
+      11) printf '[WARN] Unable to enumerate source contents for %s\n' "$src" ;;
+    esac
+
     if [[ "$backup_backend" == "local" ]]; then
-      if [[ -d "$src" ]]; then
-        dest_dir=$(copyx.join_paths "$machine_dir" "$dest_rel")
-        if (( ! dry_run )); then
-          mkdir -p "$dest_dir"
-        fi
-        local -a args=("${rsync_args[@]}")
-        args+=("$src/" "$dest_dir/")
-        if ! rsync "${args[@]}"; then
-          log.error "rsync failed for directory: $src"
-          failed+=("$src")
-        fi
-      else
-        dest_parent=$(dirname -- "$dest_rel")
-        if [[ "$dest_parent" == "." ]]; then
-          dest_dir="$machine_dir"
-        else
-          dest_dir=$(copyx.join_paths "$machine_dir" "$dest_parent")
-        fi
-        if (( ! dry_run )); then
-          mkdir -p "$dest_dir"
-        fi
-        local -a args=("${rsync_args[@]}")
-        args+=("$src" "$dest_dir/")
-        if ! rsync "${args[@]}"; then
-          log.error "rsync failed for file: $src"
-          failed+=("$src")
-        fi
-      fi
+      sync_local_source "$src" "$dest_rel" "$machine_dir" rsync_args "$dry_run" failed
     else
-      local dest_uri
-      dest_uri=$(copyx.join_paths "$machine_dir" "$dest_rel")
-      if [[ -d "$src" ]]; then
-        local -a sync_opts=("${s3_common_opts[@]}" --delete --exact-timestamps)
-        for pattern in "${config_exclude_patterns[@]-}"; do
-          sync_opts+=(--exclude "$pattern")
-        done
-        if ! aws s3 sync "$src/" "$dest_uri/" "${sync_opts[@]}"; then
-          log.error "aws s3 sync failed for directory: $src"
-          failed+=("$src")
-        fi
-      else
-        if ! aws s3 cp "$src" "$dest_uri" "${s3_common_opts[@]}"; then
-          log.error "aws s3 cp failed for file: $src"
-          failed+=("$src")
-        fi
-      fi
+      sync_s3_source "$src" "$dest_rel" "$machine_dir" s3_common_opts "$config_max_size_bytes" "$listing_ready" oversize_list "$verbose" failed
     fi
   done
 
   if (( dry_run )); then
-    log.info "Dry run complete; backup would sync to $machine_dir"
+    printf '[INFO] Dry run complete; backup would sync to %s\n' "$machine_dir"
     return 0
   fi
 
   local timestamp status entry
   timestamp=$(date +"%Y%m%dT%H%M%S")
-
-  if [[ ${#failed[@]} -eq 0 ]]; then
-    status="success"
-  else
-    status="failure"
-  fi
-
+  if [[ ${#failed[@]} -eq 0 ]]; then status="success"; else status="failure"; fi
   entry="$timestamp|sources=${#sources[@]}|status=$status"
 
   if [[ "$backup_backend" == "local" ]]; then
-    local log_dir
-    log_dir=$(copyx.join_paths "$machine_dir" "logs")
-    mkdir -p "$log_dir"
-    printf '%s\n' "$entry" >>"$(copyx.join_paths "$log_dir" "history.log")"
+    local log_dir; log_dir=$(path.join "$machine_dir" "logs"); mkdir -p "$log_dir"
+    printf '%s\n' "$entry" >>"$(path.join "$log_dir" "history.log")"
   else
-    copyx.update_s3_history_log "$machine_dir" "$entry"
+    update_s3_history_log "$machine_dir" "$entry"
   fi
 
-  if [[ ${#failed[@]} -gt 0 ]]; then
-    log.error "Iteration completed with ${#failed[@]} failed ${backup_backend} operations"
+  if (( interrupted )); then
+    if [[ ${#failed[@]} -gt 0 ]]; then
+      printf '[WARN] Iteration aborted with %d incomplete %s operations\n' "${#failed[@]}" "$backup_backend"
+    else
+      printf '[WARN] Iteration aborted before completion\n'
+    fi
     return 1
   fi
 
-  log.info "Backup synced to $machine_dir"
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    printf '[ERROR] Iteration completed with %d failed %s operations\n' "${#failed[@]}" "$backup_backend"
+    return 1
+  fi
+
+  printf '[OK] Backup complete: synced %d source(s) to %s\n' "${#sources[@]}" "$machine_dir"
 }
 
-sleep_with_interrupt() {
+sleep_until_interrupt() {
   sleep "$1" &
   local sleep_pid=$!
-  if ! wait "$sleep_pid"; then
-    (( verbose )) && log.info "Sleep interrupted"
-  fi
+  if ! wait "$sleep_pid"; then (( verbose )) && printf '[INFO] Sleep interrupted\n'; fi
 }
 
 parse_args() {
-  local opt
-  local -a transformed=()
+  local opt; local -a transformed=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --help) transformed+=('-h') ;;
       --verbose) transformed+=('-v') ;;
-      --interval)
-        shift
-        [[ $# -gt 0 ]] || { log.error "--interval requires a value"; script.usage 1; }
-        transformed+=('-i' "$1")
-        shift
-        continue
-        ;;
-      --interval=*)
-        transformed+=('-i' "${1#*=}")
-        shift
-        continue
-        ;;
-      --config)
-        shift
-        [[ $# -gt 0 ]] || { log.error "--config requires a path"; script.usage 1; }
-        config_path="$1"
-        shift
-        continue
-        ;;
-      --config=*)
-        config_path="${1#*=}"
-        shift
-        continue
-        ;;
-      --dry-run)
-        transformed+=('-n')
-        ;;
-      --oneshot)
-        oneshot=1
-        shift
-        continue
-        ;;
+      --interval) shift; [[ $# -gt 0 ]] || { printf '[ERROR] --interval requires a value\n'; script.usage 1; }
+                  transformed+=('-i' "$1"); shift; continue ;;
+      --interval=*) transformed+=('-i' "${1#*=}"); shift; continue ;;
+      --config) shift; [[ $# -gt 0 ]] || { printf '[ERROR] --config requires a path\n'; script.usage 1; }
+                config_path="$1"; shift; continue ;;
+      --config=*) config_path="${1#*=}"; shift; continue ;;
+      --dry-run) transformed+=('-n') ;;
+      --oneshot) oneshot=1; shift; continue ;;
       --launchd-load)
-        if [[ -n "$launchd_action" ]]; then
-          log.error "Multiple launchd actions specified"
-          script.usage 1
-        fi
-        launchd_action="load"
-        shift
-        continue
-        ;;
+        [[ -n "$launchd_action" ]] && { printf '[ERROR] Multiple launchd actions specified\n'; script.usage 1; }
+        launchd_action="load"; shift; continue ;;
       --launchd-unload)
-        if [[ -n "$launchd_action" ]]; then
-          log.error "Multiple launchd actions specified"
-          script.usage 1
-        fi
-        launchd_action="unload"
-        shift
-        continue
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+        [[ -n "$launchd_action" ]] && { printf '[ERROR] Multiple launchd actions specified\n'; script.usage 1; }
+        launchd_action="unload"; shift; continue ;;
+      --) shift; break ;;
+      --*) printf '[ERROR] Unknown option: %s\n' "$1"; script.usage 1 ;;
+      *) break ;;
     esac
     shift
   done
 
   transformed+=("$@")
-  set -- "${transformed[@]}"
+  if (( ${#transformed[@]} > 0 )); then set -- "${transformed[@]}"; else set --; fi
 
   while getopts ':hvni:' opt; do
     case "$opt" in
@@ -556,72 +633,95 @@ parse_args() {
       v) verbose=1 ;;
       n) dry_run=1 ;;
       i) interval="$OPTARG" ;;
-      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+      :) printf '[ERROR] Option -%s requires an argument\n' "$OPTARG"; script.usage 1 ;;
+      \?) printf '[ERROR] Invalid option: -%s\n' "$OPTARG"; script.usage 1 ;;
     esac
   done
-
   shift $((OPTIND - 1))
 
   if [[ $# -gt 0 ]]; then
-    log.error "Unexpected positional arguments"
+    printf '[ERROR] Unexpected positional arguments\n'
     script.usage 1
   fi
 
   script.validate_positive_int "$interval" "--interval"
 }
 
+load_launchd_agent() {
+  local config="${1:-}" start_interval="${2:-$interval}"
+  launchd.require_tooling || return 1
+  if [[ -z "$config" ]]; then
+    config="$HOME/.config/copyx/config.yml"
+    printf '[INFO] No config provided; defaulting to %s\n' "$config"
+  fi
+  config=$(path.resolve "$config" "$PWD")
+  if [[ ! -f "$config" ]]; then printf '[ERROR] Config path not found: %s\n' "$config"; return 1; fi
+
+  local plist_path script_source script_dir script_path log_dir
+  plist_path=$(launchd.agent_plist_path "$LAUNCHD_LABEL")
+  log_dir=$(launchd.logs_dir "copyx")
+  script_source="${BASH_SOURCE[0]}"
+  script_dir=$(cd "$(dirname -- "$script_source")" && pwd -P)
+  script_path=$(path.resolve "$(basename -- "$script_source")" "$script_dir")
+  local stdout_path="$log_dir/stdout.log" stderr_path="$log_dir/stderr.log"
+
+  if ! launchd.write_agent_plist \
+    "$plist_path" "$LAUNCHD_LABEL" "$start_interval" \
+    "$stdout_path" "$stderr_path" \
+    --env "PATH=$LAUNCHD_PATH_VALUE" \
+    -- "$script_path" "--config" "$config" "--oneshot" >/dev/null; then
+    printf '[ERROR] Failed to write LaunchAgent plist at %s\n' "$plist_path"
+    return 1
+  fi
+
+  local domain; domain=$(launchd.user_domain)
+  if ! launchd.bootstrap_agent "$LAUNCHD_LABEL" "$plist_path" "$domain" "$verbose"; then return 1; fi
+  printf '[INFO] LaunchAgent %s active (config: %s)\n' "$LAUNCHD_LABEL" "$config"
+}
+
+unload_launchd_agent() {
+  launchd.require_tooling || return 1
+  local plist_path; plist_path=$(launchd.agent_plist_path "$LAUNCHD_LABEL")
+  local domain; domain=$(launchd.user_domain)
+  if ! launchd.unload_agent "$LAUNCHD_LABEL" "$plist_path" "$domain" "$verbose"; then return 1; fi
+}
+
 main() {
-  if [[ "$launchd_action" == "load" ]]; then
-    launchd_handle_load
-    return
-  fi
+  if [[ "$launchd_action" == "load" ]]; then load_launchd_agent "$config_path" "$interval"; return $?; fi
+  if [[ "$launchd_action" == "unload" ]]; then unload_launchd_agent; return $?; fi
 
-  if [[ "$launchd_action" == "unload" ]]; then
-    launchd_handle_unload
-    return
-  fi
-
-  ensure_prerequisites
+  verify_tooling_prerequisites
 
   if [[ -z "$config_path" ]]; then
-    log.error "No config provided; use --config or set COPYX_CONFIG"
+    printf '[ERROR] No config provided; use --config or set COPYX_CONFIG\n'
     exit 1
   fi
 
-  config_path=$(copyx.resolve_path "$config_path" "$PWD")
-
-  if [[ ! -f "$config_path" ]]; then
-    log.error "Config path not found: $config_path"
-    exit 1
-  fi
+  config_path=$(path.resolve "$config_path" "$PWD")
+  [[ -f "$config_path" ]] || { printf '[ERROR] Config path not found: %s\n' "$config_path"; exit 1; }
 
   local iteration=0
-
   while :; do
     iteration=$((iteration + 1))
-    (( verbose )) && log.info "Iteration $iteration starting"
+    (( verbose )) && printf '[INFO] Iteration %d starting\n' "$iteration"
 
-    if ! perform_backup_iteration "$config_path"; then
-      log.error "Iteration $iteration failed"
+    if ! run_backup_iteration "$config_path"; then
+      if (( interrupted )); then
+        printf '[WARN] Iteration %d interrupted\n' "$iteration"
+      else
+        printf '[ERROR] Iteration %d failed\n' "$iteration"
+      fi
     fi
 
-    if (( oneshot )); then
-      break
-    fi
+    if (( oneshot )); then break; fi
+    if (( should_exit )); then printf '[INFO] Exit requested; stopping loop\n'; break; fi
 
-    if (( should_exit )); then
-      (( verbose )) && log.info "Exit requested; stopping loop"
-      break
-    fi
+    sleep_until_interrupt "$interval"
 
-    sleep_with_interrupt "$interval"
-
-    if (( should_exit )); then
-      (( verbose )) && log.info "Exit requested after sleep"
-      break
-    fi
+    if (( should_exit )); then printf '[INFO] Exit requested after sleep\n'; break; fi
   done
+
+  (( interrupted )) && return 130
 }
 
 parse_args "$@"

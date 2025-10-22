@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+
+# Helpers for managing per-user launchd agents.
+launchd.require_tooling() {
+    if ! command -v launchctl >/dev/null 2>&1; then
+        log.error "launchctl is required but was not found in PATH"
+        return 1
+    fi
+    return 0
+}
+
+launchd.user_domain() {
+    printf 'gui/%s\n' "$(id -u)"
+}
+
+launchd.agent_plist_path() {
+    local label="$1"
+    printf '%s/Library/LaunchAgents/%s.plist\n' "$HOME" "$label"
+}
+
+launchd.logs_dir() {
+    local name="$1"
+    printf '%s/Library/Logs/%s\n' "$HOME" "$name"
+}
+
+launchd.write_agent_plist() {
+    local output_path="$1"
+    local label="$2"
+    local start_interval="$3"
+    local stdout_path="$4"
+    local stderr_path="$5"
+    shift 5
+
+    local -a env_pairs=()
+    local -a program_args=()
+
+    while (($#)); do
+        case "$1" in
+            --env)
+                env_pairs+=("$2")
+                shift 2
+                ;;
+            --)
+                shift
+                program_args=("$@")
+                break
+                ;;
+            *)
+                program_args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if (( ${#program_args[@]} == 0 )); then
+        log.error "launchd.write_agent_plist requires at least one program argument"
+        return 1
+    fi
+
+    mkdir -p -- "$(dirname "$output_path")" \
+               -- "$(dirname "$stdout_path")" \
+               -- "$(dirname "$stderr_path")"
+
+    {
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+        printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+        printf '%s\n' '<plist version="1.0">'
+        printf '%s\n' '<dict>'
+        printf '    <key>Label</key>\n'
+        printf '    <string>%s</string>\n' "$(str.xml_escape "$label")"
+        printf '    <key>ProgramArguments</key>\n'
+        printf '    <array>\n'
+        local arg
+        for arg in "${program_args[@]}"; do
+            printf '        <string>%s</string>\n' "$(str.xml_escape "$arg")"
+        done
+        printf '    </array>\n'
+
+        if (( ${#env_pairs[@]} )); then
+            printf '    <key>EnvironmentVariables</key>\n'
+            printf '    <dict>\n'
+            local pair key value
+            for pair in "${env_pairs[@]}"; do
+                key=${pair%%=*}
+                value=${pair#*=}
+                printf '        <key>%s</key>\n' "$(str.xml_escape "$key")"
+                printf '        <string>%s</string>\n' "$(str.xml_escape "$value")"
+            done
+            printf '    </dict>\n'
+        fi
+
+        if [[ -n "$start_interval" ]]; then
+            printf '    <key>StartInterval</key>\n'
+            printf '    <integer>%s</integer>\n' "$(str.xml_escape "$start_interval")"
+        fi
+
+        printf '    <key>RunAtLoad</key>\n'
+        printf '    <true/>\n'
+        printf '    <key>StandardOutPath</key>\n'
+        printf '    <string>%s</string>\n' "$(str.xml_escape "$stdout_path")"
+        printf '    <key>StandardErrorPath</key>\n'
+        printf '    <string>%s</string>\n' "$(str.xml_escape "$stderr_path")"
+        printf '%s\n' '</dict>'
+        printf '%s\n' '</plist>'
+    } >"$output_path"
+
+    chmod 0644 "$output_path"
+
+    if command -v plutil >/dev/null 2>&1; then
+        if ! plutil -lint "$output_path" >/dev/null 2>&1; then
+            log.warn "launchd: plutil validation failed for $output_path"
+        fi
+    fi
+
+    printf '%s\n' "$output_path"
+}
+
+launchd.bootstrap_agent() {
+    local label="$1"
+    local plist_path="$2"
+    local domain="${3:-$(launchd.user_domain)}"
+    local verbose="${4:-0}"
+
+    local service="${domain}/${label}"
+
+    if launchctl print "$service" >/dev/null 2>&1; then
+        if launchctl bootout "$service" >/dev/null 2>&1 \
+            || launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1; then
+            (( verbose )) && log.info "launchd: booted existing agent $label"
+        else
+            log.warn "launchd: unable to boot existing agent $label; continuing"
+        fi
+    fi
+
+    if launchctl enable "$service" >/dev/null 2>&1; then
+        (( verbose )) && log.info "launchd: ensured enable for $label"
+    else
+        log.warn "launchd: enable failed for $label; continuing"
+    fi
+
+    local bootstrap_output=""
+    if ! bootstrap_output=$(launchctl bootstrap "$domain" "$plist_path" 2>&1); then
+        log.error "launchd: bootstrap failed for $label (plist $plist_path)"
+        if [[ -n "$bootstrap_output" ]]; then
+            while IFS= read -r line; do
+                line=$(str.trim "$line")
+                [[ -z "$line" ]] && continue
+                log.error "launchd:   $line"
+            done <<<"$bootstrap_output"
+        fi
+        return 1
+    fi
+
+    launchctl enable "$service" >/dev/null 2>&1 || true
+
+    if launchctl kickstart -k "$service" >/dev/null 2>&1; then
+        (( verbose )) && log.info "launchd: kickstarted $label"
+    else
+        log.warn "launchd: kickstart failed for $label; agent will start on schedule"
+    fi
+
+    log.info "launchd: agent $label loaded from $plist_path"
+    return 0
+}
+
+launchd.unload_agent() {
+    local label="$1"
+    local plist_path="$2"
+    local domain="${3:-$(launchd.user_domain)}"
+    local verbose="${4:-0}"
+
+    local service="${domain}/${label}"
+
+    if launchctl print "$service" >/dev/null 2>&1; then
+        if launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1 \
+            || launchctl bootout "$service" >/dev/null 2>&1; then
+            log.info "launchd: agent $label unloaded"
+        else
+            log.error "launchd: failed to unload agent $label"
+            return 1
+        fi
+    else
+        (( verbose )) && log.info "launchd: agent $label not currently loaded"
+    fi
+
+    launchctl disable "$service" >/dev/null 2>&1 || true
+
+    if [[ -f "$plist_path" ]]; then
+        (( verbose )) && log.info "launchd: plist remains at $plist_path"
+    else
+        log.warn "launchd: plist not found at $plist_path"
+    fi
+    return 0
+}
