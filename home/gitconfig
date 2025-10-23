@@ -40,7 +40,7 @@
 
 [core]
     editor = cursor --wait
-    fsmonitor = true
+    fsmonitor = false
     untrackedCache = true
     excludesfile = ~/.gitignore
     autocrlf = input
