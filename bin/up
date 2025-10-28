@@ -1,0 +1,316 @@
+#!/usr/bin/env bash
+#/ Upload a file to S3 and copy the shareable URL to the clipboard.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] <file>
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Environment variables:
+#/    UP_BUCKET        Required S3 bucket name (accepts optional s3:// prefix)
+#/    UP_PREFIX        Optional key prefix for uploaded objects
+#/    UP_URL_BASE      Optional https:// base used to build share URLs
+#/    UP_BUCKET_REGION Optional bucket region for default URL generation
+#/    UP_ACL           Optional ACL for aws s3 cp (default: public-read)
+#/    UP_CACHE_CONTROL Optional Cache-Control header value
+#/    UP_CONTENT_TYPE  Optional Content-Type override
+#/    UP_ID_LENGTH     Optional length for generated NanoID filenames (default: 12)
+#/    UP_DOMAIN_MAP    Optional comma-separated bucket=domain pairs for custom share URLs
+#/    UP_EXPIRES_IN    Optional TTL in seconds; sets the S3 object's expiry time
+#/
+#/ Examples:
+#/    $(basename "$0") ~/Downloads/screenshot.png
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+verbose=0
+file_path=""
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        verbose=1
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  if (( $# == 0 )); then
+    log.error "A file path is required"
+    script.usage 1
+  fi
+
+  if (( $# > 1 )); then
+    log.error "Only one file path may be provided"
+    script.usage 1
+  fi
+
+  file_path="$1"
+}
+
+require_command() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    log.error "Required command not found: $cmd"
+    exit 1
+  fi
+}
+
+sanitize_filename() {
+  local name="$1" sanitized
+  sanitized=${name//[![:alnum:]_.-]/-}
+  while [[ "$sanitized" == *--* ]]; do
+    sanitized=${sanitized//--/-}
+  done
+  sanitized=${sanitized##-}
+  sanitized=${sanitized%%-}
+  if [[ -z "$sanitized" ]]; then
+    sanitized="file"
+  fi
+  printf '%s\n' "$sanitized"
+}
+
+build_share_url() {
+  local bucket="$1"
+  local key="$2"
+  local url_base="${UP_URL_BASE:-}"
+  local region="${UP_BUCKET_REGION:-}"
+  local host
+  local mapped
+
+  if [[ -n "$url_base" ]]; then
+    url_base="${url_base%/}"
+    printf '%s/%s\n' "$url_base" "$key"
+    return
+  fi
+
+  if mapped=$(lookup_domain_mapping "$bucket"); then
+    mapped=${mapped%/}
+    if [[ "$mapped" == http://* || "$mapped" == https://* ]]; then
+      printf '%s/%s\n' "$mapped" "$key"
+    else
+      printf 'https://%s/%s\n' "$mapped" "$key"
+    fi
+    return
+  fi
+
+  if [[ -n "$region" && "$region" != "us-east-1" ]]; then
+    host="${bucket}.s3.${region}.amazonaws.com"
+  else
+    host="${bucket}.s3.amazonaws.com"
+  fi
+
+  printf 'https://%s/%s\n' "$host" "$key"
+}
+
+lookup_domain_mapping() {
+  local bucket="$1"
+  local map="${UP_DOMAIN_MAP:-}"
+  [[ -n "$map" ]] || return 1
+
+  local -a pairs=()
+  local entry key value
+  local IFS=','
+
+  read -ra pairs <<<"$map"
+  for entry in "${pairs[@]}"; do
+    entry="$(str.trim "$entry")"
+    [[ -n "$entry" && "$entry" == *=* ]] || continue
+    key="${entry%%=*}"
+    value="${entry#*=}"
+    key="$(str.trim "$key")"
+    value="$(str.trim "$value")"
+    if [[ "$key" == "$bucket" && -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+compute_expiry_timestamp() {
+  local ttl="$1"
+  local now target iso
+
+  now=$(date -u +%s)
+  target=$((now + ttl))
+
+  if iso=$(date -u -d "@${target}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null); then
+    printf '%s\n' "$iso"
+    return 0
+  fi
+
+  if iso=$(date -u -r "$target" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null); then
+    printf '%s\n' "$iso"
+    return 0
+  fi
+
+  log.error "Unable to compute expiration timestamp; unsupported 'date' command"
+  return 1
+}
+
+build_object_key() {
+  local id="$1"
+  local prefix="$2"
+  local filename="$3"
+  local sanitized="$4"
+  local ext=""
+
+  if [[ "$filename" == *.* && "$filename" != "${filename%.*}" ]]; then
+    ext=".${filename##*.}"
+    ext=${ext//[^[:alnum:]._-]/-}
+    while [[ "$ext" == *--* ]]; do
+      ext=${ext//--/-}
+    done
+  fi
+
+  if [[ -z "$ext" ]]; then
+    if [[ "$sanitized" == *.* && "$sanitized" != "${sanitized%.*}" ]]; then
+      ext=".${sanitized##*.}"
+    fi
+  fi
+
+  if [[ -n "$ext" && "${ext:0:1}" != '.' ]]; then
+    ext=".${ext}"
+  fi
+
+  local key="${id}${ext}"
+
+  if [[ -n "$prefix" ]]; then
+    prefix="${prefix#/}"
+    prefix="${prefix%/}"
+    if [[ -n "$prefix" ]]; then
+      key="${prefix}/${key}"
+    fi
+  fi
+
+  printf '%s\n' "$key"
+}
+
+main() {
+  local resolved bucket prefix filename sanitized id_len object_id object_key expires_iso s3_uri share_url acl
+  local -a aws_cmd
+
+  require_command aws
+
+  resolved=$(path.resolve "$file_path")
+  if ! fs.isfile "$resolved"; then
+    log.error "File not found: $file_path"
+    exit 1
+  fi
+
+  bucket="${UP_BUCKET:-}"
+  if [[ -z "$bucket" ]]; then
+    log.error "UP_BUCKET must be set"
+    exit 1
+  fi
+
+  prefix="${UP_PREFIX:-}"
+  prefix="${prefix#/}"
+  prefix="${prefix%/}"
+
+  bucket="${bucket#s3://}"
+  if [[ "$bucket" == */* ]]; then
+    local bucket_prefix="${bucket#*/}"
+    bucket="${bucket%%/*}"
+    bucket_prefix="${bucket_prefix#/}"
+    bucket_prefix="${bucket_prefix%/}"
+    if [[ -n "$bucket_prefix" ]]; then
+      if [[ -n "$prefix" ]]; then
+        prefix="${bucket_prefix}/${prefix}"
+      else
+        prefix="$bucket_prefix"
+      fi
+    fi
+  fi
+
+  if [[ -z "$bucket" ]]; then
+    log.error "UP_BUCKET does not contain a valid bucket name"
+    exit 1
+  fi
+
+  filename=$(basename -- "$resolved")
+  sanitized=$(sanitize_filename "$filename")
+
+  require_command nanoid
+
+  id_len="${UP_ID_LENGTH:-12}"
+  script.validate_positive_int "$id_len" "UP_ID_LENGTH"
+
+  if ! object_id=$(nanoid); then
+    log.error "Failed to generate NanoID filename"
+    exit 1
+  fi
+
+  if [[ -z "$object_id" ]]; then
+    log.error "NanoID generator returned an empty value"
+    exit 1
+  fi
+
+  object_key=$(build_object_key "$object_id" "$prefix" "$filename" "$sanitized")
+
+  if [[ -n "${UP_EXPIRES_IN:-}" ]]; then
+    script.validate_positive_int "${UP_EXPIRES_IN}" "UP_EXPIRES_IN"
+    if ! expires_iso=$(compute_expiry_timestamp "${UP_EXPIRES_IN}"); then
+      exit 1
+    fi
+  fi
+
+  s3_uri="s3://${bucket}/${object_key}"
+
+  acl="${UP_ACL:-public-read}"
+  aws_cmd=(aws s3 cp "$resolved" "$s3_uri" --only-show-errors)
+  if [[ -n "$acl" ]]; then
+    aws_cmd+=(--acl "$acl")
+  fi
+  if [[ -n "${UP_CACHE_CONTROL:-}" ]]; then
+    aws_cmd+=(--cache-control "${UP_CACHE_CONTROL}")
+  fi
+  if [[ -n "${UP_CONTENT_TYPE:-}" ]]; then
+    aws_cmd+=(--content-type "${UP_CONTENT_TYPE}")
+  fi
+  if [[ -n "${expires_iso:-}" ]]; then
+    aws_cmd+=(--expires "$expires_iso")
+  fi
+
+  (( verbose )) && log.info "Uploading $(basename -- "$resolved") to ${s3_uri}"
+
+  if ! "${aws_cmd[@]}"; then
+    log.error "Failed to upload file to S3"
+    exit 1
+  fi
+
+  share_url=$(build_share_url "$bucket" "$object_key")
+
+  if ! clip.copy <<<"$share_url"; then
+    log.error "Failed to copy URL to clipboard"
+    exit 1
+  fi
+
+  (( verbose )) && log.info "Copied URL to clipboard"
+
+  printf '%s\n' "$share_url"
+}
+
+parse_args "$@"
+main

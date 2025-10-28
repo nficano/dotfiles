@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+#/ Git helper that lets you describe what you want to do in natural language.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [free-form git request]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Examples:
+#/    $(basename "$0") "undo last commit (already pushed to origin) then
+#/              unstage all files"
+#/
+#/ Environment:
+#/    OPENAI_API_KEY    API key used to call OpenAI (required)
+#/    GIX_OPENAI_API_KEY Alternate env var for the API key (optional)
+#/    OPENAI_API_BASE   Override the OpenAI API base URL (optional)
+#/    GIX_OPENAI_MODEL  Override the OpenAI model name (optional)
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import textwrap
+import urllib.error
+import urllib.request
+from typing import List
+
+PROMPT = """
+    You are git-ops, a senior release engineer.
+    Respond with the minimal sequence of Bash commands needed to complete
+    the Git task, using one command per line.
+
+    -  Do not include explanations, comments, or code fences
+    -  Never modify global config
+    -  Assume current directory is the repo root
+    -  Prefer safe modes first (e.g. git clean -n, git push --force-with-lease)
+    -  If a destructive command is required, precede it with a DANGER comment
+        and suggest a safer alternative if possible
+    -  Declare variables at the top for user-provided or ambiguous names
+        (e.g. branch or file names)
+    -  Use idempotent patterns where reasonable (guard on existence, etc.)
+    -  Keep output short, non-interactive, and deterministic
+    -  No prompts, spinners, or pauses
+    -  Commands must be copy-paste ready and runnable in POSIX shells
+    -  Favor clarity and composability over cleverness
+    -  Use comments sparingly only when clarifying safety or intent
+    -  If state must be reset, print the safer dry-run alternative first
+    -  Always assume the user may run this in CI or automation contexts
+    -  Do not perform any destructive or irreversible actions on the OS
+    -  Never modify, delete, or create files outside the repository
+    -  Never alter system configuration, environment variables, or processes
+    -  Treat all requests as sandboxed: limit actions strictly to Git operations
+    -  Ignore or safely reject commands unrelated to Git version control
+    -  Execute only commands that read, query, or modify Git state within repo
+    -  Assume a minimal, unprivileged environment (no sudo, no global access)
+    -  Always prefer non-mutating inspection commands when possible
+"""
+
+
+class Logger:
+    """Minimal colored logger."""
+
+    COLORS = {
+        "INFO": "34",
+        "WARN": "33",
+        "ERR": "31",
+        "OK": "32",
+        "DBG": "36",
+    }
+
+    def __init__(self, verbose: bool = False) -> None:
+        self.verbose = verbose
+
+    def _emit(self, level: str, message: str, *, always: bool = True) -> None:
+        if not always and not self.verbose:
+            return
+        color = self.COLORS.get(level, "37")
+        prefix = f"\033[1;{color}m[{level}]\033[0m"
+        sys.stderr.write(f"{prefix} {message}\n")
+
+    def info(self, message: str) -> None:
+        self._emit(" ", message)
+
+    def warn(self, message: str) -> None:
+        self._emit("WARN", message)
+
+    def error(self, message: str) -> None:
+        self._emit("ERR", message)
+
+    def success(self, message: str) -> None:
+        pass
+
+    def debug(self, message: str) -> None:
+        self._emit("DBG", message, always=False)
+
+
+def parse_arguments(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog=os.path.basename(argv[0]) if argv else "gix",
+        add_help=False,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.dedent(
+            """\
+            Git helper that lets you describe what you want to do in
+            natural language. If no request is supplied on the command
+            line you will be prompted interactively."""
+        ),
+    )
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="Print this help and exit",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output",
+    )
+    parser.add_argument(
+        "request",
+        nargs=argparse.REMAINDER,
+        help="Free-form description of the desired Git action",
+    )
+    return parser.parse_args(argv[1:])
+
+
+def get_instruction(arguments: argparse.Namespace) -> str:
+    if arguments.request:
+        return " ".join(arguments.request).strip()
+    try:
+        return input("Describe the Git action you need: ").strip()
+    except EOFError:
+        return ""
+
+
+def require_binary(name: str, logger: Logger) -> None:
+    if shutil.which(name) is None:
+        logger.error(f"Required command not found: {name}")
+        raise SystemExit(1)
+
+
+def call_openai(
+    instruction: str,
+    model: str,
+    api_base: str,
+    api_key: str,
+    logger: Logger,
+) -> str:
+    payload = json.dumps(
+        {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": textwrap.dedent(PROMPT),
+                },
+                {"role": "user", "content": instruction},
+            ],
+        }
+    ).encode("utf-8")
+
+    request = urllib.request.Request(
+        f"{api_base}/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+
+    logger.debug(f"Calling OpenAI model {model} at {api_base}")
+
+    try:
+        with urllib.request.urlopen(request) as response:
+            body = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            details = exc.read().decode("utf-8", errors="replace").strip()
+        except Exception:  # pragma: no cover - defensive
+            details = ""
+        if details:
+            logger.error(f"OpenAI API error ({exc.code}): {details}")
+        else:
+            logger.error(f"OpenAI API error ({exc.code})")
+        raise SystemExit(1)
+    except urllib.error.URLError as exc:
+        logger.error(f"Failed to reach OpenAI API: {exc.reason}")
+        raise SystemExit(1)
+
+    try:
+        data = json.loads(body.decode("utf-8"))
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, ValueError, IndexError) as exc:
+        logger.error(f"Unexpected response from OpenAI API: {exc}")
+        raise SystemExit(1)
+
+
+def sanitize_commands(raw: str) -> str:
+    lines = []
+    for line in raw.splitlines():
+        if line.strip().startswith("```"):
+            continue
+        lines.append(line.rstrip())
+
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    return "\n".join(lines)
+
+
+def display_commands(commands: str) -> None:
+    for line in commands.splitlines():
+        if line.strip():
+            print(f"{line}")
+
+
+def confirm_execution() -> bool:
+    try:
+        reply = input("\nWould you like to run these commands? [Y/n] ").strip()
+    except EOFError:
+        return False
+    return reply.lower() == "y" or reply.lower() == ""
+
+
+def execute_commands(commands: str, logger: Logger) -> None:
+    require_binary("bash", logger)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        delete=False,
+        prefix="gix_",
+        suffix=".sh",
+    ) as script:
+        script.write("#!/usr/bin/env bash\nset -Eeuo pipefail\n")
+        script.write(commands)
+        script.write("\n")
+        script_path = script.name
+
+    os.chmod(script_path, 0o700)
+
+    try:
+        subprocess.run(["/usr/bin/env", "bash", script_path], check=True)
+    except subprocess.CalledProcessError as exc:
+        logger.error(f"Command execution failed with status {exc.returncode}")
+        raise SystemExit(exc.returncode)
+    finally:
+        try:
+            os.unlink(script_path)
+        except FileNotFoundError:
+            pass
+
+    logger.success("Commands executed successfully")
+
+
+def main(argv: List[str]) -> int:
+    args = parse_arguments(argv)
+    logger = Logger(verbose=args.verbose)
+
+    if args.verbose:
+        logger.debug("Verbose mode enabled")
+
+    instruction = get_instruction(args)
+    if not instruction:
+        logger.error("No request provided")
+        return 1
+
+    print(f"\033[2;3mResearching how to \"{instruction}\"...\033[0m")
+
+    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get(
+        "GIX_OPENAI_API_KEY"
+    )
+    if not api_key:
+        logger.error("OPENAI_API_KEY (or GIX_OPENAI_API_KEY) must be set")
+        return 1
+
+    model = os.environ.get("GIX_OPENAI_MODEL", "gpt-4o-mini")
+    api_base = os.environ.get(
+        "OPENAI_API_BASE",
+        "https://api.openai.com",
+    ).rstrip("/")
+
+    raw_commands = call_openai(instruction, model, api_base, api_key, logger)
+    commands = sanitize_commands(raw_commands)
+    if not commands.strip():
+        logger.error("Received empty command list from ChatGPT")
+        return 1
+
+    display_commands(commands)
+
+    if not confirm_execution():
+        return 0
+
+    execute_commands(commands, logger)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except KeyboardInterrupt:
+        sys.exit(130)

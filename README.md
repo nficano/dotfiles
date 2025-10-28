@@ -57,7 +57,8 @@ setup/macos/mac-provision --yes --non-interactive
 - **`uv-init-helper`** - Wraps the `uv` Python tool: for `uv init` it creates or reuses a virtualenv recorded in `.envrc`, otherwise it forwards all arguments to the real binary
 
 ### File and Directory Tools
-
+- **`copyx`** - Simple backup automation to S3.
+- **`up`** - Upload files to S3 and copy the shareable URL to the clipboard (similar to CloudApp)
 - **`path-resolve`** - Resolves a relative path to an absolute path (`path-resolve ../some/file`)
 - **`dir-remove-safe`** - Safety wrapper around `rm -rf` for directories; it verifies the target exists before deletion
 - **`path-expand-tilde`** - Expands a path containing `~` to its real location (`path-expand-tilde ~/Downloads`)
@@ -98,6 +99,7 @@ setup/macos/mac-provision --yes --non-interactive
 - **`git-safe-rebase`** - Safe rebase workflow: creates a timestamped working branch, runs `git rebase --autostash --rebase-merges -X patience`, and guides merging back
 - **`git-soft-reset-last`** - Performs `git reset --soft HEAD~1` and shows status to retain working tree changes
 - **`git-split-after`** - Moves all commits after a given hash onto a new branch and rewinds the original branch to the specified tree state
+- **`gix`** - AI assisted Git command lookup.
 
 ### System, macOS, and Services
 
@@ -138,10 +140,11 @@ These scripts implement Redis-inspired operations backed by the helper sourced f
 - **`kv-list-pop-left` / `kv-list-pop-right`** - Pop the first or last list element
 - **`kv-list-push-left` / `kv-list-push-right`** - Push values onto the head or tail of a list
 
-### Miscellaneous Calculators
+### Miscellaneous
 
 - **`css-px-to-em`** - Converts a pixel value to `em` units for a given base font size and copies the result to the clipboard
 - **`time-epoch`** - Prints the current Unix epoch timestamp
+- **`nanoid`** - Generate short, URL safe unique IDs.
 
 ## Copyx Backups
 

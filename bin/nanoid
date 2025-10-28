@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#/ Generate URL-safe NanoID-style identifiers using /dev/urandom.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [-l length] [-c count] [--alphabet alphabet]
+#/
+#/ Available options:
+#/    -h, --help               Print this help and exit
+#/    -v, --verbose            Enable verbose output
+#/    -l, --length, --size     Length for each generated ID (default: 8)
+#/    -c, --count              Number of IDs to generate (default: 1)
+#/    -a, --alphabet           Custom alphabet to use (default: 0-9, a-z, A-Z, _-)
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+check_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    log.error "Required command not found: $cmd"
+    exit 1
+  fi
+}
+
+parse_args() {
+  local v=0 ln=8 ct=1 abc='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-'
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        script.usage
+        ;;
+      -v|--verbose)
+        v=1
+        ;;
+      -l|--length|--size)
+        shift
+        [[ $# -gt 0 ]] || { log.error "Missing value for -l"; script.usage 1; }
+        ln="$1"
+        ;;
+      -c|--count)
+        shift
+        [[ $# -gt 0 ]] || { log.error "Missing value for -c"; script.usage 1; }
+        ct="$1"
+        ;;
+      -a|--alphabet)
+        shift
+        [[ $# -gt 0 ]] || { log.error "Missing value for -a"; script.usage 1; }
+        abc="$1"
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        log.error "Unknown option: $1"
+        script.usage 1
+        ;;
+      *)
+        log.error "Unexpected argument: $1"
+        script.usage 1
+        ;;
+    esac
+    shift
+  done
+
+  if (( $# > 0 )); then
+    log.error "Unexpected argument: $1"
+    script.usage 1
+  fi
+
+  script.validate_positive_int "$ln" "Length"
+  script.validate_positive_int "$ct" "Count"
+
+  if [[ -z "$abc" ]]; then
+    log.error "Alphabet may not be empty"
+    exit 1
+  fi
+
+  printf '%s\t%s\t%s\t%s\n' "$v" "$ln" "$ct" "$abc"
+}
+
+calc_msk() {
+  local ab_len="$1" bits=1
+  for ((bits=1; bits<ab_len; bits<<=1)); do :; done
+  printf '%d\n' $((bits - 1))
+}
+
+calc_stp() {
+  local msk="$1" sz="$2" ab_len="$3"
+  if (( msk == 0 )); then
+    printf '%d\n' "$sz"
+    return
+  fi
+  local num=$((msk * sz * 8))
+  local den=$((ab_len * 5))
+  local st=$(((num + den - 1) / den))
+  (( st > 0 )) || st="$sz"
+  printf '%d\n' "$st"
+}
+
+make_id() {
+  local sz="$1" abc="$2" ab_len=${#abc}
+  if (( ab_len == 1 )); then
+    printf '%*s\n' "$sz" '' | tr ' ' "${abc:0:1}"
+    return
+  fi
+
+  local msk st chunk val idx
+  local -a out=()
+  msk=$(calc_msk "$ab_len")
+  st=$(calc_stp "$msk" "$sz" "$ab_len")
+  chunk=$(( st > 256 ? st : 256 ))
+
+  while (( ${#out[@]} < sz )); do
+    while IFS= read -r val; do
+      [[ -z "$val" ]] && continue
+      (( idx = val & msk ))
+      if (( idx < ab_len )); then
+        out+=("${abc:idx:1}")
+        if (( ${#out[@]} >= sz )); then
+          break 2
+        fi
+      fi
+    done < <(LC_ALL=C hexdump -v -e '1/1 "%u\n"' -n "$chunk" /dev/urandom)
+  done
+
+  printf '%s\n' "$(printf '%s' "${out[@]}")"
+}
+
+main() {
+  check_cmd hexdump
+
+  local cfg verbose ln ct abc
+  cfg=$(parse_args "$@")
+  IFS=$'\t' read -r verbose ln ct abc <<<"$cfg"
+
+  (( verbose )) && log.info "Generating ${ct} ID(s) of length ${ln}"
+
+  local i
+  for (( i = 0; i < ct; i++ )); do
+    make_id "$ln" "$abc"
+  done
+}
+
+main "$@"
