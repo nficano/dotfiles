@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+#/ Fixes word spelling using ChatGPT and copies the correction to the clipboard
+#/
+#/ Usage: $(basename "$0") [-h] [-v] <typo>
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Examples:
+#/    $(basename "$0")
+#/    $(basename "$0") exspecally
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+verbose=0
+declare -a args=()
+
+parse_args() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n $remaining ]]; then
+    read -r -a args <<<"$remaining"
+  else
+    args=()
+  fi
+
+  if ((${#args[@]} == 0)); then
+    log.error "Please provide the text to correct"
+    script.usage 1
+  fi
+}
+
+main() {
+  local model="${SPELL_CORRECT_OPENAI_MODEL:-gpt-4o-mini}"
+  local agent="${SPELL_CORRECT_OPENAI_AGENT:-spell-check}"
+
+  require.cmd curl jq
+  if os.platform.is_darwin; then
+    require.cmd pbcopy
+  else
+    require.cmd xclip
+  fi
+
+  if ! ai.openai_require_api_key; then
+    exit 1
+  fi
+
+  if ! ai.agent_require "$agent"; then
+    exit 1
+  fi
+
+  local api_base
+  api_base=$(ai.openai_api_base)
+
+  ((verbose)) && log.info "Using model $model via ${api_base} (agent: $agent)"
+
+  local text=""
+  if ((${#args[@]})); then
+    printf -v text '%s ' "${args[@]}"
+    text=${text% }
+  fi
+
+  ((verbose)) && log.info "Correcting: $text"
+
+  local payload correction temperature
+  temperature="${SPELL_CORRECT_OPENAI_TEMPERATURE:-0}"
+
+  if ! payload=$(ai.openai_agent_chat_payload "$model" "$agent" "$text" "$temperature"); then
+    log.error "Failed to build OpenAI payload"
+    exit 1
+  fi
+
+  ((verbose)) && log.info "Requesting spell correction from OpenAI"
+
+  if ! ai.openai_chat_completion spell_response "$payload"; then
+    ai.openai_log_error spell_response "Failed to contact OpenAI API"
+    exit 1
+  fi
+
+  if ! http.response_ok spell_response; then
+    ai.openai_log_error spell_response "OpenAI API request failed"
+    exit 1
+  fi
+
+  if ! correction=$(ai.openai_message_text spell_response); then
+    log.error "Unable to parse OpenAI response"
+    exit 1
+  fi
+
+  correction=$(str.trim "$correction")
+  if [[ -z $correction ]]; then
+    log.error "No correction returned by OpenAI"
+    exit 1
+  fi
+
+  ((verbose)) && log.info "Correction: $correction"
+
+  if ! printf '%s' "$correction" | clip.copy; then
+    log.error "Failed to copy correction to clipboard"
+    exit 1
+  fi
+
+  printf 'Copied correction "%s" to the clipboard\n' "$correction"
+}
+
+parse_args "$@"
+main

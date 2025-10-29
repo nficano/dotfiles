@@ -1,0 +1,682 @@
+#!/usr/bin/env bash
+
+# Helpers for interacting with AI providers such as OpenAI.
+
+if [[ -n ${__LIB_BASH_AI:-} ]]; then
+  return 0
+fi
+__LIB_BASH_AI=1
+
+# Ensure the core Bash stdlib is loaded when this module is sourced directly.
+if [[ -z ${__LIB_BASH_INITRC:-} ]]; then
+  # shellcheck disable=SC1091
+  source "$(dirname "${BASH_SOURCE[0]}")/initrc"
+fi
+
+ai__module_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ai__repo_root="$(cd "${ai__module_dir}/../.." && pwd)"
+
+ai__agents_file=""
+ai__agents_mtime=""
+ai__agents_initialized=0
+
+ai__agent_names=()
+ai__agent_roles=()
+ai__agent_instructions=()
+ai__agent_rules=()
+
+ai._debug_emit() {
+  local message="$1"
+  if declare -F log.debug >/dev/null 2>&1 && [[ -n ${LOG_DEBUG:-} ]]; then
+    log.debug "$message"
+  else
+    printf '[AI DEBUG] %s\n' "$message" >&2
+  fi
+}
+
+ai._debug_dump_response() {
+  [[ -n ${AI_OPENAI_DEBUG:-} ]] || return 0
+  local reason="$1"
+  local body="$2"
+  local preview="${body:0:4000}"
+
+  ai._debug_emit "OpenAI response parse issue: ${reason}"
+  if [[ -z $preview ]]; then
+    ai._debug_emit "(no body content available)"
+    return 0
+  fi
+
+  local line
+  while IFS= read -r line; do
+    ai._debug_emit "  $line"
+  done <<<"$preview"
+
+  if ((${#body} > ${#preview})); then
+    ai._debug_emit "  ... (truncated)"
+  fi
+}
+
+ai._strip_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    case "$value" in
+    "*" | '*')
+      if [[ ${value:0:1} == "${value: -1}" ]]; then
+        value="${value:1:-1}"
+      fi
+      ;;
+    esac
+  fi
+  printf '%s\n' "$value"
+}
+
+ai._join_lines() {
+  local array_name="$1"
+  local result_var="$2"
+
+  if [[ -z $array_name || -z $result_var ]]; then
+    return 1
+  fi
+
+  if ! array._has_var "$array_name"; then
+    printf -v "$result_var" '%s' ""
+    return 0
+  fi
+
+  eval "local -a __lines=(\"\${$array_name[@]}\")"
+
+  while ((${#__lines[@]})); do
+    local __idx=$(( ${#__lines[@]} - 1 ))
+    if [[ -n ${__lines[$__idx]} ]]; then
+      break
+    fi
+    unset "__lines[$__idx]"
+  done
+
+  if ((${#__lines[@]} == 0)); then
+    printf -v "$result_var" '%s' ""
+    return 0
+  fi
+
+  local joined=""
+  printf -v joined '%s\n' "${__lines[@]}"
+  joined=${joined%$'\n'}
+  printf -v "$result_var" '%s' "$joined"
+}
+
+ai._agent_index() {
+  local target="$1"
+  local i
+  for ((i = 0; i < ${#ai__agent_names[@]}; i++)); do
+    if [[ ${ai__agent_names[$i]} == "$target" ]]; then
+      printf '%s\n' "$i"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ai._file_mtime() {
+  local path="$1"
+  [[ -e $path ]] || return 1
+
+  local value
+  if value=$(stat -f %m "$path" 2>/dev/null); then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  if value=$(stat -c %Y "$path" 2>/dev/null); then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  return 1
+}
+
+ai._resolve_agents_file() {
+  if [[ -n ${AI_AGENTS_FILE:-} ]]; then
+    local expanded
+    expanded=$(path.expand_user "${AI_AGENTS_FILE}")
+    printf '%s\n' "$expanded"
+    return 0
+  fi
+
+  if [[ -n ${DOTFILES_ROOT:-} ]]; then
+    local dotfiles_root
+    dotfiles_root=$(cd "${DOTFILES_ROOT}/../.." && pwd 2>/dev/null || true)
+    if [[ -n $dotfiles_root ]]; then
+      printf '%s/.agents\n' "$dotfiles_root"
+      return 0
+    fi
+  fi
+
+  if [[ -n ${ai__repo_root:-} ]]; then
+    printf '%s/.agents\n' "$ai__repo_root"
+    return 0
+  fi
+
+  printf '%s/.agents\n' "$PWD"
+}
+
+ai._load_agents() {
+  local resolved="${1:-}"
+  if [[ -z $resolved ]]; then
+    resolved=$(ai._resolve_agents_file)
+  fi
+
+  ai__agents_file="$resolved"
+  ai__agents_mtime=""
+  ai__agents_initialized=0
+
+  ai__agent_names=()
+  ai__agent_roles=()
+  ai__agent_instructions=()
+  ai__agent_rules=()
+
+  [[ -n $resolved && -f $resolved ]] || {
+    ai__agents_initialized=1
+    return 0
+  }
+
+  ai__agents_mtime=$(ai._file_mtime "$resolved" 2>/dev/null || true)
+
+  local current_agent=""
+  local current_index=-1
+  local state=""
+  local -a instruction_lines=()
+  local -a rules_lines=()
+  local line trimmed
+
+  while IFS='' read -r line || [[ -n $line ]]; do
+    if [[ $state == "instruction" ]]; then
+      if [[ $line =~ ^[[:space:]]*$ ]]; then
+        instruction_lines+=("")
+        continue
+      fi
+      if [[ $line =~ ^[[:space:]] ]]; then
+        local text
+        text=$(str.trim "$line")
+        instruction_lines+=("$text")
+        continue
+      fi
+      state=""
+      local instruction_joined=""
+      ai._join_lines instruction_lines instruction_joined
+      if (( current_index >= 0 )); then
+        ai__agent_instructions[$current_index]="$instruction_joined"
+      fi
+      instruction_lines=()
+    fi
+
+    if [[ $state == "rules" ]]; then
+      trimmed=$(str.trim "$line")
+      if [[ -z $trimmed ]]; then
+        continue
+      fi
+      if [[ $trimmed == "]" ]]; then
+        state=""
+        local rules_joined=""
+        ai._join_lines rules_lines rules_joined
+        if (( current_index >= 0 )); then
+          ai__agent_rules[$current_index]="$rules_joined"
+        fi
+        rules_lines=()
+        continue
+      fi
+      trimmed=${trimmed%,}
+      trimmed=$(ai._strip_quotes "$trimmed")
+      rules_lines+=("$trimmed")
+      continue
+    fi
+
+    trimmed=$(str.trim "$line")
+    if [[ -z $trimmed ]]; then
+      continue
+    fi
+
+    if [[ $trimmed =~ ^\[agent[[:space:]]+\"([^\"]+)\"\]$ ]]; then
+      current_agent="${BASH_REMATCH[1]}"
+
+      if ! current_index=$(ai._agent_index "$current_agent" 2>/dev/null); then
+        current_index=${#ai__agent_names[@]}
+        ai__agent_names+=("$current_agent")
+        ai__agent_roles+=("")
+        ai__agent_instructions+=("")
+        ai__agent_rules+=("")
+      fi
+
+      instruction_lines=()
+      rules_lines=()
+      state=""
+      continue
+    fi
+
+    if [[ -z $current_agent || $current_index -lt 0 ]]; then
+      continue
+    fi
+
+    if [[ $trimmed =~ ^role[[:space:]]*=(.*)$ ]]; then
+      local value
+      value=$(str.trim "${BASH_REMATCH[1]}")
+      value=$(ai._strip_quotes "$value")
+      ai__agent_roles[$current_index]="$value"
+      continue
+    fi
+
+    if [[ $trimmed =~ ^instruction[[:space:]]*=(.*)$ ]]; then
+      local rest
+      rest=$(str.trim "${BASH_REMATCH[1]}")
+      instruction_lines=()
+      if [[ $rest == ">" ]]; then
+        state="instruction"
+        continue
+      fi
+      if [[ -n $rest ]]; then
+        rest=$(ai._strip_quotes "$rest")
+        instruction_lines+=("$rest")
+        local instruction_joined=""
+        ai._join_lines instruction_lines instruction_joined
+        ai__agent_instructions[$current_index]="$instruction_joined"
+        instruction_lines=()
+      else
+        ai__agent_instructions[$current_index]=""
+      fi
+      continue
+    fi
+
+    if [[ $trimmed =~ ^rules[[:space:]]*=(.*)$ ]]; then
+      local rest
+      rest=$(str.trim "${BASH_REMATCH[1]}")
+      rules_lines=()
+      if [[ $rest == "[" ]]; then
+        state="rules"
+        continue
+      fi
+      if [[ $rest == "[]" || -z $rest ]]; then
+        ai__agent_rules[$current_index]=""
+        continue
+      fi
+      rest=$(ai._strip_quotes "$rest")
+      ai__agent_rules[$current_index]="$rest"
+    fi
+  done <"$resolved"
+
+  if [[ $state == "instruction" && -n $current_agent && $current_index -ge 0 ]]; then
+    local instruction_joined=""
+    ai._join_lines instruction_lines instruction_joined
+    ai__agent_instructions[$current_index]="$instruction_joined"
+  fi
+
+  if [[ $state == "rules" && -n $current_agent && $current_index -ge 0 ]]; then
+    local rules_joined=""
+    ai._join_lines rules_lines rules_joined
+    ai__agent_rules[$current_index]="$rules_joined"
+  fi
+
+  ai__agents_initialized=1
+  return 0
+}
+
+ai._ensure_agents_loaded() {
+  local resolved
+  resolved=$(ai._resolve_agents_file)
+
+  local need_reload=0
+  if [[ $resolved != "${ai__agents_file:-}" ]]; then
+    need_reload=1
+  elif [[ -n $resolved && -f $resolved ]]; then
+    local current_mtime
+    current_mtime=$(ai._file_mtime "$resolved" 2>/dev/null || true)
+    if [[ ${ai__agents_mtime:-} != "$current_mtime" ]]; then
+      need_reload=1
+    fi
+  elif (( ! ai__agents_initialized )); then
+    need_reload=1
+  fi
+
+  if ((need_reload)); then
+    ai._load_agents "$resolved" || return 1
+  fi
+
+  return 0
+}
+
+ai.agent_names() {
+  ai._ensure_agents_loaded || return 1
+  local name
+  for name in "${ai__agent_names[@]}"; do
+    printf '%s\n' "$name"
+  done
+}
+
+ai.agent_exists() {
+  local agent="$1"
+  [[ -n $agent ]] || return 1
+  ai._ensure_agents_loaded || return 1
+  if ai._agent_index "$agent" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+ai.agent_require() {
+  local agent="$1"
+  if [[ -z $agent ]]; then
+    log.error "Agent name is required"
+    return 1
+  fi
+  if ! ai.agent_exists "$agent"; then
+    log.error "Unknown AI agent: $agent"
+    return 1
+  fi
+}
+
+ai.agent_role() {
+  local agent="$1"
+  if ! ai.agent_require "$agent"; then
+    return 1
+  fi
+  local idx
+  idx=$(ai._agent_index "$agent")
+  printf '%s\n' "${ai__agent_roles[$idx]}"
+}
+
+ai.agent_instruction() {
+  local agent="$1"
+  if ! ai.agent_require "$agent"; then
+    return 1
+  fi
+  local idx
+  idx=$(ai._agent_index "$agent")
+  printf '%s\n' "${ai__agent_instructions[$idx]}"
+}
+
+ai.agent_rules() {
+  local agent="$1"
+  local out_var="$2"
+  if [[ -z $out_var ]]; then
+    log.error "ai.agent_rules requires an output array variable name"
+    return 1
+  fi
+  if ! ai.agent_require "$agent"; then
+    return 1
+  fi
+  array.empty "$out_var"
+
+  local idx stored
+  idx=$(ai._agent_index "$agent")
+  stored="${ai__agent_rules[$idx]}"
+  if [[ -z $stored ]]; then
+    return 0
+  fi
+
+  local line
+  while IFS= read -r line || [[ -n $line ]]; do
+    array.push "$out_var" "$line"
+  done <<<"$stored"
+}
+
+ai.agent_prompt() {
+  local agent="$1"
+  if ! ai.agent_require "$agent"; then
+    return 1
+  fi
+
+  local idx
+  idx=$(ai._agent_index "$agent")
+
+  local role="${ai__agent_roles[$idx]}"
+  local instruction="${ai__agent_instructions[$idx]}"
+  local rules_block="${ai__agent_rules[$idx]}"
+
+  printf 'You are %s' "$agent"
+  if [[ -n $role ]]; then
+    printf ', %s' "$role"
+  fi
+  printf '.\n'
+
+  if [[ -n $instruction ]]; then
+    printf '%s\n' "$instruction"
+  fi
+
+  if [[ -n $rules_block ]]; then
+    if [[ -n $instruction ]]; then
+      printf '\n'
+    fi
+    local rule
+    while IFS= read -r rule || [[ -n $rule ]]; do
+      printf -- '-  %s\n' "$rule"
+    done <<<"$rules_block"
+  fi
+}
+
+ai._openai_init() {
+  if [[ -n ${AI_OPENAI_INITIALIZED:-} ]]; then
+    return 0
+  fi
+  AI_OPENAI_INITIALIZED=1
+
+  ai_openai_key="${OPENAI_API_KEY:-${GIX_OPENAI_API_KEY:-}}"
+  ai_openai_base="${OPENAI_API_BASE:-https://api.openai.com}"
+}
+
+ai.openai_api_key() {
+  ai._openai_init
+  printf '%s\n' "${ai_openai_key:-}"
+}
+
+ai.openai_api_base() {
+  ai._openai_init
+  printf '%s\n' "${ai_openai_base:-}"
+}
+
+ai.openai_require_api_key() {
+  ai._openai_init
+  if [[ -z ${ai_openai_key:-} ]]; then
+    log.error "OPENAI_API_KEY is not set"
+    return 1
+  fi
+  return 0
+}
+
+ai.openai_request() {
+  local response_var="$1"
+  local method="${2:-POST}"
+  local path="$3"
+  local payload="${4-}"
+  local content_type="${5-application/json}"
+  local -a extra_args=()
+
+  if (($# >= 6)); then
+    extra_args=(${@:6})
+  fi
+
+  if [[ -z $response_var || -z $path ]]; then
+    log.error "ai.openai_request requires a response variable and API path"
+    return 1
+  fi
+
+  ai._openai_init
+  if ! ai.openai_require_api_key; then
+    return 1
+  fi
+
+  method=$(printf '%s' "$method" | tr '[:lower:]' '[:upper:]')
+  local base
+  base=$(ai.openai_api_base)
+  base=${base%/}
+  local url="${base}${path}"
+
+  local -a http_args=(
+    --header "Authorization: Bearer ${ai_openai_key}"
+  )
+
+  if [[ -n $content_type ]]; then
+    http_args+=(--header "Content-Type: ${content_type}")
+  fi
+
+  if [[ -n $payload ]]; then
+    http_args+=(--data "$payload")
+  fi
+
+  if ((${#extra_args[@]})); then
+    http_args+=("${extra_args[@]}")
+  fi
+
+  http.request "$response_var" "$method" "$url" "${http_args[@]}"
+}
+
+ai.openai_chat_completion() {
+  if (($# < 2)); then
+    log.error "ai.openai_chat_completion requires a response variable and payload"
+    return 1
+  fi
+  local response_var="$1"
+  local payload="$2"
+  local content_type="${3-application/json}"
+  ai.openai_request "$response_var" "POST" "/v1/chat/completions" "$payload" "$content_type"
+}
+
+ai.openai_chat_payload() {
+  local model="$1"
+  local system_prompt="$2"
+  local user_prompt="$3"
+  local temperature="${4:-0}"
+
+  if [[ -z $model ]]; then
+    log.error "ai.openai_chat_payload requires a model name"
+    return 1
+  fi
+
+  if ! declare -F json.escape >/dev/null 2>&1; then
+    log.error "json.escape is required for ai.openai_chat_payload"
+    return 1
+  fi
+
+  local model_json system_json user_json
+  model_json=$(json.escape "$model")
+  system_json=$(json.escape "$system_prompt")
+  user_json=$(json.escape "$user_prompt")
+
+  cat <<AIOJSON
+{
+  "model": "$model_json",
+  "temperature": $temperature,
+  "messages": [
+    {"role": "system", "content": "$system_json"},
+    {"role": "user", "content": "$user_json"}
+  ]
+}
+AIOJSON
+}
+
+ai.openai_agent_chat_payload() {
+  if (($# < 3)); then
+    log.error "ai.openai_agent_chat_payload requires model, agent name, and user prompt"
+    return 1
+  fi
+  local model="$1"
+  local agent="$2"
+  local user_prompt="$3"
+  local temperature="${4:-0}"
+
+  local system_prompt
+  if ! system_prompt=$(ai.agent_prompt "$agent"); then
+    return 1
+  fi
+
+  ai.openai_chat_payload "$model" "$system_prompt" "$user_prompt" "$temperature"
+}
+
+ai.openai_log_error() {
+  local response_var="$1"
+  local fallback="${2:-OpenAI API request failed}"
+
+  if [[ -z $response_var ]]; then
+    log.error "$fallback"
+    return 1
+  fi
+
+  local err
+  err=$(http.response_get "$response_var" error 2>/dev/null || true)
+  if [[ -n $err ]]; then
+    log.error "$err"
+  else
+    local status reason message="$fallback"
+    status=$(http.response_get "$response_var" status 2>/dev/null || true)
+    reason=$(http.response_get "$response_var" reason 2>/dev/null || true)
+    if [[ -n $status ]]; then
+      message+=" (status $status"
+      if [[ -n $reason ]]; then
+        message+=": $reason"
+      fi
+      message+=")"
+    fi
+    log.error "$message"
+  fi
+
+  local body api_message
+  body=$(http.response_get "$response_var" body 2>/dev/null || true)
+  if [[ -n $body && $(command -v jq 2>/dev/null || true) ]]; then
+    api_message=$(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null || true)
+    if [[ -n $api_message ]]; then
+      log.error "$api_message"
+    fi
+  fi
+}
+
+ai.openai_message_text() {
+  local ref="$1"
+  [[ -n $ref ]] || return 1
+  command -v jq >/dev/null 2>&1 || { log.error "jq is required to parse OpenAI responses"; return 1; }
+
+  local body
+  body=$(http.response_get "$ref" body 2>/dev/null) || return 1
+  [[ -n $body ]] || return 1
+
+  # Prefer Responses API shape, then fall back to Chat Completions (string, array, or structured blocks).
+  local result jq_status
+  result=$(jq -er '
+    def flatten_text:
+      if . == null then ""
+      elif type == "string" then .
+      elif type == "array" then map(flatten_text) | join("")
+      elif type == "object" then
+        [
+          .value?,
+          .text?,
+          .content?,
+          .message?
+        ]
+        | map(select(.) | flatten_text)
+        | join("")
+      else ""
+      end;
+
+    (
+      .output_text?
+      | flatten_text
+      | select(length > 0)
+    )
+    //
+    (
+      (
+        .choices[0].message.content?
+        // .choices[0].message?
+      )
+      | flatten_text
+      | select(length > 0)
+    )
+  ' <<<"$body" 2>/dev/null)
+  jq_status=$?
+  if ((jq_status != 0)); then
+    ai._debug_dump_response "jq parse failed with status ${jq_status}" "$body"
+    return 1
+  fi
+
+  if [[ -z $result ]]; then
+    ai._debug_dump_response "jq parse returned an empty result" "$body"
+    return 1
+  fi
+
+  printf '%s\n' "$result"
+}

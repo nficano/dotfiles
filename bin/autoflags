@@ -1,0 +1,621 @@
+#!/usr/bin/env bash
+#/ AI CLI that turns natural language intents into safe shell commands.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [options] <tool> "<intent>"
+#/
+#/ Options:
+#/    -h, --help         Print this help and exit
+#/    -v, --verbose      Enable verbose output
+#/    -y, --yes          Run without confirmation
+#/    -P, --print        Print commands only (no execution)
+#/    -C, --copy         Copy commands to clipboard (implies --print)
+#/    -A, --allow-alt    Allow alternative tools/flows
+#/    -W, --which        Include PATH probe data (requires --allow-alt)
+#/        --context STR  Additional context for the AI prompt
+#/
+#/ Examples:
+#/    $(basename "$0") git "force reset to origin/main"
+#/    $(basename "$0") -C git "undo last commit but keep changes staged"
+#/    $(basename "$0") -y -A -W docker "remove all dangling images"
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+verbose=0
+
+tool=""
+intent=""
+context_extra=""
+
+auto_execute=0
+print_only=0
+copy_to_clipboard=0
+allow_alternatives=0
+probe_which=0
+confirm_default_yes=1
+
+declare -a command_lines=()
+declare -a placeholder_names=()
+declare -a placeholder_defaults=()
+declare -a placeholder_notes=()
+declare -a placeholder_line_indexes=()
+
+autoflags_bool() {
+  local value="${1-}"
+  local default="${2:-0}"
+
+  if [[ -z $value ]]; then
+    printf '%s\n' "$default"
+    return
+  fi
+
+  local lower
+  lower=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in
+  1 | true | yes | on | y)
+    printf '1\n'
+    ;;
+  0 | false | no | off | n)
+    printf '0\n'
+    ;;
+  *)
+    printf '%s\n' "$default"
+    ;;
+  esac
+}
+
+autoflags_bool_word() {
+  local flag="${1:-0}"
+  if ((flag)); then
+    printf 'true'
+  else
+    printf 'false'
+  fi
+}
+
+autoflags_init_config() {
+  auto_execute=0
+  print_only=0
+  copy_to_clipboard=0
+  allow_alternatives=0
+  probe_which=0
+  confirm_default_yes=1
+}
+
+autoflags_apply_env() {
+  local value
+
+  printf '%s\n' "Applying environment variable configuration"
+
+  value=$(autoflags_bool "${AUTOFLAGS_YES:-}" 0)
+  auto_execute=$value
+  printf '%s\n' "  AUTOFLAGS_YES: $auto_execute"
+
+  value=$(autoflags_bool "${AUTOFLAGS_PRINT:-}" 0)
+  print_only=$value
+  printf '%s\n' "  AUTOFLAGS_PRINT: $print_only"
+
+  value=$(autoflags_bool "${AUTOFLAGS_COPY:-}" 0)
+  copy_to_clipboard=$value
+  printf '%s\n' "  AUTOFLAGS_COPY: $copy_to_clipboard"
+
+  value=$(autoflags_bool "${AUTOFLAGS_ALLOW_ALT:-}" 0)
+  allow_alternatives=$value
+  printf '%s\n' "  AUTOFLAGS_ALLOW_ALT: $allow_alternatives"
+
+  value=$(autoflags_bool "${AUTOFLAGS_CONFIRM_DEFAULT:-}" 1)
+  confirm_default_yes=$value
+  printf '%s\n' "  AUTOFLAGS_CONFIRM_DEFAULT: $confirm_default_yes"
+
+  if ((allow_alternatives)); then
+    value=$(autoflags_bool "${AUTOFLAGS_REQUIRE_WHICH:-}" 0)
+    probe_which=$value
+    printf '%s\n' "  AUTOFLAGS_REQUIRE_WHICH: $probe_which"
+  fi
+
+  if ((copy_to_clipboard)); then
+    print_only=1
+    printf '%s\n' "  Setting print_only=1 due to copy_to_clipboard"
+  fi
+
+  if [[ -n ${AUTOFLAGS_NO_CLIPBOARD:-} ]]; then
+    value=$(autoflags_bool "${AUTOFLAGS_NO_CLIPBOARD}" 1)
+    if ((value)); then
+      copy_to_clipboard=0
+      printf '%s\n' "  Disabling clipboard copy due to AUTOFLAGS_NO_CLIPBOARD"
+    fi
+  fi
+
+  if [[ -z $context_extra && -n ${AUTOFLAGS_CONTEXT:-} ]]; then
+    context_extra="${AUTOFLAGS_CONTEXT}"
+    printf '%s\n' "  AUTOFLAGS_CONTEXT: $context_extra"
+  fi
+}
+
+autoflags_usage_error() {
+  log.error "$1"
+  script.usage 1
+}
+
+parse_args() {
+  autoflags_init_config
+  autoflags_apply_env
+
+  local -a raw_args=()
+
+  while (($#)); do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      shift
+      ;;
+    --)
+      shift
+      while (($#)); do
+        raw_args+=("$1")
+        shift
+      done
+      break
+      ;;
+    *)
+      raw_args+=("$1")
+      shift
+      ;;
+    esac
+  done
+
+  printf '%s\n' "Parsing command line arguments"
+
+  local -a positionals=()
+  local cli_context=""
+
+  local i=0
+  local arg=""
+  while ((i < ${#raw_args[@]})); do
+    arg="${raw_args[i]}"
+    case "$arg" in
+    -y | --yes)
+      auto_execute=1
+      printf '%s\n' "  Flag: auto_execute enabled"
+      ;;
+    -P | --print)
+      print_only=1
+      printf '%s\n' "  Flag: print_only enabled"
+      ;;
+    -C | --copy)
+      copy_to_clipboard=1
+      print_only=1
+      printf '%s\n' "  Flag: copy_to_clipboard enabled"
+      ;;
+    -A | --allow-alt)
+      allow_alternatives=1
+      printf '%s\n' "  Flag: allow_alternatives enabled"
+      ;;
+    -W | --which)
+      probe_which=1
+      printf '%s\n' "  Flag: probe_which enabled"
+      ;;
+    --context)
+      if ((i + 1 >= ${#raw_args[@]})); then
+        autoflags_usage_error "--context requires a value"
+      fi
+      cli_context="${raw_args[i + 1]}"
+      printf '%s\n' "  Flag: context='$cli_context'"
+      ((i++))
+      ;;
+    --)
+      local j=$((i + 1))
+      while ((j < ${#raw_args[@]})); do
+        positionals+=("${raw_args[j]}")
+        ((j++))
+      done
+      break
+      ;;
+    --*)
+      autoflags_usage_error "Unknown option: $arg"
+      ;;
+    -*)
+      autoflags_usage_error "Unknown short option: $arg"
+      ;;
+    *)
+      positionals+=("$arg")
+      ;;
+    esac
+    ((i++))
+  done
+
+  if ((copy_to_clipboard)); then
+    print_only=1
+  fi
+
+  if ((probe_which)) && (( ! allow_alternatives )); then
+    autoflags_usage_error "--which requires --allow-alt"
+  fi
+
+  if ((${#positionals[@]} < 2)); then
+    autoflags_usage_error "Expected <tool> and <intent> arguments"
+  fi
+
+  tool="${positionals[0]}"
+  printf '%s\n' "Tool: $tool"
+
+  local -a intent_parts=("${positionals[@]:1}")
+  printf -v intent '%s ' "${intent_parts[@]}"
+  intent=${intent% }
+  printf '%s\n' "Intent: $intent"
+
+  if [[ -n $cli_context ]]; then
+    context_extra="$cli_context"
+    printf '%s\n' "CLI context: $cli_context"
+  fi
+
+  printf '%s\n' "Final configuration:"
+  printf '  auto_execute=%s\n' "$auto_execute"
+  printf '  print_only=%s\n' "$print_only"
+  printf '  copy_to_clipboard=%s\n' "$copy_to_clipboard"
+  printf '  allow_alternatives=%s\n' "$allow_alternatives"
+  printf '  probe_which=%s\n' "$probe_which"
+}
+
+autoflags_collect_placeholders() {
+  printf '%s\n' "Collecting placeholders from command lines"
+
+  placeholder_names=()
+  placeholder_defaults=()
+  placeholder_notes=()
+  placeholder_line_indexes=()
+
+  local idx=0
+  local count=${#command_lines[@]}
+  printf '%s\n' "  Total command lines: $count"
+  local block_started=0
+  local current_index=-1
+
+  while ((idx < count)); do
+    local line="${command_lines[idx]}"
+    local trimmed
+    trimmed=$(str.trim "$line")
+
+    if [[ -z $trimmed ]]; then
+      if ((block_started)); then
+        current_index=-1
+      fi
+      ((idx++))
+      continue
+    fi
+
+    if [[ $trimmed == \#* ]]; then
+      if ((block_started)) && ((current_index >= 0)); then
+        local existing="${placeholder_notes[current_index]:-}"
+        if [[ -n $existing ]]; then
+          existing+=$'\n'
+        fi
+        existing+="$line"
+        placeholder_notes[current_index]="$existing"
+        ((idx++))
+        continue
+      fi
+      if ((block_started)); then
+        break
+      fi
+      break
+    fi
+
+    if [[ $trimmed =~ ^([A-Z0-9_]+)=(.*)$ ]]; then
+      block_started=1
+      local name="${BASH_REMATCH[1]}"
+      local value="${BASH_REMATCH[2]}"
+      printf '%s\n' "  Found placeholder: $name=$value"
+      placeholder_names+=("$name")
+      placeholder_defaults+=("$value")
+      placeholder_notes+=("")
+      placeholder_line_indexes+=("$idx")
+      current_index=$((${#placeholder_names[@]} - 1))
+      ((idx++))
+      continue
+    fi
+
+    if ((block_started)); then
+      break
+    fi
+
+    break
+  done
+
+  printf '%s\n' "  Collected ${#placeholder_names[@]} placeholder(s)"
+}
+
+autoflags_prompt_placeholders() {
+  local count=${#placeholder_names[@]}
+  ((count)) || return 0
+
+  printf '%s\n' "Additional details required before running commands"
+
+  local i
+  for ((i = 0; i < count; i++)); do
+    local name="${placeholder_names[i]}"
+    local default_value="${placeholder_defaults[i]}"
+    local note="${placeholder_notes[i]}"
+
+    if [[ -n $note ]]; then
+      printf '%s\n' "$note"
+    fi
+
+    local prompt_value=""
+    if [[ -n $default_value ]]; then
+      prompt_value=$(prompt.read_input "Value for $name" "$default_value")
+    else
+      prompt_value=$(prompt.read_required "Value for $name")
+    fi
+
+    placeholder_defaults[i]="$prompt_value"
+
+    local line_index="${placeholder_line_indexes[i]}"
+    command_lines[line_index]="$name=$prompt_value"
+  done
+}
+
+autoflags_join_array() {
+  local array_name="$1"
+  local output=""
+
+  if array._has_var "$array_name"; then
+    eval "set -- \"\${${array_name}[@]}\""
+    if (($#)); then
+      printf -v output '%s\n' "$@"
+      output=${output%$'\n'}
+    fi
+  fi
+
+  printf '%s' "$output"
+}
+
+
+autoflags_confirm() {
+  local prompt="$1"
+  local default_yes="${2:-0}"
+  local reply=""
+
+  if ((default_yes)); then
+    read -r -p "$prompt [Y/n]: " reply || return 1
+    [[ -z $reply ]] && return 0
+  else
+    read -r -p "$prompt [y/N]: " reply || return 1
+    [[ -z $reply ]] && return 1
+  fi
+
+  case "$reply" in
+  [Yy]*) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+autoflags_execute() {
+  local script_content="$1"
+  local tmpfile
+  tmpfile=$(mktemp "${TMPDIR:-/tmp}/autoflags.XXXXXX")
+  printf '%s\n' "$script_content" >"$tmpfile"
+  if ! bash -Eeuo pipefail "$tmpfile"; then
+    local status=$?
+    rm -f "$tmpfile"
+    return $status
+  fi
+  rm -f "$tmpfile"
+}
+
+autoflags_build_context() {
+  printf '%s\n' "Building context for AI prompt"
+
+  local -a lines=()
+
+  if [[ -n $context_extra ]]; then
+    printf '%s\n' "  Adding extra context: ${context_extra:0:50}..."
+    lines+=("$context_extra")
+  fi
+
+  if ((probe_which)); then
+    printf '%s\n' "  Probing PATH for tool: $tool"
+    local which_output
+    if which_output=$(command -v -a "$tool" 2>/dev/null); then
+      printf '%s\n' "  Found $tool in PATH"
+      lines+=("PATH probe for $tool:\n$which_output")
+    else
+      printf '%s\n' "  $tool not found in PATH"
+      lines+=("PATH probe for $tool: not found in PATH")
+    fi
+  fi
+
+  local ctx=""
+  if ((${#lines[@]})); then
+    local entry
+    for entry in "${lines[@]}"; do
+      if [[ -n $ctx ]]; then
+        ctx+=$'\n\n'
+      fi
+      ctx+="$entry"
+    done
+  fi
+
+  printf '%s\n' "  Context length: ${#ctx} characters"
+  printf '%s' "$ctx"
+}
+
+autoflags_build_prompt() {
+  printf '%s\n' "Building AI prompt"
+
+  local escaped_tool
+  local escaped_intent
+  local escaped_context
+
+  escaped_tool=$(json.escape "$tool")
+  escaped_intent=$(json.escape "$intent")
+
+  local context_text
+  context_text=$(autoflags_build_context)
+  escaped_context=$(json.escape "$context_text")
+
+  printf '%s\n' "  Prompt includes: tool, intent, context, flags, constraints"
+
+  cat <<EOF
+tool:      "$escaped_tool"
+intent:    "$escaped_intent"
+context:   "$escaped_context"
+flags:
+  allow_alternatives: $(autoflags_bool_word "$allow_alternatives")
+  probe_which:        $(autoflags_bool_word "$probe_which")
+constraints:
+  - posix_only: true
+  - safe_first: true
+  - print_only: $(autoflags_bool_word "$print_only")
+  - copy_to_clipboard: $(autoflags_bool_word "$copy_to_clipboard")
+  - auto_execute: $(autoflags_bool_word "$auto_execute")
+EOF
+}
+
+autoflags_require_clipboard() {
+  if os.platform.is_darwin; then
+    require.cmd pbcopy || return 1
+  else
+    require.cmd xclip || return 1
+  fi
+}
+
+main() {
+  printf '%s\n' "Starting main execution"
+
+  local model="${AUTOFLAGS_OPENAI_MODEL:-gpt-4o-mini}"
+  local agent="${AUTOFLAGS_OPENAI_AGENT:-autoflags}"
+  local temperature="${AUTOFLAGS_OPENAI_TEMPERATURE:-0}"
+
+  printf '%s\n' "Checking required commands"
+  require.cmd curl jq || exit 1
+
+  if ((copy_to_clipboard)); then
+    printf '%s\n' "Checking clipboard availability"
+    if ! autoflags_require_clipboard; then
+      log.warn "Clipboard copy requested but clipboard tools not available"
+      copy_to_clipboard=0
+    fi
+  fi
+
+  printf '%s\n' "Verifying OpenAI API key"
+  if ! ai.openai_require_api_key; then
+    exit 1
+  fi
+
+  printf '%s\n' "Verifying AI agent configuration"
+  if ! ai.agent_require "$agent"; then
+    exit 1
+  fi
+
+  printf '%s\n' "Using model $model (agent $agent, temperature $temperature)"
+
+  local user_prompt
+  user_prompt=$(autoflags_build_prompt)
+
+  printf '%s\n' "Requesting command plan for '$tool'"
+
+  printf '%s\n' "Building OpenAI payload"
+  local payload
+  if ! payload=$(ai.openai_agent_chat_payload "$model" "$agent" "$user_prompt" "$temperature"); then
+    log.error "Failed to build OpenAI payload"
+    exit 1
+  fi
+
+  printf '%s\n' "Payload size: ${#payload} bytes"
+
+  printf '%s\n' "Sending request to OpenAI API"
+  local response_var="autoflags_response"
+  if ! ai.openai_chat_completion "$response_var" "$payload"; then
+    ai.openai_log_error "$response_var" "Failed to contact OpenAI API"
+    exit 1
+  fi
+
+  printf '%s\n' "Received response from OpenAI API"
+
+  if ! http.response_ok "$response_var"; then
+    ai.openai_log_error "$response_var" "OpenAI API request failed"
+    exit 1
+  fi
+
+  printf '%s\n' "Parsing OpenAI response"
+  local commands_raw
+  if ! commands_raw=$(ai.openai_message_text "$response_var"); then
+    log.error "Unable to parse OpenAI response"
+    exit 1
+  fi
+
+  commands_raw=$(str.trim "$commands_raw")
+  if [[ -z $commands_raw ]]; then
+    log.error "AI response did not contain any commands"
+    exit 1
+  fi
+
+  printf '%s\n' "Response length: ${#commands_raw} characters"
+
+  mapfile -t command_lines <<<"$commands_raw"
+  printf '%s\n' "Parsed ${#command_lines[@]} command line(s)"
+
+  autoflags_collect_placeholders
+  autoflags_prompt_placeholders
+
+  local -a execution_lines=("${command_lines[@]}")
+
+  printf '%s\n' "Preparing command display"
+  local display_output
+  display_output=$(autoflags_join_array execution_lines)
+
+  printf '%s\n' "Commands to run:"
+  printf '%s\n' "$display_output"
+
+  if ((copy_to_clipboard)); then
+    printf '%s\n' "Copying commands to clipboard"
+    if ! printf '%s' "$display_output" | clip.copy; then
+      log.warn "Failed to copy commands to clipboard"
+    else
+      printf '%s\n' "Commands copied to clipboard"
+    fi
+  fi
+
+  if ((print_only)); then
+    printf '%s\n' "Print-only mode, exiting without execution"
+    exit 0
+  fi
+
+  if (( ! auto_execute )); then
+    printf '%s\n' "Prompting user for confirmation"
+    if ! autoflags_confirm "Proceed with execution?" "$confirm_default_yes"; then
+      printf '%s\n' "Execution cancelled by user"
+      exit 1
+    fi
+    printf '%s\n' "User confirmed execution"
+  else
+    printf '%s\n' "Auto-execute mode, skipping confirmation"
+  fi
+
+  printf '%s\n' "Preparing commands for execution"
+  local execution_output
+  execution_output=$(autoflags_join_array execution_lines)
+  if [[ -z $execution_output ]]; then
+    log.error "No commands to execute"
+    exit 1
+  fi
+
+  printf '%s\n' "Executing ${#execution_lines[@]} command(s)"
+  printf '%s\n' "Executing commands"
+  if ! autoflags_execute "$execution_output"; then
+    log.error "Command execution failed"
+    exit 1
+  fi
+
+  log.success "Commands completed successfully"
+  printf '%s\n' "Execution completed successfully"
+}
+
+parse_args "$@"
+main
