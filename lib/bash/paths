@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-shopt -s nullglob dotglob
-
 # _path__is_abs PATH
 _path__is_abs() {
   [[ $1 == /* ]]
