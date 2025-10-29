@@ -1,5 +1,5 @@
 [apply]
-    whitespace = nowarn
+    whitespace = warn
 
 [branch]
     sort = -committerdate
@@ -14,7 +14,6 @@
     branch = auto
     interactive = auto
     ui = true
-    pager = true
 
 [color "diff"]
     meta = yellow
@@ -41,10 +40,9 @@
 [core]
     editor = cursor --wait
     fsmonitor = false
-    untrackedCache = true
     excludesfile = ~/.gitignore
     autocrlf = input
-    pager = diff-so-fancy | less --tabs=4 -RFX
+    pager = diff-so-fancy
 
 [diff]
     tool = default-difftool
@@ -69,9 +67,6 @@
 [gpg]
     format = ssh
 
-[help]
-    autocorrect = prompt
-
 [include]
     path = ~/.gitconfig.local
 
@@ -80,7 +75,7 @@
 
 [merge]
     summary = true
-    ff = false
+    ff = only
     tool = cursor
 
 [merge "ours"]

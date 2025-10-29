@@ -1,11 +1,52 @@
+# ------------------------------------------------------------
+# Commit message template (Conventional Commits + good hygiene)
+# Lines starting with '#' are ignored.
+#
+# RULES:
+# - Subject ≤ 50 chars, imperative mood, no period.
+# - Wrap body at ~72 chars.
+# - Explain the WHY first, then the WHAT/HOW.
+# - Reference issues/PRs in the footer.
+# - Use trailers (Co-authored-by, Signed-off-by, etc.) as needed.
+# ------------------------------------------------------------
 
+# type(scope)!: short imperative subject
+# e.g. feat(auth)!: add TOTP during login
+# types: feat | fix | docs | style | refactor | perf | test | build | ci | chore | revert
+# scope: optional module/area (e.g. api, web, db)
+# "!" marks a breaking change
+<type>(<scope>)<bang-if-breaking>: <subject>
+# --- BODY (why, what, how). Wrap at ~72 cols. ---
+#
+# Why:
+# - Explain the problem or motivation.
+#
+# What:
+# - High-level summary of the change.
+#
+# How:
+# - Key implementation notes, tradeoffs, alternatives considered.
 
-# 50-character subject line
-#
-# 72-character wrapped longer description. This should answer:
-#
-# * Why was this change necessary?
-# * How does it address the problem?
-# * Are there any side effects?
-#
-# Include a link to the ticket, if any.
+# Bullet points for notable changes:
+# - Change 1
+# - Change 2
+# - Change 3
+
+# Any perf, security, or UX impact?
+# - Perf:
+# - Security:
+# - UX:
+
+# --- BREAKING CHANGES (if any) ---
+# BREAKING CHANGE: describe the breaking behavior and required migration steps.
+
+# --- LINKS / REFERENCES ---
+# Closes: #123
+# Related-to: #456
+# See-also: https://link
+
+# --- METADATA / TRAILERS (optional) ---
+# Co-authored-by: Name <email@example.com>
+# Reviewed-by: Name <email@example.com>
+# Signed-off-by: Name <email@example.com>
+# Reverts: <commit SHA>
