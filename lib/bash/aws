@@ -2,32 +2,32 @@
 
 # AWS CLI helpers for common output handling patterns.
 aws.s3_lines_are_socket_warnings() {
-    local -a lines=("$@")
-    local line trimmed lower saw_warning=0 saw_content=0
+  local -a lines=("$@")
+  local line trimmed lower saw_warning=0 saw_content=0
 
-    for line in "${lines[@]}"; do
-        trimmed=$(str.trim "$line")
-        [[ -z "$trimmed" ]] && continue
-        saw_content=1
-        lower=$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')
-        if [[ "$lower" == *" - debug - "* || "$lower" == *" - info - "* || "$lower" == *" - trace - "* ]]; then
-            continue
-        fi
-        if [[ "$lower" =~ ^(debug|info|trace):[[:space:]] ]]; then
-            continue
-        fi
-        if [[ "$lower" == *"warning:"* ]]; then
-            if [[ "$lower" == *"warning: skipping file"* && "$lower" == *"socket"* ]]; then
-                saw_warning=1
-                continue
-            fi
-            return 1
-        fi
-        if [[ "$lower" == *"error"* ]]; then
-            return 1
-        fi
-    done
+  for line in "${lines[@]}"; do
+    trimmed=$(str.trim "$line")
+    [[ -z $trimmed ]] && continue
+    saw_content=1
+    lower=$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')
+    if [[ $lower == *" - debug - "* || $lower == *" - info - "* || $lower == *" - trace - "* ]]; then
+      continue
+    fi
+    if [[ $lower =~ ^(debug|info|trace):[[:space:]] ]]; then
+      continue
+    fi
+    if [[ $lower == *"warning:"* ]]; then
+      if [[ $lower == *"warning: skipping file"* && $lower == *"socket"* ]]; then
+        saw_warning=1
+        continue
+      fi
+      return 1
+    fi
+    if [[ $lower == *"error"* ]]; then
+      return 1
+    fi
+  done
 
-    (( saw_content && saw_warning )) || return 1
-    return 0
+  ((saw_content && saw_warning)) || return 1
+  return 0
 }
