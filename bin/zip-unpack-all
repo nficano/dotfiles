@@ -23,7 +23,7 @@ parse_args() {
   local remaining
   remaining=$(script.parse_common "$@")
 
-  if [[ -n "$remaining" ]]; then
+  if [[ -n $remaining ]]; then
     log.error "This script does not accept positional arguments"
     script.usage 1
   fi
@@ -34,7 +34,7 @@ extract_zip() {
   folder="${file%.*}"
   mkdir -p "$folder"
   unzip -n "$file" -d "$folder" >/dev/null
-  (( verbose )) && log.info "Extracted $file -> $folder"
+  ((verbose)) && log.info "Extracted $file -> $folder"
 }
 
 main() {
@@ -53,7 +53,7 @@ main() {
     extract_zip "$file"
   done
 
-  if (( ! matched )); then
+  if ((!matched)); then
     log.warn "No zip files found"
   fi
 }

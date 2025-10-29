@@ -44,14 +44,14 @@ parse_args() {
   local remaining
   remaining=$(script.parse_common "$@")
 
-  if [[ -z "$remaining" ]]; then
+  if [[ -z $remaining ]]; then
     log.error "URL argument is required"
     script.usage 1
   fi
 
   # shellcheck disable=SC2206
   local args=($remaining)
-  if (( ${#args[@]} != 1 )); then
+  if ((${#args[@]} != 1)); then
     log.error "Expected exactly one URL argument"
     script.usage 1
   fi
@@ -60,7 +60,7 @@ parse_args() {
 }
 
 collect_metrics() {
-  (( verbose )) && log.info "Collecting timing metrics for $url"
+  ((verbose)) && log.info "Collecting timing metrics for $url"
 
   local write_out='%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_pretransfer}|%{time_starttransfer}|%{time_total}|%{time_redirect}|%{size_download}|%{speed_download}|%{http_code}|%{url_effective}|%{remote_ip}|%{num_redirects}|%{content_type}'
   local response=""
@@ -104,12 +104,12 @@ collect_metrics() {
 print_summary() {
   printf 'Target : %s\n' "$metrics_url"
   printf 'Status : %s\n' "${metrics_http_code:-n/a}"
-  [[ -n "$metrics_remote_ip" ]] && printf 'Remote : %s\n' "$metrics_remote_ip"
-  [[ -n "$metrics_content_type" ]] && printf 'Type   : %s\n' "$metrics_content_type"
+  [[ -n $metrics_remote_ip ]] && printf 'Remote : %s\n' "$metrics_remote_ip"
+  [[ -n $metrics_content_type ]] && printf 'Type   : %s\n' "$metrics_content_type"
   printf 'TTFB   : %s\n' "$(fmt.duration_us "$metrics_starttransfer_us")"
   printf 'Total  : %s\n' "$(fmt.duration_us "$metrics_total_us")"
 
-  if (( metrics_num_redirects > 0 )); then
+  if ((metrics_num_redirects > 0)); then
     printf 'Redirects : %s (elapsed %s)\n' \
       "$metrics_num_redirects" \
       "$(fmt.duration_us "$metrics_redirect_us")"
@@ -122,27 +122,27 @@ print_summary() {
 
 render_timeline() {
   local stage_dns_us=$metrics_dns_us
-  local stage_tcp_us=$(( metrics_connect_us - metrics_dns_us ))
-  (( stage_tcp_us < 0 )) && stage_tcp_us=0
+  local stage_tcp_us=$((metrics_connect_us - metrics_dns_us))
+  ((stage_tcp_us < 0)) && stage_tcp_us=0
 
   local stage_tls_us=0
-  if (( metrics_appconnect_us > metrics_connect_us )); then
-    stage_tls_us=$(( metrics_appconnect_us - metrics_connect_us ))
+  if ((metrics_appconnect_us > metrics_connect_us)); then
+    stage_tls_us=$((metrics_appconnect_us - metrics_connect_us))
   fi
 
   local setup_base_us=$metrics_appconnect_us
-  if (( setup_base_us <= metrics_connect_us )); then
+  if ((setup_base_us <= metrics_connect_us)); then
     setup_base_us=$metrics_connect_us
   fi
 
-  local stage_prep_us=$(( metrics_pretransfer_us - setup_base_us ))
-  (( stage_prep_us < 0 )) && stage_prep_us=0
+  local stage_prep_us=$((metrics_pretransfer_us - setup_base_us))
+  ((stage_prep_us < 0)) && stage_prep_us=0
 
-  local stage_wait_us=$(( metrics_starttransfer_us - metrics_pretransfer_us ))
-  (( stage_wait_us < 0 )) && stage_wait_us=0
+  local stage_wait_us=$((metrics_starttransfer_us - metrics_pretransfer_us))
+  ((stage_wait_us < 0)) && stage_wait_us=0
 
-  local stage_transfer_us=$(( metrics_total_us - metrics_starttransfer_us ))
-  (( stage_transfer_us < 0 )) && stage_transfer_us=0
+  local stage_transfer_us=$((metrics_total_us - metrics_starttransfer_us))
+  ((stage_transfer_us < 0)) && stage_transfer_us=0
 
   local -a segments=(
     "DNS Lookup|$stage_dns_us|38;5;110"

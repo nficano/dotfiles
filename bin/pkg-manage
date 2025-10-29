@@ -19,7 +19,7 @@ trap script.cleanup SIGINT SIGTERM ERR EXIT
 
 source "$(dirname "$0")/../lib/bash/initrc"
 
-if (( BASH_VERSINFO[0] < 4 )) || (( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3 )); then
+if ((BASH_VERSINFO[0] < 4)) || ((BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3)); then
   log.error "pkg-manage requires Bash 4.3 or newer"
   exit 1
 fi
@@ -34,7 +34,8 @@ declare -A MANAGER_ALIASES=()
 declare -a MANAGER_KEYS=()
 MANAGER_DEFS_LOADED=0
 
-MANAGER_DEFINITIONS=$(cat <<'EOF'
+MANAGER_DEFINITIONS=$(
+  cat <<'EOF'
 brew|Homebrew|detect=brew|install=brew install {pkg}|update=brew upgrade {pkg}|remove=brew uninstall {pkg}|sudo=0
 port|MacPorts|detect=port|install=port install {pkg}|update=port upgrade {pkg}|remove=port uninstall {pkg}|sudo=1
 apt_get|APT (apt-get)|detect=apt-get|install=apt-get install -y {pkg}|update=apt-get install --only-upgrade -y {pkg}|remove=apt-get remove -y {pkg}|sudo=1
@@ -57,16 +58,16 @@ EOF
 )
 
 load_manager_definitions() {
-  (( MANAGER_DEFS_LOADED )) && return
+  ((MANAGER_DEFS_LOADED)) && return
   MANAGER_DEFS_LOADED=1
 
   local line key label rest
   while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    [[ "$line" =~ ^# ]] && continue
+    [[ -z $line ]] && continue
+    [[ $line =~ ^# ]] && continue
 
     IFS='|' read -r key label rest <<<"$line"
-    [[ -z "$key" ]] && continue
+    [[ -z $key ]] && continue
 
     MANAGER_KEYS+=("$key")
     MANAGER_LABEL["$key"]="$label"
@@ -75,16 +76,16 @@ load_manager_definitions() {
     IFS='|' read -ra props <<<"$rest"
     local prop name value
     for prop in "${props[@]}"; do
-      [[ -z "$prop" ]] && continue
+      [[ -z $prop ]] && continue
       name=${prop%%=*}
       value=${prop#*=}
       case "$name" in
-        detect) MANAGER_DETECT["$key"]="$value" ;;
-        install) MANAGER_INSTALL["$key"]="$value" ;;
-        update) MANAGER_UPDATE["$key"]="$value" ;;
-        remove) MANAGER_REMOVE["$key"]="$value" ;;
-        sudo) MANAGER_SUDO["$key"]="$value" ;;
-        alias) MANAGER_ALIASES["$key"]="$value" ;;
+      detect) MANAGER_DETECT["$key"]="$value" ;;
+      install) MANAGER_INSTALL["$key"]="$value" ;;
+      update) MANAGER_UPDATE["$key"]="$value" ;;
+      remove) MANAGER_REMOVE["$key"]="$value" ;;
+      sudo) MANAGER_SUDO["$key"]="$value" ;;
+      alias) MANAGER_ALIASES["$key"]="$value" ;;
       esac
     done
   done <<<"$MANAGER_DEFINITIONS"
@@ -106,24 +107,24 @@ resolve_manager_key() {
 
   local key
   for key in "${MANAGER_KEYS[@]}"; do
-    if [[ "$normalized" == "$key" ]]; then
+    if [[ $normalized == "$key" ]]; then
       echo "$key"
       return 0
     fi
 
-    if [[ -n "${MANAGER_ALIASES[$key]:-}" ]]; then
+    if [[ -n ${MANAGER_ALIASES[$key]:-} ]]; then
       IFS=',' read -ra alias_list <<<"${MANAGER_ALIASES[$key]}"
       local alias
       for alias in "${alias_list[@]}"; do
-        if [[ "$normalized" == "$(normalize_key "$alias")" ]]; then
+        if [[ $normalized == "$(normalize_key "$alias")" ]]; then
           echo "$key"
           return 0
         fi
       done
     fi
 
-    if [[ -n "${MANAGER_DETECT[$key]:-}" ]]; then
-      if [[ "$normalized" == "$(normalize_key "${MANAGER_DETECT[$key]}")" ]]; then
+    if [[ -n ${MANAGER_DETECT[$key]:-} ]]; then
+      if [[ $normalized == "$(normalize_key "${MANAGER_DETECT[$key]}")" ]]; then
         echo "$key"
         return 0
       fi
@@ -138,7 +139,7 @@ detect_available_managers() {
   local key detect_cmd
   for key in "${MANAGER_KEYS[@]}"; do
     detect_cmd=${MANAGER_DETECT["$key"]:-}
-    [[ -z "$detect_cmd" ]] && continue
+    [[ -z $detect_cmd ]] && continue
     if command -v "$detect_cmd" >/dev/null 2>&1; then
       printf '%s\n' "$key"
     fi
@@ -148,7 +149,7 @@ detect_available_managers() {
 show_detected_managers() {
   local -a available=()
   mapfile -t available < <(detect_available_managers)
-  if (( ${#available[@]} == 0 )); then
+  if ((${#available[@]} == 0)); then
     printf 'No supported package managers detected.\n'
     return 1
   fi
@@ -165,14 +166,14 @@ select_manager() {
   local -a available=()
   mapfile -t available < <(detect_available_managers)
 
-  if [[ -n "$preferred" ]]; then
+  if [[ -n $preferred ]]; then
     if resolve_manager_key "$preferred" >/dev/null; then
       local key
       key=$(resolve_manager_key "$preferred")
 
       local candidate
       for candidate in "${available[@]}"; do
-        if [[ "$candidate" == "$key" ]]; then
+        if [[ $candidate == "$key" ]]; then
           echo "$key"
           return 0
         fi
@@ -185,7 +186,7 @@ select_manager() {
     exit 1
   fi
 
-  if (( ${#available[@]} == 0 )); then
+  if ((${#available[@]} == 0)); then
     log.error "No supported package managers detected"
     exit 1
   fi
@@ -196,7 +197,7 @@ select_manager() {
 command_requires_sudo() {
   local manager="$1"
   local require="${MANAGER_SUDO[$manager]:-0}"
-  if (( require == 0 )); then
+  if ((require == 0)); then
     return 1
   fi
   if [[ $(id -u) -eq 0 ]]; then
@@ -210,21 +211,21 @@ build_action_command() {
   local manager="$1" action="$2" package="$3" output_ref="$4"
   local template
   case "$action" in
-    install) template="${MANAGER_INSTALL[$manager]:-}" ;;
-    update|upgrade) template="${MANAGER_UPDATE[$manager]:-}" ;;
-    uninstall|remove) template="${MANAGER_REMOVE[$manager]:-}" ;;
-    *)
-      log.error "Unsupported command '$action'"
-      exit 1
-      ;;
+  install) template="${MANAGER_INSTALL[$manager]:-}" ;;
+  update | upgrade) template="${MANAGER_UPDATE[$manager]:-}" ;;
+  uninstall | remove) template="${MANAGER_REMOVE[$manager]:-}" ;;
+  *)
+    log.error "Unsupported command '$action'"
+    exit 1
+    ;;
   esac
 
-  if [[ -z "$template" ]]; then
+  if [[ -z $template ]]; then
     log.error "${MANAGER_LABEL[$manager]} does not support '$action'"
     exit 1
   fi
 
-  if [[ -z "$package" ]]; then
+  if [[ -z $package ]]; then
     log.error "A package name is required"
     exit 1
   fi
@@ -252,7 +253,7 @@ run_action() {
   local -a cmd_parts=()
   build_action_command "$manager" "$action" "$package" cmd_parts
 
-  if (( dry_run )); then
+  if ((dry_run)); then
     local formatted=""
     local part
     for part in "${cmd_parts[@]}"; do
@@ -280,51 +281,51 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -l|--list-managers)
-        _list_ref=1
-        ;;
-      --dry-run)
-        _dry_run_ref=1
-        ;;
-      -m|--manager)
-        if [[ $# -lt 2 ]]; then
-          log.error "--manager requires a value"
-          script.usage 1
-        fi
-        _manager_ref=$2
-        shift
-        ;;
-      --)
-        shift
-        while [[ $# -gt 0 ]]; do
-          positional+=("$1")
-          shift
-        done
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
+    -h | --help)
+      script.usage
+      ;;
+    -l | --list-managers)
+      _list_ref=1
+      ;;
+    --dry-run)
+      _dry_run_ref=1
+      ;;
+    -m | --manager)
+      if [[ $# -lt 2 ]]; then
+        log.error "--manager requires a value"
         script.usage 1
-        ;;
-      *)
+      fi
+      _manager_ref=$2
+      shift
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
         positional+=("$1")
-        ;;
+        shift
+      done
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      positional+=("$1")
+      ;;
     esac
     shift
   done
 
-  if (( ${#positional[@]} >= 1 )); then
+  if ((${#positional[@]} >= 1)); then
     _action_ref="${positional[0]}"
   fi
 
-  if (( ${#positional[@]} >= 2 )); then
+  if ((${#positional[@]} >= 2)); then
     _package_ref="${positional[1]}"
   fi
 
-  if (( ${#positional[@]} > 2 )); then
+  if ((${#positional[@]} > 2)); then
     log.error "Too many positional arguments"
     script.usage 1
   fi
@@ -341,26 +342,25 @@ main() {
 
   parse_args action package manager list_only dry_run "$@"
 
-  if (( list_only )); then
+  if ((list_only)); then
     show_detected_managers
     exit $?
   fi
 
-  if [[ -z "$action" ]]; then
+  if [[ -z $action ]]; then
     log.error "A command is required"
     script.usage 1
   fi
 
   case "$action" in
-    install|update|upgrade|uninstall|remove)
-      ;;
-    *)
-      log.error "Unsupported command '$action'"
-      script.usage 1
-      ;;
+  install | update | upgrade | uninstall | remove) ;;
+  *)
+    log.error "Unsupported command '$action'"
+    script.usage 1
+    ;;
   esac
 
-  if [[ -z "$package" ]]; then
+  if [[ -z $package ]]; then
     log.error "A package name must be supplied"
     script.usage 1
   fi

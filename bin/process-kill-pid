@@ -12,16 +12,16 @@ set -o nounset # Disallow expansion of unset variables
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
 usage() {
-    grep '^#/' <"$0" | cut -c4-
-    exit 0
+  grep '^#/' <"$0" | cut -c4-
+  exit 0
 }
 
 if [ "$#" -ne 1 ]; then
-    usage
+  usage
 fi
 
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    usage
+  usage
 fi
 
 sudo kill -TERM "$1"

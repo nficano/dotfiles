@@ -2,8 +2,8 @@
 
 # Numeric helpers mirroring bits of Python's math utilities.
 math.seconds_to_microseconds() {
-    local seconds="${1:-0}"
-    awk -v value="$seconds" 'BEGIN {
+  local seconds="${1:-0}"
+  awk -v value="$seconds" 'BEGIN {
         if (value + 0 <= 0) {
             printf "%d", 0
         } else {

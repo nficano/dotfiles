@@ -1,41 +1,55 @@
 #!/usr/bin/env bash
 
 # Session state capture inspired by Python's inspect and pprint tooling.
-state._dump_env() { env | sort; }
-state._dump_shopt() { shopt -p 2>/dev/null | sort; }
-state._dump_seto() { set -o | sort; }
-state._dump_aliases() { alias -p | sort; }
-state._dump_functions() { declare -F | awk '{print $3}' | sort; }
-state._dump_path() { tr ':' '\n' <<<"$PATH"; }
-state._dump_completions() { complete -p 2>/dev/null | sort; }
+state._dump_env() {
+  env | sort
+}
+state._dump_shopt() {
+  shopt -p 2>/dev/null | sort
+}
+state._dump_seto() {
+  set -o | sort
+}
+state._dump_aliases() {
+  alias -p | sort
+}
+state._dump_functions() {
+  declare -F | awk '{print $3}' | sort
+}
+state._dump_path() {
+  tr ':' '\n' <<<"$PATH"
+}
+state._dump_completions() {
+  complete -p 2>/dev/null | sort
+}
 
 state.capture_begin() {
-    local name=${1:-session}
-    local base="$(cache.dir)/state/${name}/pre"
-    mkdir -p "$base"
-    state._dump_env >"$base/env"
-    state._dump_shopt >"$base/shopt"
-    state._dump_seto >"$base/seto"
-    state._dump_aliases >"$base/aliases"
-    state._dump_functions >"$base/functions"
-    state._dump_path >"$base/path"
-    state._dump_completions >"$base/completions"
-    export STATE_CAPTURE_NAME="$name"
+  local name=${1:-session}
+  local base="$(cache.dir)/state/${name}/pre"
+  mkdir -p "$base"
+  state._dump_env >"$base/env"
+  state._dump_shopt >"$base/shopt"
+  state._dump_seto >"$base/seto"
+  state._dump_aliases >"$base/aliases"
+  state._dump_functions >"$base/functions"
+  state._dump_path >"$base/path"
+  state._dump_completions >"$base/completions"
+  export STATE_CAPTURE_NAME="$name"
 }
 
 state.capture_end() {
-    local name="${1:-${STATE_CAPTURE_NAME:-session}}"
-    local pre="$(cache.dir)/state/${name}/pre"
-    local post="$(cache.dir)/state/${name}/post"
-    mkdir -p "$post"
-    state._dump_env >"$post/env"
-    state._dump_shopt >"$post/shopt"
-    state._dump_seto >"$post/seto"
-    state._dump_aliases >"$post/aliases"
-    state._dump_functions >"$post/functions"
-    state._dump_path >"$post/path"
-    state._dump_completions >"$post/completions"
-    if command -v diff >/dev/null 2>&1; then
-        diff -ru "$pre" "$post" >"$(cache.dir)/state/${name}/diff.txt" || true
-    fi
+  local name="${1:-${STATE_CAPTURE_NAME:-session}}"
+  local pre="$(cache.dir)/state/${name}/pre"
+  local post="$(cache.dir)/state/${name}/post"
+  mkdir -p "$post"
+  state._dump_env >"$post/env"
+  state._dump_shopt >"$post/shopt"
+  state._dump_seto >"$post/seto"
+  state._dump_aliases >"$post/aliases"
+  state._dump_functions >"$post/functions"
+  state._dump_path >"$post/path"
+  state._dump_completions >"$post/completions"
+  if command -v diff >/dev/null 2>&1; then
+    diff -ru "$pre" "$post" >"$(cache.dir)/state/${name}/diff.txt" || true
+  fi
 }

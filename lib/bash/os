@@ -2,130 +2,130 @@
 
 # OS and platform helpers similar in spirit to Python's os and sys modules.
 os.devnull() {
-    "$@" 2>/dev/null >/dev/null
+  "$@" 2>/dev/null >/dev/null
 }
 
 os.setenv() {
-    export "${1}"="${2}"
+  export "${1}"="${2}"
 }
 
 os.getenv() {
-    env | grep "^$1=" | cut -d'=' -f2
+  env | grep "^$1=" | cut -d'=' -f2
 }
 
 sys.platform() {
-    uname -s | tr "[:upper:]" "[:lower:]"
+  uname -s | tr "[:upper:]" "[:lower:]"
 }
 
 os.platform.is_darwin() {
-    [[ $(sys.platform) == darwin ]]
+  [[ $(sys.platform) == darwin ]]
 }
 
 os.platform.is_linux() {
-    [[ $(sys.platform) == linux ]]
+  [[ $(sys.platform) == linux ]]
 }
 
 os.path.exists() {
-    [[ -f "$1" ]]
+  [[ -f $1 ]]
 }
 
 sys.path.contains() {
-    os.devnull command -v "$1"
+  os.devnull command -v "$1"
 }
 
 sys.path.prepend() {
-    [[ -d "$1" ]] && PATH="$1:${PATH}"
+  [[ -d $1 ]] && PATH="$1:${PATH}"
 }
 
 sys.path.append() {
-    [[ -d "$1" ]] && PATH="${PATH}:$1"
+  [[ -d $1 ]] && PATH="${PATH}:$1"
 }
 
 sys.path.prepend_many() {
-    local d
-    for d in "$@"; do
-        sys.path.prepend "$d"
-    done
+  local d
+  for d in "$@"; do
+    sys.path.prepend "$d"
+  done
 }
 
 sys.path.append_many() {
-    local d
-    for d in "$@"; do
-        sys.path.append "$d"
-    done
+  local d
+  for d in "$@"; do
+    sys.path.append "$d"
+  done
 }
 
 clip.copy() {
-    if os.platform.is_darwin; then
-        pbcopy
-    else
-        xclip -selection clipboard
-    fi
+  if os.platform.is_darwin; then
+    pbcopy
+  else
+    xclip -selection clipboard
+  fi
 }
 
 clip.paste() {
-    if os.platform.is_darwin; then
-        pbpaste
-    else
-        xclip -selection clipboard -o
-    fi
+  if os.platform.is_darwin; then
+    pbpaste
+  else
+    xclip -selection clipboard -o
+  fi
 }
 
 # Returns success if $HOME/.machine_id matches the current IOPlatformUUID.
 os.machine_id.matches_current() {
-    local machine_id_file="$HOME/.machine_id"
-    local stored hw_uuid
+  local machine_id_file="$HOME/.machine_id"
+  local stored hw_uuid
 
-    os.platform.is_darwin || return 1
-    sys.path.contains ioreg || return 1
-    [[ -f "$machine_id_file" ]] || return 1
+  os.platform.is_darwin || return 1
+  sys.path.contains ioreg || return 1
+  [[ -f $machine_id_file ]] || return 1
 
-    stored=$(<"$machine_id_file")
-    stored=${stored//$'\n'/}
-    [[ -n "$stored" ]] || return 1
+  stored=$(<"$machine_id_file")
+  stored=${stored//$'\n'/}
+  [[ -n $stored ]] || return 1
 
-    if ! hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
-        return 1
-    fi
-    hw_uuid=${hw_uuid//$'\n'/}
-    [[ -n "$hw_uuid" ]] || return 1
+  if ! hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
+    return 1
+  fi
+  hw_uuid=${hw_uuid//$'\n'/}
+  [[ -n $hw_uuid ]] || return 1
 
-    [[ "$stored" == "$hw_uuid" ]]
+  [[ $stored == "$hw_uuid" ]]
 }
 
 os.on_battery_power() {
-    if command -v pmset >/dev/null 2>&1; then
-        local status
-        status=$(pmset -g batt 2>/dev/null | head -n 1 || true)
-        if [[ "$status" == *"Battery Power"* ]]; then
-            return 0
-        fi
-        if [[ "$status" == *"AC Power"* ]]; then
-            return 1
-        fi
-    elif command -v upower >/dev/null 2>&1; then
-        local battery state_line state
-        battery=$(upower -e 2>/dev/null | grep -m1 battery || true)
-        if [[ -n "$battery" ]]; then
-            state_line=$(upower -i "$battery" 2>/dev/null | grep -i 'state' | head -n1 || true)
-            state=${state_line##*: }
-            state=$(printf '%s' "$state" | tr '[:upper:]' '[:lower:]')
-            if [[ "$state" == "discharging" ]]; then
-                return 0
-            fi
-            if [[ "$state" == "charging" || "$state" == "fully-charged" ]]; then
-                return 1
-            fi
-        fi
-    elif command -v acpi >/dev/null 2>&1; then
-        local acpi_out
-        acpi_out=$(acpi -a 2>/dev/null | head -n1 || true)
-        if [[ "$acpi_out" == *"off-line"* ]]; then
-            return 0
-        fi
-        if [[ "$acpi_out" == *"on-line"* ]]; then
-            return 1
-        fi
+  if command -v pmset >/dev/null 2>&1; then
+    local status
+    status=$(pmset -g batt 2>/dev/null | head -n 1 || true)
+    if [[ $status == *"Battery Power"* ]]; then
+      return 0
     fi
-    return 1
+    if [[ $status == *"AC Power"* ]]; then
+      return 1
+    fi
+  elif command -v upower >/dev/null 2>&1; then
+    local battery state_line state
+    battery=$(upower -e 2>/dev/null | grep -m1 battery || true)
+    if [[ -n $battery ]]; then
+      state_line=$(upower -i "$battery" 2>/dev/null | grep -i 'state' | head -n1 || true)
+      state=${state_line##*: }
+      state=$(printf '%s' "$state" | tr '[:upper:]' '[:lower:]')
+      if [[ $state == "discharging" ]]; then
+        return 0
+      fi
+      if [[ $state == "charging" || $state == "fully-charged" ]]; then
+        return 1
+      fi
+    fi
+  elif command -v acpi >/dev/null 2>&1; then
+    local acpi_out
+    acpi_out=$(acpi -a 2>/dev/null | head -n1 || true)
+    if [[ $acpi_out == *"off-line"* ]]; then
+      return 0
+    fi
+    if [[ $acpi_out == *"on-line"* ]]; then
+      return 1
+    fi
+  fi
+  return 1
 }

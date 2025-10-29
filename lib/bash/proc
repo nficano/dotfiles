@@ -2,74 +2,74 @@
 
 # Process helpers loosely inspired by Python's multiprocessing utilities.
 proc.cpu_count() {
-    local count=4
-    if command -v getconf >/dev/null 2>&1; then
-        count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
-    fi
-    if ! [[ $count =~ ^[0-9]+$ ]] || [[ $count -le 0 ]]; then
-        count=4
-    fi
-    echo "$count"
+  local count=4
+  if command -v getconf >/dev/null 2>&1; then
+    count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+  fi
+  if ! [[ $count =~ ^[0-9]+$ ]] || [[ $count -le 0 ]]; then
+    count=4
+  fi
+  echo "$count"
 }
 
 proc.wait_for_pids() {
-    local pids_ref_name="$1"
-    local had_failure_ref="${2:-}"
-    local had_failure=0
+  local pids_ref_name="$1"
+  local had_failure_ref="${2:-}"
+  local had_failure=0
 
-    if array._has_var "$pids_ref_name"; then
-        eval "local -a pids_ref=(\"\${$pids_ref_name[@]}\")"
-    else
-        local -a pids_ref=()
+  if array._has_var "$pids_ref_name"; then
+    eval "local -a pids_ref=(\"\${$pids_ref_name[@]}\")"
+  else
+    local -a pids_ref=()
+  fi
+
+  local pid
+  for pid in "${pids_ref[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      if ! wait "$pid"; then
+        had_failure=1
+      fi
     fi
+  done
 
-    local pid
-    for pid in "${pids_ref[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            if ! wait "$pid"; then
-                had_failure=1
-            fi
-        fi
-    done
+  if [[ -n $had_failure_ref ]]; then
+    eval "$had_failure_ref=$had_failure"
+  fi
 
-    if [[ -n "$had_failure_ref" ]]; then
-        eval "$had_failure_ref=$had_failure"
-    fi
-
-    array.empty "$pids_ref_name"
+  array.empty "$pids_ref_name"
 }
 
 # Capture combined stdout/stderr from a command into an array while exposing the exit status.
 # When tee_mode is non-zero, stderr is streamed live (useful for progress) and captured via a temp file.
 proc.capture_command() {
-    local out_ref_name="$1"
-    local status_ref_name="$2"
-    local tee_mode="${3:-0}"
-    shift 3
+  local out_ref_name="$1"
+  local status_ref_name="$2"
+  local tee_mode="${3:-0}"
+  shift 3
 
-    array.empty "$out_ref_name"
+  array.empty "$out_ref_name"
 
-    local __tmp status line output
-    if (( tee_mode )); then
-        __tmp=$(mktemp) || return 127
-        "$@" 2> >(tee "$__tmp" >&2)
-        status=$?
-        if [[ -s "$__tmp" ]]; then
-            while IFS= read -r line; do
-                array.push "$out_ref_name" "$line"
-            done <"$__tmp"
-        fi
-        rm -f "$__tmp"
-    else
-        output=$("$@" 2>&1)
-        status=$?
-        while IFS= read -r line; do
-                array.push "$out_ref_name" "$line"
-        done <<<"$output"
+  local __tmp status line output
+  if ((tee_mode)); then
+    __tmp=$(mktemp) || return 127
+    "$@" 2> >(tee "$__tmp" >&2)
+    status=$?
+    if [[ -s $__tmp ]]; then
+      while IFS= read -r line; do
+        array.push "$out_ref_name" "$line"
+      done <"$__tmp"
     fi
+    rm -f "$__tmp"
+  else
+    output=$("$@" 2>&1)
+    status=$?
+    while IFS= read -r line; do
+      array.push "$out_ref_name" "$line"
+    done <<<"$output"
+  fi
 
-    eval "$status_ref_name=$status"
-    return 0
+  eval "$status_ref_name=$status"
+  return 0
 }
 
 : "${proc__interrupt_cleanup_fn:=}"
@@ -81,40 +81,40 @@ proc.capture_command() {
 : "${proc__interrupt_exit_code:=130}"
 
 proc.interrupt_handler_init() {
-    proc__interrupt_cleanup_fn="${1:-cleanup}"
-    proc__interrupt_should_exit_var="${2:-should_exit}"
-    proc__interrupt_interrupted_var="${3:-interrupted}"
-    proc__interrupt_counter_var="${4:-interrupt_count}"
-    proc__interrupt_first_msg="${5:-[WARN] %s received; finishing current work then exiting. Press Ctrl+C again to force quit.}"
-    proc__interrupt_second_msg="${6:-[ERROR] Second %s received; terminating immediately.}"
-    proc__interrupt_exit_code="${7:-130}"
+  proc__interrupt_cleanup_fn="${1:-cleanup}"
+  proc__interrupt_should_exit_var="${2:-should_exit}"
+  proc__interrupt_interrupted_var="${3:-interrupted}"
+  proc__interrupt_counter_var="${4:-interrupt_count}"
+  proc__interrupt_first_msg="${5:-[WARN] %s received; finishing current work then exiting. Press Ctrl+C again to force quit.}"
+  proc__interrupt_second_msg="${6:-[ERROR] Second %s received; terminating immediately.}"
+  proc__interrupt_exit_code="${7:-130}"
 }
 
 proc.handle_interrupt_signal() {
-    local signal="${1:-SIGINT}"
+  local signal="${1:-SIGINT}"
 
-    local cleanup_fn="$proc__interrupt_cleanup_fn"
-    eval "local counter_ref=\${$proc__interrupt_counter_var:-0}"
-    counter_ref=$((counter_ref + 1))
-    eval "$proc__interrupt_counter_var=$counter_ref"
-    eval "$proc__interrupt_interrupted_var=1"
-    eval "$proc__interrupt_should_exit_var=1"
+  local cleanup_fn="$proc__interrupt_cleanup_fn"
+  eval "local counter_ref=\${$proc__interrupt_counter_var:-0}"
+  counter_ref=$((counter_ref + 1))
+  eval "$proc__interrupt_counter_var=$counter_ref"
+  eval "$proc__interrupt_interrupted_var=1"
+  eval "$proc__interrupt_should_exit_var=1"
 
-    if (( counter_ref == 1 )); then
-        printf "$proc__interrupt_first_msg\n" "$signal"
-    else
-        printf "$proc__interrupt_second_msg\n" "$signal"
-        if [[ -n "$cleanup_fn" ]]; then
-            "$cleanup_fn"
-        fi
-        exit "$proc__interrupt_exit_code"
+  if ((counter_ref == 1)); then
+    printf "$proc__interrupt_first_msg\n" "$signal"
+  else
+    printf "$proc__interrupt_second_msg\n" "$signal"
+    if [[ -n $cleanup_fn ]]; then
+      "$cleanup_fn"
     fi
+    exit "$proc__interrupt_exit_code"
+  fi
 }
 
 proc.handle_sigint() {
-    proc.handle_interrupt_signal "SIGINT"
+  proc.handle_interrupt_signal "SIGINT"
 }
 
 proc.handle_sigterm() {
-    proc.handle_interrupt_signal "SIGTERM"
+  proc.handle_interrupt_signal "SIGTERM"
 }

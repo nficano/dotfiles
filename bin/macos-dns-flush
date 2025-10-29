@@ -23,14 +23,14 @@ parse_args() {
   local remaining
   remaining=$(script.parse_common "$@")
 
-  if [[ -n "$remaining" ]]; then
+  if [[ -n $remaining ]]; then
     log.error "This script does not accept positional arguments"
     script.usage 1
   fi
 }
 
 main() {
-  (( verbose )) && log.info "Flushing DNS caches"
+  ((verbose)) && log.info "Flushing DNS caches"
 
   sudo dscacheutil -flushcache
   sudo killall -HUP mDNSResponder

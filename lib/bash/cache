@@ -2,45 +2,45 @@
 
 # Simple caching primitives akin to Python's functools.lru_cache patterns.
 cache.dir() {
-    local base="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
-    mkdir -p "$base"
-    echo "$base"
+  local base="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+  mkdir -p "$base"
+  echo "$base"
 }
 
 cache.path_for() {
-    local key="$1"
-    echo "$(cache.dir)/$(echo "$key" | tr '/ ' '__')"
+  local key="$1"
+  echo "$(cache.dir)/$(echo "$key" | tr '/ ' '__')"
 }
 
 cache.get() {
-    local key="$1" ttl=${2:-0}
-    local f
-    f=$(cache.path_for "$key")
-    [[ -f $f ]] || return 1
-    if (( ttl > 0 )); then
-        local now
-        local mtime
-        now=$(date +%s)
-        mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
-        (( now - mtime <= ttl )) || return 1
-    fi
-    cat "$f"
+  local key="$1" ttl=${2:-0}
+  local f
+  f=$(cache.path_for "$key")
+  [[ -f $f ]] || return 1
+  if ((ttl > 0)); then
+    local now
+    local mtime
+    now=$(date +%s)
+    mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+    ((now - mtime <= ttl)) || return 1
+  fi
+  cat "$f"
 }
 
 cache.set() {
-    local key="$1" f
-    f=$(cache.path_for "$key")
-    cat - >"$f"
+  local key="$1" f
+  f=$(cache.path_for "$key")
+  cat - >"$f"
 }
 
 shell.eval_cached() {
-    local key="$1" ttl="$2" cmd="$3"
-    local data
-    if data=$(cache.get "$key" "$ttl" 2>/dev/null); then
-        eval "$data"
-        return
-    fi
-    data="$($cmd)"
-    printf "%s" "$data" | cache.set "$key"
+  local key="$1" ttl="$2" cmd="$3"
+  local data
+  if data=$(cache.get "$key" "$ttl" 2>/dev/null); then
     eval "$data"
+    return
+  fi
+  data="$($cmd)"
+  printf "%s" "$data" | cache.set "$key"
+  eval "$data"
 }

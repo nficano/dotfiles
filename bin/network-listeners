@@ -3,7 +3,6 @@
 #/
 #/ Usage: network-listeners
 
-
 set -euo pipefail
 
 # ---------- Colors ----------
@@ -11,7 +10,7 @@ supports_color() {
   [[ -t 1 ]] || return 1
   local n
   n=$(tput colors 2>/dev/null || echo 0)
-  (( n > 0 ))
+  ((n > 0))
 }
 
 if supports_color; then
@@ -25,13 +24,21 @@ if supports_color; then
   CLR_MAGENTA="\033[35m"
   CLR_CYAN="\033[36m"
 else
-  CLR_RESET=""; CLR_DIM=""; CLR_BOLD=""; CLR_RED=""; CLR_GREEN=""; CLR_YELLOW=""; CLR_BLUE=""; CLR_MAGENTA=""; CLR_CYAN="";
+  CLR_RESET=""
+  CLR_DIM=""
+  CLR_BOLD=""
+  CLR_RED=""
+  CLR_GREEN=""
+  CLR_YELLOW=""
+  CLR_BLUE=""
+  CLR_MAGENTA=""
+  CLR_CYAN=""
 fi
 
-label() { printf "%b"   "${CLR_BLUE}$*${CLR_RESET}"; }
-val()   { printf "%b\n" "${CLR_GREEN}$*${CLR_RESET}"; }
-warn()  { printf "%b\n" "${CLR_YELLOW}$*${CLR_RESET}"; }
-err()   { printf "%b\n" "${CLR_RED}$*${CLR_RESET}"; }
+label() { printf "%b" "${CLR_BLUE}$*${CLR_RESET}"; }
+val() { printf "%b\n" "${CLR_GREEN}$*${CLR_RESET}"; }
+warn() { printf "%b\n" "${CLR_YELLOW}$*${CLR_RESET}"; }
+err() { printf "%b\n" "${CLR_RED}$*${CLR_RESET}"; }
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
@@ -40,11 +47,13 @@ OS=$(uname -s)
 # Normalize hostnames like local short hostname or "pine" to 127.0.0.1
 normalize_local_host() {
   local hp=$1 host port
-  host=${hp%:*}; port=${hp##*:}
+  host=${hp%:*}
+  port=${hp##*:}
   # Only normalize explicit hostname 'pine'
   case "$host" in
-    pine|pine.local)
-      host=127.0.0.1 ;;
+  pine | pine.local)
+    host=127.0.0.1
+    ;;
   esac
   printf "%s:%s\n" "$host" "$port"
 }
@@ -52,13 +61,13 @@ normalize_local_host() {
 # Get friendly process name from PID
 proc_name_from_pid() {
   local pid=$1 name=""
-  if [[ "$OS" == "Darwin" ]]; then
+  if [[ $OS == "Darwin" ]]; then
     name=$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')
-    [[ -n "$name" ]] && name=${name##*/}
+    [[ -n $name ]] && name=${name##*/}
   else
     name=$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')
   fi
-  [[ -z "$name" ]] && name="pid:$pid"
+  [[ -z $name ]] && name="pid:$pid"
   printf "%s\n" "$name"
 }
 
@@ -90,7 +99,7 @@ print_listeners() {
       }'
   )
 
-  if [[ -z "$lines" ]]; then
+  if [[ -z $lines ]]; then
     warn "  No listening sockets found"
     return
   fi
@@ -98,12 +107,12 @@ print_listeners() {
   # Replace local hostnames like 'pine' with 127.0.0.1 and build name\taddr list
   local out_lines=""
   while IFS=$'\t' read -r pid addr; do
-    [[ -z "$pid" || -z "$addr" ]] && continue
+    [[ -z $pid || -z $addr ]] && continue
     local name
     name=$(proc_name_from_pid "$pid")
     addr=$(normalize_local_host "$addr")
     printf "%s\t%s\n" "$name" "$addr"
-  done <<<"$lines" | sort -k1,1 -k2,2 | awk '!seen[$0]++' > /tmp/.ports_listeners.$$ 2>/dev/null || true
+  done <<<"$lines" | sort -k1,1 -k2,2 | awk '!seen[$0]++' >/tmp/.ports_listeners.$$ 2>/dev/null || true
 
   if [[ ! -s /tmp/.ports_listeners.$$ ]]; then
     rm -f /tmp/.ports_listeners.$$ 2>/dev/null || true
@@ -115,26 +124,28 @@ print_listeners() {
   local PROC_W=30
   local last_name="" pad left
   while IFS=$'\t' read -r name addr; do
-    if [[ "$name" != "$last_name" ]]; then
+    if [[ $name != "$last_name" ]]; then
       printf -v left "%s""  ${name}"
       # pad name field to width
       printf -v pad "%-*s" $((PROC_W))""
       # Build padded label with name truncated/padded
-      if (( ${#name} < PROC_W-2 )); then
-        printf -v left "%-*s" $((PROC_W-2)) "$name"
+      if ((${#name} < PROC_W - 2)); then
+        printf -v left "%-*s" $((PROC_W - 2)) "$name"
       else
         # truncate and add ellipsis if very long
-        local t=${name:0:$((PROC_W-5))}...
-        printf -v left "  %-*s" $((PROC_W-2)) "$t"
+        local t=${name:0:$((PROC_W - 5))}...
+        printf -v left "  %-*s" $((PROC_W - 2)) "$t"
       fi
-      label "$left"; val "$addr"
-      printf -v pad "%-*s" $((PROC_W-2)) ""
+      label "$left"
+      val "$addr"
+      printf -v pad "%-*s" $((PROC_W - 2)) ""
       last_name="$name"
     else
       # subsequent lines: align under address column
-      label "$pad"; val "$addr"
+      label "$pad"
+      val "$addr"
     fi
-  done < /tmp/.ports_listeners.$$
+  done </tmp/.ports_listeners.$$
 
   rm -f /tmp/.ports_listeners.$$ 2>/dev/null || true
 }

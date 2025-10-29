@@ -22,7 +22,7 @@ verbose=0
 assume_yes=0
 
 show_help() {
-  grep '^#/' < "${BASH_SOURCE[0]}" | cut -c4-
+  grep '^#/' <"${BASH_SOURCE[0]}" | cut -c4-
   echo
   select_template 1
 }
@@ -41,7 +41,7 @@ select_template() {
     'interactive:Interactive prompt script'
   )
 
-  if [[ "$show_list" == "1" ]]; then
+  if [[ $show_list == "1" ]]; then
     printf 'Available skeletons:\n'
     local index=1
     local entry
@@ -58,22 +58,22 @@ select_template() {
     local choice
     read -r -p 'Select a template by number or name: ' choice || choice=""
 
-    if [[ -z "$choice" ]]; then
+    if [[ -z $choice ]]; then
       [[ ${templates[0]-} ]] && printf '%s' "${templates[0]%%:*}" && return
       log.error 'Invalid selection.'
       continue
     fi
 
-    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+    if [[ $choice =~ ^[0-9]+$ ]]; then
       local idx=$((choice - 1))
-      if (( idx >= 0 && idx < ${#templates[@]} )); then
+      if ((idx >= 0 && idx < ${#templates[@]})); then
         printf '%s' "${templates[idx]%%:*}"
         return
       fi
     else
       for entry in "${templates[@]}"; do
         local key="${entry%%:*}"
-        if [[ "$choice" == "$key" ]]; then
+        if [[ $choice == "$key" ]]; then
           printf '%s' "$key"
           return
         fi
@@ -90,20 +90,20 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --yes) transformed+=('-y') ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --yes) transformed+=('-y') ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -113,13 +113,16 @@ parse_args() {
 
   while getopts ':hvy' opt; do
     case "$opt" in
-      h)
-        show_help
-        exit 0
-        ;;
-      v) verbose=1 ;;
-      y) assume_yes=1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    h)
+      show_help
+      exit 0
+      ;;
+    v) verbose=1 ;;
+    y) assume_yes=1 ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
     esac
   done
 
@@ -139,7 +142,7 @@ render_script() {
   local skeleton_dir="$script_dir/../skel/bash"
   local skeleton_path="$skeleton_dir/${template}"
 
-  if [[ ! -f "$skeleton_path" ]]; then
+  if [[ ! -f $skeleton_path ]]; then
     log.error "Skeleton not found: $template"
     return 1
   fi
@@ -149,7 +152,7 @@ render_script() {
   escaped="${escaped//&/\\&}"
   escaped="${escaped//\//\/}"
 
-  sed "s/{{ description }}/$escaped/g" "$skeleton_path" > "$target"
+  sed "s/{{ description }}/$escaped/g" "$skeleton_path" >"$target"
 }
 
 main() {
@@ -186,7 +189,7 @@ main() {
 
   fs.mkcd "${destination_dir%/}"
 
-  if [[ -e "$target_path" ]]; then
+  if [[ -e $target_path ]]; then
     if ! prompt.ask_yes_no "File exists at $target_path. Overwrite?" "$assume_yes" 0 "$verbose"; then
       log.warn "Aborting"
       exit 1
@@ -198,7 +201,7 @@ main() {
   chmod +x -- "$target_path"
   log.info "Created $target_path"
 
-  if [[ -n "${EDITOR:-}" ]]; then
+  if [[ -n ${EDITOR:-} ]]; then
     log.info "Opening $target_path in $EDITOR"
     $EDITOR "$target_path"
   else

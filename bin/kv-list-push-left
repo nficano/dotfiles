@@ -13,23 +13,28 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib/envdb"
 
-usage () {
-    grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
-    exit 0
+usage() {
+  grep '^#/ ' <"$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+  exit 0
 }
 
 main() {
   # Check for help flags first
-  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  if [ $# -eq 1 ] && [[ $1 == "-h" || $1 == "--help" ]]; then
     usage
   fi
 
-  [ $# -ge 2 ] || { usage; exit 2; }
+  [ $# -ge 2 ] || {
+    usage
+    exit 2
+  }
   init_db
-  local key="$1"; shift
+  local key="$1"
+  shift
   ensure_type_or_new "$key" list
 
-  local k; k=$(sql_escape "$key")
+  local k
+  k=$(sql_escape "$key")
   # find current min idx (or 0 if none)
   local min_idx
   min_idx=$("$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
@@ -37,9 +42,10 @@ main() {
   local base=$min_idx
   local i=0
   for v in "$@"; do
-    i=$((i+1))
-    local idx=$(( base - i ))
-    local vv; vv=$(sql_escape "$v")
+    i=$((i + 1))
+    local idx=$((base - i))
+    local vv
+    vv=$(sql_escape "$v")
     "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
       "INSERT OR REPLACE INTO list_entries(key, idx, value) VALUES ('${k}', ${idx}, '${vv}');" >/dev/null
   done

@@ -8,30 +8,30 @@
 #/   -f, --font-size     Font size in pixels (default: 16)
 
 usage() {
-    grep '^#/' < "$0" | cut -c4-
-    exit 1
+  grep '^#/' <"$0" | cut -c4-
+  exit 1
 }
 
 font_size=16
 
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        -h|--help)
-            usage
-            ;;
-        -f|--font-size)
-            font_size="$2"
-            shift 2
-            ;;
-        -*)
-            echo "Unknown option $1"
-            usage
-            ;;
-        *)
-            px_value="$1"
-            shift
-            ;;
-    esac
+  case $1 in
+  -h | --help)
+    usage
+    ;;
+  -f | --font-size)
+    font_size="$2"
+    shift 2
+    ;;
+  -*)
+    echo "Unknown option $1"
+    usage
+    ;;
+  *)
+    px_value="$1"
+    shift
+    ;;
+  esac
 done
 
 # Ensure px_value is provided
@@ -42,9 +42,9 @@ px_value=$(echo "$px_value" | sed 's/px$//')
 px_value=$((px_value))
 
 # Validate that px_value is a number
-if ! [[ "$px_value" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$px_value' is not a valid number"
-    exit 1
+if ! [[ $px_value =~ ^[0-9]+$ ]]; then
+  echo "Error: '$px_value' is not a valid number"
+  exit 1
 fi
 
 # Calculate em value with higher precision
@@ -54,15 +54,15 @@ em_value=$(echo "scale=10; $px_value / $font_size" | bc)
 em_value=$(echo "scale=2; ($em_value * 20 + 0.5) / 20" | bc)
 
 # Remove trailing zeros and decimal point if it's a whole number
-if [[ "$em_value" == *".00" ]]; then
-    em_value=${em_value%.00}
-elif [[ "$em_value" == *".0" ]]; then
-    em_value=${em_value%.0}
+if [[ $em_value == *".00" ]]; then
+  em_value=${em_value%.00}
+elif [[ $em_value == *".0" ]]; then
+  em_value=${em_value%.0}
 fi
 
 # Handle exact whole numbers (like 16/16 = 1.0)
-if (( $(echo "$px_value % $font_size == 0" | bc) )); then
-    em_value=$((px_value / font_size))
+if (($(echo "$px_value % $font_size == 0" | bc))); then
+  em_value=$((px_value / font_size))
 fi
 
 # Copy to clipboard

@@ -25,23 +25,23 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        verbose=1
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -51,7 +51,7 @@ parse_args() {
     shift
   done
 
-  if (( ${#args[@]} != 1 )); then
+  if ((${#args[@]} != 1)); then
     log.error "A single path argument is required"
     script.usage 1
   fi
@@ -66,14 +66,14 @@ main() {
   local input resolved
   input="${args[0]}"
 
-  resolved=$(python3 <<'PY' "$input")
+  resolved=$(python3 "$input" <<'PY')
 import os
 import sys
 
 print(os.path.abspath(os.path.expanduser(sys.argv[1])))
 PY
 
-  (( verbose )) && log.info "Resolved path: $resolved"
+  ((verbose)) && log.info "Resolved path: $resolved"
   printf '%s\n' "$resolved"
 }
 

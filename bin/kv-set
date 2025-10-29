@@ -13,18 +13,21 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib/envdb"
 
-usage () {
-    grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
-    exit 0
+usage() {
+  grep '^#/ ' <"$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+  exit 0
 }
 
 main() {
   # Check for help flags first
-  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  if [ $# -eq 1 ] && [[ $1 == "-h" || $1 == "--help" ]]; then
     usage
   fi
 
-  [ $# -eq 2 ] || { usage; exit 2; }
+  [ $# -eq 2 ] || {
+    usage
+    exit 2
+  }
   init_db
   local key="$1" val="$2"
   replace_with_string "$key" "$val"

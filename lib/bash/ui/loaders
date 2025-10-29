@@ -4,16 +4,16 @@
 
 # Spinner frames (braille style for smooth animation).
 loader_frames=(
-    $'\u280b' # ⠋
-    $'\u2819' # ⠙
-    $'\u281a' # ⠚
-    $'\u281e' # ⠞
-    $'\u2816' # ⠖
-    $'\u2826' # ⠦
-    $'\u2834' # ⠴
-    $'\u2832' # ⠲
-    $'\u2833' # ⠳
-    $'\u2823' # ⠓
+  $'\u280b' # ⠋
+  $'\u2819' # ⠙
+  $'\u281a' # ⠚
+  $'\u281e' # ⠞
+  $'\u2816' # ⠖
+  $'\u2826' # ⠦
+  $'\u2834' # ⠴
+  $'\u2832' # ⠲
+  $'\u2833' # ⠳
+  $'\u2823' # ⠓
 )
 loader_spinner_pid=""
 loader_spinner_message=""
@@ -22,53 +22,53 @@ loader_spinner_saved_message=""
 loader_spinner_paused=0
 
 loader.spinner_start() {
-    local message="$1"
-    loader.spinner_stop
-    loader_spinner_message="$message"
-    loader_spinner_saved_message=""
-    loader_spinner_active=1
-    (
-        trap '' TERM
-        local i=0 frame_count=${#loader_frames[@]}
-        while true; do
-            local frame="${loader_frames[i]}"
-            printf '\r\033[K%b%s%b %s' "$(log._color 36)" "$frame" "$(log._reset)" "$loader_spinner_message" >&2
-            i=$(( (i + 1) % frame_count ))
-            sleep 0.1
-        done
-    ) &
-    loader_spinner_pid=$!
+  local message="$1"
+  loader.spinner_stop
+  loader_spinner_message="$message"
+  loader_spinner_saved_message=""
+  loader_spinner_active=1
+  (
+    trap '' TERM
+    local i=0 frame_count=${#loader_frames[@]}
+    while true; do
+      local frame="${loader_frames[i]}"
+      printf '\r\033[K%b%s%b %s' "$(log._color 36)" "$frame" "$(log._reset)" "$loader_spinner_message" >&2
+      i=$(((i + 1) % frame_count))
+      sleep 0.1
+    done
+  ) &
+  loader_spinner_pid=$!
 }
 
 loader.spinner_update() {
-    if [[ -n "${loader_spinner_pid:-}" ]]; then
-        loader_spinner_message="$1"
-    fi
+  if [[ -n ${loader_spinner_pid:-} ]]; then
+    loader_spinner_message="$1"
+  fi
 }
 
 loader.spinner_stop() {
-    if [[ -n "${loader_spinner_pid:-}" ]]; then
-        kill "${loader_spinner_pid}" 2>/dev/null || true
-        wait "${loader_spinner_pid}" 2>/dev/null || true
-        loader_spinner_pid=""
-        printf '\r\033[K' >&2
-    fi
-    loader_spinner_active=0
+  if [[ -n ${loader_spinner_pid:-} ]]; then
+    kill "${loader_spinner_pid}" 2>/dev/null || true
+    wait "${loader_spinner_pid}" 2>/dev/null || true
+    loader_spinner_pid=""
+    printf '\r\033[K' >&2
+  fi
+  loader_spinner_active=0
 }
 
 loader.spinner_pause() {
-    if (( loader_spinner_active )); then
-        loader_spinner_saved_message="$loader_spinner_message"
-        loader_spinner_paused=1
-        loader.spinner_stop
-    fi
+  if ((loader_spinner_active)); then
+    loader_spinner_saved_message="$loader_spinner_message"
+    loader_spinner_paused=1
+    loader.spinner_stop
+  fi
 }
 
 loader.spinner_resume() {
-    if (( loader_spinner_paused )); then
-        loader_spinner_paused=0
-        if [[ -n "$loader_spinner_saved_message" ]]; then
-            loader.spinner_start "$loader_spinner_saved_message"
-        fi
+  if ((loader_spinner_paused)); then
+    loader_spinner_paused=0
+    if [[ -n $loader_spinner_saved_message ]]; then
+      loader.spinner_start "$loader_spinner_saved_message"
     fi
+  fi
 }

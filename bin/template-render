@@ -29,9 +29,8 @@ declare -a SECTION_VARS=()
 declare -a SECTION_BODIES=()
 OUTPUT_BUFFER=""
 
-
 log_verbose() {
-  (( verbose )) && log.info "$*"
+  ((verbose)) && log.info "$*"
 }
 
 die() {
@@ -48,7 +47,7 @@ trim() {
 
 is_truthy() {
   local value="$1"
-  [[ -n "$value" && "$value" != "0" && ! "$value" =~ ^[Ff][Aa][Ll][Ss][Ee]$ ]]
+  [[ -n $value && $value != "0" && ! $value =~ ^[Ff][Aa][Ll][Ss][Ee]$ ]]
 }
 
 set_template_var() {
@@ -58,7 +57,7 @@ set_template_var() {
 
 make_assignment() {
   local pair="$1"
-  [[ "$pair" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || die "invalid assignment '$pair'"
+  [[ $pair =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || die "invalid assignment '$pair'"
   local key="${BASH_REMATCH[1]}"
   local value="${BASH_REMATCH[2]}"
   set_template_var "$key" "$value"
@@ -67,11 +66,11 @@ make_assignment() {
 
 load_vars_file() {
   local file="$1"
-  [[ -f "$file" ]] || die "vars file not found: $file"
+  [[ -f $file ]] || die "vars file not found: $file"
   log_verbose "Loading vars from $file"
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "${line// }" || "$line" =~ ^[[:space:]]*# ]] && continue
-    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+  while IFS= read -r line || [[ -n $line ]]; do
+    [[ -z ${line// /} || $line =~ ^[[:space:]]*# ]] && continue
+    if [[ $line =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
       local key="${BASH_REMATCH[1]}"
       local value="${BASH_REMATCH[2]}"
       set_template_var "$key" "$value"
@@ -81,14 +80,14 @@ load_vars_file() {
 
 load_environment_fallbacks() {
   while IFS='=' read -r key value; do
-    [[ -n "${TEMPLATE_VARS[$key]+_}" ]] && continue
+    [[ -n ${TEMPLATE_VARS[$key]+_} ]] && continue
     TEMPLATE_VARS["$key"]="$value"
   done < <(env)
 }
 
 read_template_content() {
-  if [[ -n "$template_path" ]]; then
-    [[ -f "$template_path" ]] || die "template not found: $template_path"
+  if [[ -n $template_path ]]; then
+    [[ -f $template_path ]] || die "template not found: $template_path"
     log_verbose "Reading template from $template_path"
     TEMPLATE_CONTENT=$(<"$template_path")
   else
@@ -103,15 +102,21 @@ strip_template_comments() {
 lookup_value() {
   local key="$1" ctx="$2" idx="$3"
   case "$key" in
-    '.'|'this') printf '%s' "$ctx"; return ;;
-    \$index)    printf '%s' "$idx"; return ;;
+  '.' | 'this')
+    printf '%s' "$ctx"
+    return
+    ;;
+  \$index)
+    printf '%s' "$idx"
+    return
+    ;;
   esac
   local underscored="${key//./_}"
-  if [[ -n "${TEMPLATE_VARS[$underscored]+_}" ]]; then
+  if [[ -n ${TEMPLATE_VARS[$underscored]+_} ]]; then
     printf '%s' "${TEMPLATE_VARS[$underscored]}"
     return
   fi
-  if [[ -n "${TEMPLATE_VARS[$key]+_}" ]]; then
+  if [[ -n ${TEMPLATE_VARS[$key]+_} ]]; then
     printf '%s' "${TEMPLATE_VARS[$key]}"
     return
   fi
@@ -121,24 +126,24 @@ lookup_value() {
 apply_filter() {
   local value="$1" filter="$2"
   case "$filter" in
-    ''|'default') printf '%s' "$value" ;;
-    upper)        printf '%s' "$value" | tr '[:lower:]' '[:upper:]' ;;
-    lower)        printf '%s' "$value" | tr '[:upper:]' '[:lower:]' ;;
-    trim)         trim "$value" ;;
-    *)            printf '%s' "$value" ;;
+  '' | 'default') printf '%s' "$value" ;;
+  upper) printf '%s' "$value" | tr '[:lower:]' '[:upper:]' ;;
+  lower) printf '%s' "$value" | tr '[:upper:]' '[:lower:]' ;;
+  trim) trim "$value" ;;
+  *) printf '%s' "$value" ;;
   esac
 }
 
 expand_inline() {
   local input="$1" ctx="$2" idx="$3"
   local output="" rest="$input"
-  while [[ "$rest" =~ (.*?)\{\{([^}]*)\}\}(.*) ]]; do
+  while [[ $rest =~ (.*?)\{\{([^}]*)\}\}(.*) ]]; do
     local pre="${BASH_REMATCH[1]}"
     local tag="${BASH_REMATCH[2]}"
     rest="${BASH_REMATCH[3]}"
     output+="$pre"
     local var filter
-    if [[ "$tag" =~ ^[[:space:]]*([^|]+)[[:space:]]*\|[[:space:]]*(.*)$ ]]; then
+    if [[ $tag =~ ^[[:space:]]*([^|]+)[[:space:]]*\|[[:space:]]*(.*)$ ]]; then
       var="$(trim "${BASH_REMATCH[1]}")"
       filter="$(trim "${BASH_REMATCH[2]}")"
     else
@@ -147,7 +152,7 @@ expand_inline() {
     fi
     local value
     value="$(lookup_value "$var" "$ctx" "$idx")"
-    if [[ -z "$value" && -n "$filter" && "$filter" != upper && "$filter" != lower && "$filter" != trim ]]; then
+    if [[ -z $value && -n $filter && $filter != upper && $filter != lower && $filter != trim ]]; then
       output+="$filter"
     else
       output+="$(apply_filter "$value" "$filter")"
@@ -165,23 +170,23 @@ section_push() {
 
 section_pop() {
   local size=${#SECTION_TYPES[@]}
-  (( size > 0 )) || die "unbalanced section close"
+  ((size > 0)) || die "unbalanced section close"
   local idx=$((size - 1))
   SECTION_POP_TYPE="${SECTION_TYPES[$idx]}"
   SECTION_POP_VAR="${SECTION_VARS[$idx]}"
   SECTION_POP_BODY="${SECTION_BODIES[$idx]}"
   unset 'SECTION_TYPES[$idx]' 'SECTION_VARS[$idx]' 'SECTION_BODIES[$idx]'
-  if (( ${#SECTION_TYPES[@]} )); then
+  if ((${#SECTION_TYPES[@]})); then
     SECTION_TYPES=("${SECTION_TYPES[@]}")
   else
     SECTION_TYPES=()
   fi
-  if (( ${#SECTION_VARS[@]} )); then
+  if ((${#SECTION_VARS[@]})); then
     SECTION_VARS=("${SECTION_VARS[@]}")
   else
     SECTION_VARS=()
   fi
-  if (( ${#SECTION_BODIES[@]} )); then
+  if ((${#SECTION_BODIES[@]})); then
     SECTION_BODIES=("${SECTION_BODIES[@]}")
   else
     SECTION_BODIES=()
@@ -191,7 +196,7 @@ section_pop() {
 append_line() {
   local text="$1"
   if [[ ${#SECTION_TYPES[@]} -gt 0 ]]; then
-    local idx=$(( ${#SECTION_BODIES[@]} - 1 ))
+    local idx=$((${#SECTION_BODIES[@]} - 1))
     local existing="${SECTION_BODIES[idx]}"
     SECTION_BODIES[idx]="${existing}${text}"$'\n'
   else
@@ -204,9 +209,9 @@ render_if_section() {
   local resolved
   resolved="$(lookup_value "$var" "" "")"
   if is_truthy "$resolved"; then
-    while IFS= read -r line || [[ -n "$line" ]]; do
+    while IFS= read -r line || [[ -n $line ]]; do
       append_line "$(expand_inline "$line" "" "")"
-    done <<< "$body"
+    done <<<"$body"
   fi
 }
 
@@ -220,26 +225,26 @@ render_each_section() {
   for entry in "${items[@]}"; do
     local trimmed_entry
     trimmed_entry="$(trim "$entry")"
-    if [[ -z "$trimmed_entry" ]]; then
-      (( index++ ))
+    if [[ -z $trimmed_entry ]]; then
+      ((index++))
       continue
     fi
-    while IFS= read -r line || [[ -n "$line" ]]; do
+    while IFS= read -r line || [[ -n $line ]]; do
       append_line "$(expand_inline "$line" "$trimmed_entry" "$index")"
-    done <<< "$body"
-    (( index++ ))
+    done <<<"$body"
+    ((index++))
   done
 }
 
 handle_section_close() {
   local closing_type="$1"
   section_pop
-  if [[ "$SECTION_POP_TYPE" != "$closing_type" ]]; then
+  if [[ $SECTION_POP_TYPE != "$closing_type" ]]; then
     die "mismatched section close for $closing_type"
   fi
   case "$closing_type" in
-    if)   render_if_section "$SECTION_POP_VAR" "$SECTION_POP_BODY" ;;
-    each) render_each_section "$SECTION_POP_VAR" "$SECTION_POP_BODY" ;;
+  if) render_if_section "$SECTION_POP_VAR" "$SECTION_POP_BODY" ;;
+  each) render_each_section "$SECTION_POP_VAR" "$SECTION_POP_BODY" ;;
   esac
 }
 
@@ -248,25 +253,25 @@ render_template() {
   SECTION_TYPES=()
   SECTION_VARS=()
   SECTION_BODIES=()
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ \{\{#if[[:space:]]+([^}]+)\}\} ]]; then
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ \{\{#if[[:space:]]+([^}]+)\}\} ]]; then
       local varname
       varname="$(trim "${BASH_REMATCH[1]}")"
       section_push "if" "$varname"
       continue
     fi
-    if [[ "$line" =~ \{\{#each[[:space:]]+([^}]+)\}\} ]]; then
+    if [[ $line =~ \{\{#each[[:space:]]+([^}]+)\}\} ]]; then
       local varname
       varname="$(trim "${BASH_REMATCH[1]}")"
       section_push "each" "$varname"
       continue
     fi
-    if [[ "$line" =~ \{\{/(if|each)\}\} ]]; then
+    if [[ $line =~ \{\{/(if|each)\}\} ]]; then
       handle_section_close "${BASH_REMATCH[1]}"
       continue
     fi
     append_line "$(expand_inline "$line" "" "")"
-  done <<< "$TEMPLATE_CONTENT"
+  done <<<"$TEMPLATE_CONTENT"
 
   if [[ ${#SECTION_TYPES[@]} -ne 0 ]]; then
     die "unclosed section(s)"
@@ -279,46 +284,46 @@ parse_args() {
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -V|--version)
-        printf '%s %s\n' "$SCRIPT_NAME" "$SCRIPT_VERSION"
-        exit 0
-        ;;
-      --verbose)
-        verbose=1
-        shift
-        ;;
-      --vars)
-        [[ $# -gt 1 ]] || die "--vars requires a file path"
-        load_vars_file "$2"
-        shift 2
-        ;;
-      --vars=*)
-        load_vars_file "${1#*=}"
-        shift
-        ;;
-      -v|--var)
-        [[ $# -gt 1 ]] || die "-v requires KEY=VALUE"
-        make_assignment "$2"
-        shift 2
-        ;;
-      --var=*)
-        make_assignment "${1#*=}"
-        shift
-        ;;
-      --)
-        shift
-        break
-        ;;
-      -* )
-        die "unknown option $1"
-        ;;
-      *)
-        positional+=("$1")
-        shift
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -V | --version)
+      printf '%s %s\n' "$SCRIPT_NAME" "$SCRIPT_VERSION"
+      exit 0
+      ;;
+    --verbose)
+      verbose=1
+      shift
+      ;;
+    --vars)
+      [[ $# -gt 1 ]] || die "--vars requires a file path"
+      load_vars_file "$2"
+      shift 2
+      ;;
+    --vars=*)
+      load_vars_file "${1#*=}"
+      shift
+      ;;
+    -v | --var)
+      [[ $# -gt 1 ]] || die "-v requires KEY=VALUE"
+      make_assignment "$2"
+      shift 2
+      ;;
+    --var=*)
+      make_assignment "${1#*=}"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option $1"
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
     esac
   done
 

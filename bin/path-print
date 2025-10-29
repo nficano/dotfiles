@@ -21,14 +21,14 @@ parse_args() {
   local remaining
   remaining=$(script.parse_common "$@")
 
-  if [[ -n "$remaining" ]]; then
+  if [[ -n $remaining ]]; then
     log.error "This script does not accept positional arguments"
     script.usage 1
   fi
 }
 
 main() {
-  (( verbose )) && log.info "Printing PATH entries"
+  ((verbose)) && log.info "Printing PATH entries"
   tr ':' '\n' <<<"${PATH:-}"
 }
 

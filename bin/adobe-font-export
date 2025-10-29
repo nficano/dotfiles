@@ -13,102 +13,101 @@
 #   output-directory   Directory to copy fonts to (defaults to current directory)
 
 usage() {
-    grep '^# ' "$0" | cut -c3-
-    exit 0
+  grep '^# ' "$0" | cut -c3-
+  exit 0
 }
 
 convert_to_ttf() {
-    local input_file="$1"
-    local output_file="$2"
-    if command -v fontforge >/dev/null 2>&1; then
-        fontforge -lang=ff -c "Open('$input_file'); Generate('$output_file');" >/dev/null 2>&1
-        return $?
-    else
-        echo "Error: fontforge is required for TTF conversion. Please install it first."
-        exit 1
-    fi
+  local input_file="$1"
+  local output_file="$2"
+  if command -v fontforge >/dev/null 2>&1; then
+    fontforge -lang=ff -c "Open('$input_file'); Generate('$output_file');" >/dev/null 2>&1
+    return $?
+  else
+    echo "Error: fontforge is required for TTF conversion. Please install it first."
+    exit 1
+  fi
 }
 
 convert_to_woff2() {
-    local input_file="$1"
-    local output_file="$2"
-    if command -v woff2_compress >/dev/null 2>&1; then
-        woff2_compress "$input_file" > "$output_file" 2>/dev/null
-        return $?
-    else
-        echo "Error: woff2 is required for WOFF2 conversion. Please install it first."
-        exit 1
-    fi
+  local input_file="$1"
+  local output_file="$2"
+  if command -v woff2_compress >/dev/null 2>&1; then
+    woff2_compress "$input_file" >"$output_file" 2>/dev/null
+    return $?
+  else
+    echo "Error: woff2 is required for WOFF2 conversion. Please install it first."
+    exit 1
+  fi
 }
 
 find_and_export_font() {
-    cd "$HOME/Library/Application Support/Adobe/CoreSync/plugins/livetype/"
-    # grab all otf dot files (adjust to your needs)
-    find . -type f -iname "*.otf" | while read file
-    do
-        # the "Postscript name:" does not contain spaces. good for file names.
-        fontName=$(otfinfo --info "$file" | grep -F "PostScript name:" | grep -oE "[^ ]+$")
-        # Check if fontName matches the search term (case-insensitive)
-        if [[ "${fontName,,}" == *"${search,,}"* ]]; then
-            if [ "$convert_to_ttf" = true ]; then
-                output_file="$output_dir/$fontName.ttf"
-                if convert_to_ttf "$file" "$output_file"; then
-                    echo "Converted to TTF: $file -> $output_file"
-                else
-                    echo "Failed to convert to TTF: $file"
-                fi
-            elif [ "$convert_to_woff2" = true ]; then
-                output_file="$output_dir/$fontName.woff2"
-                if convert_to_woff2 "$file" "$output_file"; then
-                    echo "Converted to WOFF2: $file -> $output_file"
-                else
-                    echo "Failed to convert to WOFF2: $file"
-                fi
-            else
-                cp "$file" "$output_dir/$fontName.otf"
-                echo "Copied: $file -> $output_dir/$fontName.otf"
-            fi
+  cd "$HOME/Library/Application Support/Adobe/CoreSync/plugins/livetype/"
+  # grab all otf dot files (adjust to your needs)
+  find . -type f -iname "*.otf" | while read file; do
+    # the "Postscript name:" does not contain spaces. good for file names.
+    fontName=$(otfinfo --info "$file" | grep -F "PostScript name:" | grep -oE "[^ ]+$")
+    # Check if fontName matches the search term (case-insensitive)
+    if [[ ${fontName,,} == *"${search,,}"* ]]; then
+      if [ "$convert_to_ttf" = true ]; then
+        output_file="$output_dir/$fontName.ttf"
+        if convert_to_ttf "$file" "$output_file"; then
+          echo "Converted to TTF: $file -> $output_file"
+        else
+          echo "Failed to convert to TTF: $file"
         fi
-    done
+      elif [ "$convert_to_woff2" = true ]; then
+        output_file="$output_dir/$fontName.woff2"
+        if convert_to_woff2 "$file" "$output_file"; then
+          echo "Converted to WOFF2: $file -> $output_file"
+        else
+          echo "Failed to convert to WOFF2: $file"
+        fi
+      else
+        cp "$file" "$output_dir/$fontName.otf"
+        echo "Copied: $file -> $output_dir/$fontName.otf"
+      fi
+    fi
+  done
 }
 
 convert_to_ttf=false
 convert_to_woff2=false
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            usage
-            ;;
-        --ttf)
-            convert_to_ttf=true
-            shift
-            ;;
-        --woff2)
-            convert_to_woff2=true
-            shift
-            ;;
-        *)
-            if [ -z "$search" ]; then
-                search="$1"
-            elif [ -z "$output_dir" ]; then
-                output_dir="$1"
-            fi
-            shift
-            ;;
-    esac
+  case "$1" in
+  -h | --help)
+    usage
+    ;;
+  --ttf)
+    convert_to_ttf=true
+    shift
+    ;;
+  --woff2)
+    convert_to_woff2=true
+    shift
+    ;;
+  *)
+    if [ -z "$search" ]; then
+      search="$1"
+    elif [ -z "$output_dir" ]; then
+      output_dir="$1"
+    fi
+    shift
+    ;;
+  esac
 done
 
 # Check for positional argument
 if [ -z "$search" ]; then
-    echo "Error: Font name (or part) required."
-    usage
+  echo "Error: Font name (or part) required."
+  usage
 fi
 
 # Check for mutually exclusive options
 if [ "$convert_to_ttf" = true ] && [ "$convert_to_woff2" = true ]; then
-    echo "Error: Cannot use --ttf and --woff2 options together."
-    usage
+  echo "Error: Cannot use --ttf and --woff2 options together."
+  usage
 fi
 
-output_dir="${output_dir:-$PWD}"  # Use provided directory if set, otherwise use current directory
+output_dir="${output_dir:-$PWD}" # Use provided directory if set, otherwise use current directory
 find_and_export_font

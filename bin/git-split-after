@@ -11,57 +11,63 @@
 # Example: git-split-after -b feature-branch -u abc1234
 
 usage() {
-    grep '^# ' "$0" | cut -c3-
-    exit 1
+  grep '^# ' "$0" | cut -c3-
+  exit 1
 }
 
 branch_name=""
 until_hash=""
 
 while getopts "hb:u:" opt; do
-    case "$opt" in
-        h) usage ;;
-        b) branch_name="$OPTARG" ;;
-        u) until_hash="$OPTARG" ;;
-        *) usage ;;
-    esac
+  case "$opt" in
+  h) usage ;;
+  b) branch_name="$OPTARG" ;;
+  u) until_hash="$OPTARG" ;;
+  *) usage ;;
+  esac
 done
 shift $((OPTIND - 1))
 
 # Ensure required parameters are provided
-[ -z "$branch_name" ] && { echo "Error: Branch name (-b) is required"; usage; }
-[ -z "$until_hash" ] && { echo "Error: Until hash (-u) is required"; usage; }
+[ -z "$branch_name" ] && {
+  echo "Error: Branch name (-b) is required"
+  usage
+}
+[ -z "$until_hash" ] && {
+  echo "Error: Until hash (-u) is required"
+  usage
+}
 
 # Validate we're in a git repository
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    echo "Error: Not in a git repository"
-    exit 1
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Error: Not in a git repository"
+  exit 1
 fi
 
 # Validate the until_hash exists
-if ! git rev-parse --verify "$until_hash" > /dev/null 2>&1; then
-    echo "Error: Hash '$until_hash' does not exist"
-    exit 1
+if ! git rev-parse --verify "$until_hash" >/dev/null 2>&1; then
+  echo "Error: Hash '$until_hash' does not exist"
+  exit 1
 fi
 
 # Get current branch name
 current_branch=$(git branch --show-current)
 if [ -z "$current_branch" ]; then
-    echo "Error: Not on a branch (detached HEAD?)"
-    exit 1
+  echo "Error: Not on a branch (detached HEAD?)"
+  exit 1
 fi
 
 # Check if target branch already exists
 if git branch --list "$branch_name" | grep -q "$branch_name"; then
-    echo "Error: Branch '$branch_name' already exists"
-    exit 1
+  echo "Error: Branch '$branch_name' already exists"
+  exit 1
 fi
 
 # Get list of commits from HEAD to until_hash (exclusive)
 commits=$(git rev-list --reverse "$until_hash..HEAD")
 if [ -z "$commits" ]; then
-    echo "No commits found between $until_hash and HEAD"
-    exit 0
+  echo "No commits found between $until_hash and HEAD"
+  exit 0
 fi
 
 echo "Moving the following commits to branch '$branch_name':"

@@ -25,9 +25,9 @@
 set -e
 
 # show usage message and exit
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 1
+usage() {
+  grep '^#/' <"$0" | cut -c4-
+  exit 1
 }
 [ $# -eq 0 ] || [ "$1" = "--help" ] && usage
 
@@ -37,13 +37,13 @@ update=false
 remote=
 while getopts hfur: name; do
   case $name in
-    f) force=true ;;
-    r) remote="$OPTARG" ;;
-    u) update=true ;;
-    ?) usage 2 ;;
+  f) force=true ;;
+  r) remote="$OPTARG" ;;
+  u) update=true ;;
+  ?) usage 2 ;;
   esac
 done
-shift $(($OPTIND - 1))
+shift $((OPTIND - 1))
 
 # remaining arg must be a branch name
 branch="$1"

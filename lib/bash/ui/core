@@ -2,104 +2,105 @@
 
 # UI helpers reminiscent of Python's rich/pretty printing utilities.
 ui.ansi._should_use_color() {
-    local mode="${UI_COLOR_MODE:-auto}"
-    case "$mode" in
-        always) return 0 ;;
-        never) return 1 ;;
-    esac
+  local mode="${UI_COLOR_MODE:-auto}"
+  case "$mode" in
+  always) return 0 ;;
+  never) return 1 ;;
+  esac
 
-    [[ -n "${NO_COLOR:-}" ]] && return 1
-    [[ "${TERM:-}" == "dumb" ]] && return 1
-    [[ -t 1 ]] || return 1
-    return 0
+  [[ -n ${NO_COLOR:-} ]] && return 1
+  [[ ${TERM:-} == "dumb" ]] && return 1
+  [[ -t 1 ]] || return 1
+  return 0
 }
 
 ui.ansi.wrap() {
-    local code="$1"; shift || true
-    local text="$*"
-    if [[ -z "${UI_ANSI_CAN_COLOR:-}" ]]; then
-        if ui.ansi._should_use_color; then
-            UI_ANSI_CAN_COLOR=1
-        else
-            UI_ANSI_CAN_COLOR=0
-        fi
-    fi
-
-    if (( UI_ANSI_CAN_COLOR )); then
-        printf '\033[%sm%s\033[0m' "$code" "$text"
+  local code="$1"
+  shift || true
+  local text="$*"
+  if [[ -z ${UI_ANSI_CAN_COLOR:-} ]]; then
+    if ui.ansi._should_use_color; then
+      UI_ANSI_CAN_COLOR=1
     else
-        printf '%s' "$text"
+      UI_ANSI_CAN_COLOR=0
     fi
+  fi
+
+  if ((UI_ANSI_CAN_COLOR)); then
+    printf '\033[%sm%s\033[0m' "$code" "$text"
+  else
+    printf '%s' "$text"
+  fi
 }
 
 ui.timeline.render() {
-    local title="$1"
-    local segments_ref="$2"
-    local total_us="${3:-0}"
-    local width="${4:-48}"
-    (( width >= 10 )) || width=10
+  local title="$1"
+  local segments_ref="$2"
+  local total_us="${3:-0}"
+  local width="${4:-48}"
+  ((width >= 10)) || width=10
 
-    local -a source_segments=()
-    if declare -p "$segments_ref" &>/dev/null; then
-        eval "source_segments=(\"\${${segments_ref}[@]}\")"
-    fi
+  local -a source_segments=()
+  if declare -p "$segments_ref" &>/dev/null; then
+    eval "source_segments=(\"\${${segments_ref}[@]}\")"
+  fi
 
-    local -a render_segments=()
-    local entry label duration color
-    local max_label=0
-    local computed_total=0
+  local -a render_segments=()
+  local entry label duration color
+  local max_label=0
+  local computed_total=0
 
-    for entry in "${source_segments[@]}"; do
-        IFS='|' read -r label duration color <<<"$entry"
-        duration="${duration:-0}"
-        (( duration < 0 )) && duration=0
-        (( duration == 0 )) && continue
-        color="${color:-36}"
-        render_segments+=("$label|$duration|$color")
-        (( ${#label} > max_label )) && max_label=${#label}
-        computed_total=$((computed_total + duration))
-    done
+  for entry in "${source_segments[@]}"; do
+    IFS='|' read -r label duration color <<<"$entry"
+    duration="${duration:-0}"
+    ((duration < 0)) && duration=0
+    ((duration == 0)) && continue
+    color="${color:-36}"
+    render_segments+=("$label|$duration|$color")
+    ((${#label} > max_label)) && max_label=${#label}
+    computed_total=$((computed_total + duration))
+  done
 
-    if (( ${#render_segments[@]} == 0 )); then
-        printf '%s\n' "${title:-Timeline}"
-        printf '  (no timing data available)\n'
-        return 0
-    fi
+  if ((${#render_segments[@]} == 0)); then
+    printf '%s\n' "${title:-Timeline}"
+    printf '  (no timing data available)\n'
+    return 0
+  fi
 
-    if (( total_us <= 0 )); then
-        total_us=$computed_total
-    fi
+  if ((total_us <= 0)); then
+    total_us=$computed_total
+  fi
 
-    local total_label
-    total_label=$(fmt.duration_us "$total_us")
+  local total_label
+  total_label=$(fmt.duration_us "$total_us")
 
-    if [[ -n "$title" ]]; then
-        printf '%s [%s]\n' "$title" "$total_label"
+  if [[ -n $title ]]; then
+    printf '%s [%s]\n' "$title" "$total_label"
+  else
+    printf 'Timeline [%s]\n' "$total_label"
+  fi
+
+  local count=${#render_segments[@]}
+  local idx=0
+  local cumulative=0
+  for entry in "${render_segments[@]}"; do
+    ((idx++))
+    IFS='|' read -r label duration color <<<"$entry"
+    local start_chars=$((cumulative * width / total_us))
+    local span
+    if ((idx == count)); then
+      span=$((width - start_chars))
     else
-        printf 'Timeline [%s]\n' "$total_label"
+      span=$((duration * width / total_us))
     fi
+    ((span <= 0)) && span=1
+    ((start_chars + span > width)) && span=$((width - start_chars))
+    ((span <= 0)) && span=1
+    local post_spaces=$((width - start_chars - span))
+    ((post_spaces < 0)) && post_spaces=0
 
-    local count=${#render_segments[@]}
-    local idx=0
-    local cumulative=0
-    for entry in "${render_segments[@]}"; do
-        (( idx++ ))
-        IFS='|' read -r label duration color <<<"$entry"
-        local start_chars=$(( cumulative * width / total_us ))
-        local span
-        if (( idx == count )); then
-            span=$(( width - start_chars ))
-        else
-            span=$(( duration * width / total_us ))
-        fi
-        (( span <= 0 )) && span=1
-        (( start_chars + span > width )) && span=$(( width - start_chars ))
-        (( span <= 0 )) && span=1
-        local post_spaces=$(( width - start_chars - span ))
-        (( post_spaces < 0 )) && post_spaces=0
-
-        local percent
-        percent=$(awk -v value="$duration" -v total="$total_us" 'BEGIN {
+    local percent
+    percent=$(awk -v value="$duration" -v total="$total_us" 'BEGIN {
             if (total <= 0) {
                 printf "0.0%%"
             } else {
@@ -107,55 +108,55 @@ ui.timeline.render() {
             }
         }')
 
-        local pre
-        pre=$(text.repeat " " "$start_chars")
-        local segment
-        segment=$(text.repeat "=" "$span")
-        local colored_segment
-        colored_segment=$(ui.ansi.wrap "$color" "$segment")
-        local post
-        post=$(text.repeat " " "$post_spaces")
+    local pre
+    pre=$(text.repeat " " "$start_chars")
+    local segment
+    segment=$(text.repeat "=" "$span")
+    local colored_segment
+    colored_segment=$(ui.ansi.wrap "$color" "$segment")
+    local post
+    post=$(text.repeat " " "$post_spaces")
 
-        printf '  %-*s %9s %8s |%s%s%s|\n' \
-            "$max_label" "$label" \
-            "$(fmt.duration_us "$duration")" \
-            "$percent" \
-            "$pre" "$colored_segment" "$post"
+    printf '  %-*s %9s %8s |%s%s%s|\n' \
+      "$max_label" "$label" \
+      "$(fmt.duration_us "$duration")" \
+      "$percent" \
+      "$pre" "$colored_segment" "$post"
 
-        cumulative=$((cumulative + duration))
-    done
+    cumulative=$((cumulative + duration))
+  done
 }
 
 _UI_LOADER_LOADED=0
 
 ui.loader.ensure() {
-    (( _UI_LOADER_LOADED )) && return 0
-    local loader_path
-    loader_path="$(dirname "${BASH_SOURCE[0]}")/loaders"
-    if [[ ! -f "$loader_path" ]]; then
-        log.warn "ui.loader: loader script not found at $loader_path"
-        return 1
-    fi
-    shell.import "$loader_path" || return 1
-    _UI_LOADER_LOADED=1
+  ((_UI_LOADER_LOADED)) && return 0
+  local loader_path
+  loader_path="$(dirname "${BASH_SOURCE[0]}")/loaders"
+  if [[ ! -f $loader_path ]]; then
+    log.warn "ui.loader: loader script not found at $loader_path"
+    return 1
+  fi
+  shell.import "$loader_path" || return 1
+  _UI_LOADER_LOADED=1
 }
 
 ui.loader.start() {
-    ui.loader.ensure || return 1
-    spinner.start "$@"
+  ui.loader.ensure || return 1
+  spinner.start "$@"
 }
 
 ui.loader.ok() {
-    [[ ${_UI_LOADER_LOADED:-0} -eq 0 ]] && return 0
-    spinner.ok
+  [[ ${_UI_LOADER_LOADED:-0} -eq 0 ]] && return 0
+  spinner.ok
 }
 
 ui.loader.fail() {
-    [[ ${_UI_LOADER_LOADED:-0} -eq 0 ]] && return 0
-    spinner.fail
+  [[ ${_UI_LOADER_LOADED:-0} -eq 0 ]] && return 0
+  spinner.fail
 }
 
 ui.loader.run() {
-    ui.loader.ensure || return 1
-    spinner "$@"
+  ui.loader.ensure || return 1
+  spinner "$@"
 }

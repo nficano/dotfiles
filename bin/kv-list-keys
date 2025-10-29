@@ -13,9 +13,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib/envdb"
 
-usage () {
-    grep '^#/ ' < "$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
-    exit 0
+usage() {
+  grep '^#/ ' <"$0" | cut -c4- | sed "s/\$(basename \"\$0\")/${0##*/}/g"
+  exit 0
 }
 
 glob_to_like() {
@@ -33,14 +33,19 @@ glob_to_like() {
 
 main() {
   # Check for help flags first
-  if [ $# -eq 1 ] && [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  if [ $# -eq 1 ] && [[ $1 == "-h" || $1 == "--help" ]]; then
     usage
   fi
 
-  [ $# -eq 1 ] || { usage; exit 2; }
+  [ $# -eq 1 ] || {
+    usage
+    exit 2
+  }
   init_db
-  local like; like=$(glob_to_like "$1")
-  local lk; lk=$(sql_escape "$like")
+  local like
+  like=$(glob_to_like "$1")
+  local lk
+  lk=$(sql_escape "$like")
   "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
     "SELECT key FROM keys WHERE key LIKE '${lk}' ORDER BY key;"
 }

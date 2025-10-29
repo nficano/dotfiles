@@ -7,7 +7,7 @@
 REAL_UV=$(which -a uv | grep -v "$0" | head -n 1)
 
 # Handle `uv init` specially
-if [[ "$1" == "init" ]]; then
+if [[ $1 == "init" ]]; then
   ENVRC_PATH="$PWD/.envrc"
 
   if [ -f "$ENVRC_PATH" ]; then
@@ -23,8 +23,8 @@ if [[ "$1" == "init" ]]; then
     python3 -m venv "$VENV_PATH"
 
     echo "🌱 Writing .envrc"
-    echo "export VIRTUAL_ENV=\"$VENV_PATH\"" > "$ENVRC_PATH"
-    echo "source \"\$VIRTUAL_ENV/bin/activate\"" >> "$ENVRC_PATH"
+    echo "export VIRTUAL_ENV=\"$VENV_PATH\"" >"$ENVRC_PATH"
+    echo 'source "$VIRTUAL_ENV/bin/activate"' >>"$ENVRC_PATH"
     echo "✅ .envrc created. Run 'direnv allow' to enable auto-activation."
   fi
 

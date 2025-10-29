@@ -27,23 +27,23 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        verbose=1
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -53,7 +53,7 @@ parse_args() {
     shift
   done
 
-  if (( ${#positional[@]} != 1 )); then
+  if ((${#positional[@]} != 1)); then
     log.error "Expected exactly one input file"
     script.usage 1
   fi
@@ -69,7 +69,7 @@ ensure_dependencies() {
 lowercase_extension() {
   local filename="$1"
   local ext="${filename##*.}"
-  if [[ "$filename" == "$ext" ]]; then
+  if [[ $filename == "$ext" ]]; then
     echo ""
   else
     echo "$ext" | tr '[:upper:]' '[:lower:]'
@@ -82,23 +82,23 @@ build_ffmpeg_args() {
   ffmpeg_input_args=()
 
   case "$ext" in
-    mkv|mov|avi|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts|3gp|ogv|vob|f4v)
-      ffmpeg_args=(-c:v libx264 -preset medium -crf 20 -c:a aac -b:a 192k -movflags +faststart)
-      ;;
-    gif)
-      ffmpeg_args=(-vf "fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an)
-      ;;
-    webp)
-      ffmpeg_input_args=(-loop 1 -framerate 30)
-      ffmpeg_args=(-c:v libx264 -t 5 -pix_fmt yuv420p -movflags +faststart -an)
-      ;;
-    mp4)
-      ffmpeg_args=()
-      ;;
-    *)
-      log.error "Unsupported input extension: .$ext"
-      exit 1
-      ;;
+  mkv | mov | avi | wmv | flv | webm | m4v | mpg | mpeg | ts | m2ts | 3gp | ogv | vob | f4v)
+    ffmpeg_args=(-c:v libx264 -preset medium -crf 20 -c:a aac -b:a 192k -movflags +faststart)
+    ;;
+  gif)
+    ffmpeg_args=(-vf "fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an)
+    ;;
+  webp)
+    ffmpeg_input_args=(-loop 1 -framerate 30)
+    ffmpeg_args=(-c:v libx264 -t 5 -pix_fmt yuv420p -movflags +faststart -an)
+    ;;
+  mp4)
+    ffmpeg_args=()
+    ;;
+  *)
+    log.error "Unsupported input extension: .$ext"
+    exit 1
+    ;;
   esac
 }
 
@@ -108,7 +108,7 @@ main() {
 
   local input_file="${positional[0]}"
 
-  if [[ ! -f "$input_file" ]]; then
+  if [[ ! -f $input_file ]]; then
     log.error "Input file not found: $input_file"
     exit 1
   fi
@@ -116,12 +116,12 @@ main() {
   local ext
   ext=$(lowercase_extension "$input_file")
 
-  if [[ -z "$ext" ]]; then
+  if [[ -z $ext ]]; then
     log.error "Input file must have an extension"
     exit 1
   fi
 
-  if [[ "$ext" == "mp4" ]]; then
+  if [[ $ext == "mp4" ]]; then
     log.warn "Input is already an MP4 file"
     exit 0
   fi
@@ -130,13 +130,13 @@ main() {
 
   local output_file="${input_file%.*}.mp4"
 
-  if [[ -e "$output_file" ]]; then
+  if [[ -e $output_file ]]; then
     log.error "Output file already exists: $output_file"
     exit 1
   fi
 
   local ffmpeg_loglevel="error"
-  (( verbose )) && ffmpeg_loglevel="info"
+  ((verbose)) && ffmpeg_loglevel="info"
 
   log.info "Converting $input_file -> $output_file"
 

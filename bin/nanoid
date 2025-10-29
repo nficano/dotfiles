@@ -28,44 +28,53 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        v=1
-        ;;
-      -l|--length|--size)
-        shift
-        [[ $# -gt 0 ]] || { log.error "Missing value for -l"; script.usage 1; }
-        ln="$1"
-        ;;
-      -c|--count)
-        shift
-        [[ $# -gt 0 ]] || { log.error "Missing value for -c"; script.usage 1; }
-        ct="$1"
-        ;;
-      -a|--alphabet)
-        shift
-        [[ $# -gt 0 ]] || { log.error "Missing value for -a"; script.usage 1; }
-        abc="$1"
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      v=1
+      ;;
+    -l | --length | --size)
+      shift
+      [[ $# -gt 0 ]] || {
+        log.error "Missing value for -l"
         script.usage 1
-        ;;
-      *)
-        log.error "Unexpected argument: $1"
+      }
+      ln="$1"
+      ;;
+    -c | --count)
+      shift
+      [[ $# -gt 0 ]] || {
+        log.error "Missing value for -c"
         script.usage 1
-        ;;
+      }
+      ct="$1"
+      ;;
+    -a | --alphabet)
+      shift
+      [[ $# -gt 0 ]] || {
+        log.error "Missing value for -a"
+        script.usage 1
+      }
+      abc="$1"
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      log.error "Unexpected argument: $1"
+      script.usage 1
+      ;;
     esac
     shift
   done
 
-  if (( $# > 0 )); then
+  if (($# > 0)); then
     log.error "Unexpected argument: $1"
     script.usage 1
   fi
@@ -73,7 +82,7 @@ parse_args() {
   script.validate_positive_int "$ln" "Length"
   script.validate_positive_int "$ct" "Count"
 
-  if [[ -z "$abc" ]]; then
+  if [[ -z $abc ]]; then
     log.error "Alphabet may not be empty"
     exit 1
   fi
@@ -83,26 +92,26 @@ parse_args() {
 
 calc_msk() {
   local ab_len="$1" bits=1
-  for ((bits=1; bits<ab_len; bits<<=1)); do :; done
+  for ((bits = 1; bits < ab_len; bits <<= 1)); do :; done
   printf '%d\n' $((bits - 1))
 }
 
 calc_stp() {
   local msk="$1" sz="$2" ab_len="$3"
-  if (( msk == 0 )); then
+  if ((msk == 0)); then
     printf '%d\n' "$sz"
     return
   fi
   local num=$((msk * sz * 8))
   local den=$((ab_len * 5))
   local st=$(((num + den - 1) / den))
-  (( st > 0 )) || st="$sz"
+  ((st > 0)) || st="$sz"
   printf '%d\n' "$st"
 }
 
 make_id() {
   local sz="$1" abc="$2" ab_len=${#abc}
-  if (( ab_len == 1 )); then
+  if ((ab_len == 1)); then
     printf '%*s\n' "$sz" '' | tr ' ' "${abc:0:1}"
     return
   fi
@@ -111,15 +120,15 @@ make_id() {
   local -a out=()
   msk=$(calc_msk "$ab_len")
   st=$(calc_stp "$msk" "$sz" "$ab_len")
-  chunk=$(( st > 256 ? st : 256 ))
+  chunk=$((st > 256 ? st : 256))
 
-  while (( ${#out[@]} < sz )); do
+  while ((${#out[@]} < sz)); do
     while IFS= read -r val; do
-      [[ -z "$val" ]] && continue
-      (( idx = val & msk ))
-      if (( idx < ab_len )); then
+      [[ -z $val ]] && continue
+      ((idx = val & msk))
+      if ((idx < ab_len)); then
         out+=("${abc:idx:1}")
-        if (( ${#out[@]} >= sz )); then
+        if ((${#out[@]} >= sz)); then
           break 2
         fi
       fi
@@ -136,10 +145,10 @@ main() {
   cfg=$(parse_args "$@")
   IFS=$'\t' read -r verbose ln ct abc <<<"$cfg"
 
-  (( verbose )) && log.info "Generating ${ct} ID(s) of length ${ln}"
+  ((verbose)) && log.info "Generating ${ct} ID(s) of length ${ln}"
 
   local i
-  for (( i = 0; i < ct; i++ )); do
+  for ((i = 0; i < ct; i++)); do
     make_id "$ln" "$abc"
   done
 }

@@ -25,23 +25,23 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        verbose=1
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -51,7 +51,7 @@ parse_args() {
     shift
   done
 
-  if (( ${#svgs[@]} == 0 )); then
+  if ((${#svgs[@]} == 0)); then
     log.error "Provide at least one SVG file"
     script.usage 1
   fi
@@ -66,7 +66,7 @@ ensure_dependencies() {
 
 strip_attribution() {
   local file="$1"
-  python3 <<'PY' "$file"
+  python3 "$file" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -91,7 +91,7 @@ PY
 process_svg() {
   local file="$1"
 
-  if [[ ! -f "$file" ]]; then
+  if [[ ! -f $file ]]; then
     log.warn "Skipping missing file: $file"
     return
   fi
@@ -101,7 +101,7 @@ process_svg() {
 
   svgo --multipass -i "$file" >/dev/null 2>&1
 
-  if (( verbose )); then
+  if ((verbose)); then
     log.info "Cleaned $file (removed ${removed:-0} attribution blocks)"
   else
     log.info "Cleaned $file"

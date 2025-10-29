@@ -58,7 +58,7 @@ setup/macos/mac-provision --yes --non-interactive
 
 ### File and Directory Tools
 - **`copyx`** - Simple backup automation to S3.
-- **`up`** - Upload files to S3 and copy the shareable URL to the clipboard (similar to CloudApp)
+- **`s3-upload-and-link`** - Upload files to S3 and copy the shareable URL to the clipboard (similar to CloudApp)
 - **`path-resolve`** - Resolves a relative path to an absolute path (`path-resolve ../some/file`)
 - **`dir-remove-safe`** - Safety wrapper around `rm -rf` for directories; it verifies the target exists before deletion
 - **`path-expand-tilde`** - Expands a path containing `~` to its real location (`path-expand-tilde ~/Downloads`)

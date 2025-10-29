@@ -10,12 +10,12 @@ set -o nounset # Disallow expansion of unset variables
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
 usage() {
-    grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
-    exit 0
+  grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
+  exit 0
 }
 
 if [ "$#" -gt 0 ]; then
-    usage
+  usage
 fi
 
 brew services stop postgresql

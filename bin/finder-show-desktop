@@ -23,14 +23,14 @@ parse_args() {
   local remaining
   remaining=$(script.parse_common "$@")
 
-  if [[ -n "$remaining" ]]; then
+  if [[ -n $remaining ]]; then
     log.error "This script does not accept positional arguments"
     script.usage 1
   fi
 }
 
 main() {
-  (( verbose )) && log.info "Enabling Finder desktop icons"
+  ((verbose)) && log.info "Enabling Finder desktop icons"
 
   defaults write com.apple.finder CreateDesktop -bool true
   killall Finder

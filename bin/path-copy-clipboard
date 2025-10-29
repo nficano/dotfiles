@@ -25,23 +25,23 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        verbose=1
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -51,7 +51,7 @@ parse_args() {
     shift
   done
 
-  if (( ${#args[@]} > 1 )); then
+  if ((${#args[@]} > 1)); then
     log.error "At most one entry may be provided"
     script.usage 1
   fi
@@ -62,7 +62,7 @@ main() {
   base_path=$(pwd)
   entry="${args[0]:-}"
 
-  if [[ -n "$entry" ]]; then
+  if [[ -n $entry ]]; then
     target="${base_path%/}/$entry"
   else
     target="$base_path"
@@ -70,7 +70,7 @@ main() {
 
   printf '%s' "$target" | clip.copy
 
-  (( verbose )) && log.info "Copied path to clipboard: $target"
+  ((verbose)) && log.info "Copied path to clipboard: $target"
 }
 
 parse_args "$@"

@@ -2,16 +2,16 @@
 
 # Homebrew helpers for macOS environments.
 brew.prefix() {
-    if [[ -n "${_BREW_PREFIX:-}" ]]; then
-        echo "$_BREW_PREFIX"
-        return 0
-    fi
-    if os.path.exists /opt/homebrew/bin/brew; then
-        _BREW_PREFIX=/opt/homebrew
-    elif os.path.exists /usr/local/bin/brew; then
-        _BREW_PREFIX=/usr/local
-    else
-        _BREW_PREFIX=""
-    fi
+  if [[ -n ${_BREW_PREFIX:-} ]]; then
     echo "$_BREW_PREFIX"
+    return 0
+  fi
+  if os.path.exists /opt/homebrew/bin/brew; then
+    _BREW_PREFIX=/opt/homebrew
+  elif os.path.exists /usr/local/bin/brew; then
+    _BREW_PREFIX=/usr/local
+  else
+    _BREW_PREFIX=""
+  fi
+  echo "$_BREW_PREFIX"
 }

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
 # Time helpers comparable to Python's time module.
-time.epoch()   { date +%s; }
-time.iso8601() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+time.epoch() {
+  date +%s
+}
+time.iso8601() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}

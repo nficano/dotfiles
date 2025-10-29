@@ -29,29 +29,29 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        verbose=1
-        ;;
-      -cc|--current-color)
-        current_color=1
-        ;;
-      -r|--responsive)
-        responsive=1
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    -cc | --current-color)
+      current_color=1
+      ;;
+    -r | --responsive)
+      responsive=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -61,7 +61,7 @@ parse_args() {
     shift
   done
 
-  if (( ${#targets[@]} == 0 )); then
+  if ((${#targets[@]} == 0)); then
     log.error "Provide at least one SVG file or directory"
     script.usage 1
   fi
@@ -78,39 +78,39 @@ normalize_svg() {
   local file="$1"
   local width="" height=""
 
-  if (( responsive )); then
+  if ((responsive)); then
     width=$(grep -oP '(?<=width=")[^"]+' "$file" || true)
     height=$(grep -oP '(?<=height=")[^"]+' "$file" || true)
     sed -i '' -E 's/(width|height)="[^"]*"//g' "$file"
   fi
 
-  if (( current_color )); then
+  if ((current_color)); then
     sed -i '' -E 's/fill="[^"]*"//g' "$file"
   fi
 
   local additions=""
-  if (( responsive )) && [[ -n "$width" && -n "$height" ]]; then
+  if ((responsive)) && [[ -n $width && -n $height ]]; then
     additions+=" viewBox=\"0 0 $width $height\""
   fi
-  if (( current_color )); then
-    additions+=" fill=\"currentColor\""
+  if ((current_color)); then
+    additions+=' fill="currentColor"'
   fi
 
-  if [[ -n "$additions" ]]; then
+  if [[ -n $additions ]]; then
     sed -i '' -E "s|<svg|<svg${additions}|" "$file"
   fi
 
-  (( verbose )) && log.info "Normalized: $file"
+  ((verbose)) && log.info "Normalized: $file"
 }
 
 process_target() {
   local path="$1"
-  if [[ -d "$path" ]]; then
+  if [[ -d $path ]]; then
     while IFS= read -r -d '' svg; do
       normalize_svg "$svg"
     done < <(find "$path" -type f -name '*.svg' -print0)
-  elif [[ -f "$path" ]]; then
-    if [[ "$path" == *.svg ]]; then
+  elif [[ -f $path ]]; then
+    if [[ $path == *.svg ]]; then
       normalize_svg "$path"
     else
       log.warn "Skipping non-SVG file: $path"
@@ -121,7 +121,7 @@ process_target() {
 }
 
 main() {
-  (( verbose )) && set -x
+  ((verbose)) && set -x
   ensure_tools
   local item
   for item in "${targets[@]}"; do

@@ -2,131 +2,131 @@
 
 # Helpers for reading and transforming YAML configuration values via yq.
 yaml.read_list() {
-    local file="$1"
-    local query="$2"
-    local out_ref_name="$3"
-    local expand_env="${4:-1}"
+  local file="$1"
+  local query="$2"
+  local out_ref_name="$3"
+  local expand_env="${4:-1}"
 
-    array.empty "$out_ref_name"
+  array.empty "$out_ref_name"
 
-    local raw
-    raw=$(yq eval -r "(($query) // [])[]" "$file" 2>/dev/null || true)
-    [[ -z "$raw" ]] && return 0
+  local raw
+  raw=$(yq eval -r "(($query) // [])[]" "$file" 2>/dev/null || true)
+  [[ -z $raw ]] && return 0
 
-    local line trimmed value
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        trimmed=$(str.trim "$line")
-        [[ -z "$trimmed" || "$trimmed" == "null" ]] && continue
-        if (( expand_env )); then
-            value=$(path.expand_env "$trimmed")
-        else
-            value="$trimmed"
-        fi
-        array.push "$out_ref_name" "$value"
-    done <<<"$raw"
+  local line trimmed value
+  while IFS= read -r line || [[ -n $line ]]; do
+    trimmed=$(str.trim "$line")
+    [[ -z $trimmed || $trimmed == "null" ]] && continue
+    if ((expand_env)); then
+      value=$("$trimmed")
+    else
+      value="$trimmed"
+    fi
+    array.push "$out_ref_name" "$value"
+  done <<<"$raw"
 }
 
 yaml.read_string() {
-    local file="$1"
-    local query="$2"
-    local default_value="${3:-}"
-    local expand_env="${4:-1}"
+  local file="$1"
+  local query="$2"
+  local default_value="${3:-}"
+  local expand_env="${4:-1}"
 
-    local value
-    value=$(yq eval -r "$query // \"\"" "$file" 2>/dev/null || true)
-    value=$(str.trim "$value")
-    if [[ -z "$value" || "$value" == "null" ]]; then
-        value="$default_value"
-    fi
-    if (( expand_env )); then
-        value=$(path.expand_env "$value")
-    fi
-    printf '%s\n' "$value"
+  local value
+  value=$(yq eval -r "$query // \"\"" "$file" 2>/dev/null || true)
+  value=$(str.trim "$value")
+  if [[ -z $value || $value == "null" ]]; then
+    value="$default_value"
+  fi
+  if ((expand_env)); then
+    value=$("$value")
+  fi
+  printf '%s\n' "$value"
 }
 
 yaml.read_int() {
-    local file="$1"
-    local query="$2"
-    local default_value="${3:-}"
+  local file="$1"
+  local query="$2"
+  local default_value="${3:-}"
 
-    local value
-    value=$(yq eval -r "$query // \"\"" "$file" 2>/dev/null || true)
-    value=$(str.trim "$value")
+  local value
+  value=$(yq eval -r "$query // \"\"" "$file" 2>/dev/null || true)
+  value=$(str.trim "$value")
 
-    if [[ -z "$value" || "$value" == "null" ]]; then
-        printf '%s\n' "$default_value"
-        return 0
-    fi
+  if [[ -z $value || $value == "null" ]]; then
+    printf '%s\n' "$default_value"
+    return 0
+  fi
 
-    if [[ "$value" =~ ^[0-9]+$ ]]; then
-        printf '%s\n' "$value"
-        return 0
-    fi
+  if [[ $value =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
 
-    return 1
+  return 1
 }
 
 # Convert a list of glob patterns into a combined regular expression.
 yaml.glob_patterns_regex() {
-    local patterns_ref_name="$1"
-    if ! array._has_var "$patterns_ref_name"; then
-        return 1
-    fi
-    eval "local -a __yaml_patterns=(\"\${$patterns_ref_name[@]}\")"
-    local pattern fragment
-    local -a fragments=()
+  local patterns_ref_name="$1"
+  if ! array._has_var "$patterns_ref_name"; then
+    return 1
+  fi
+  eval "local -a __yaml_patterns=(\"\${$patterns_ref_name[@]}\")"
+  local pattern fragment
+  local -a fragments=()
 
-    for pattern in "${__yaml_patterns[@]-}"; do
-        fragment=""
-        local len=${#pattern} i=0 char next
-        while (( i < len )); do
-            char="${pattern:i:1}"
-            next=""
-            if (( i + 1 < len )); then
-                next="${pattern:i+1:1}"
-            fi
-            case "$char" in
-                '*')
-                    if [[ "$next" == "*" ]]; then
-                        fragment+=".*"
-                        (( i++ ))
-                    else
-                        fragment+="[^/]*"
-                    fi
-                    ;;
-                '?')
-                    fragment+='.'
-                    ;;
-                '[')
-                    fragment+='['
-                    (( i++ ))
-                    while (( i < len )); do
-                        char="${pattern:i:1}"
-                        fragment+="$char"
-                        if [[ "$char" == "]" ]]; then
-                            break
-                        fi
-                        (( i++ ))
-                    done
-                    ;;
-                '.'|'+'|'('|')'|'{'|'}'|'|'|'$'|'^'|'\\')
-                    fragment+="\\$char"
-                    ;;
-                *)
-                    fragment+="$char"
-                    ;;
-            esac
-            (( i++ ))
-        done
-        if [[ -n "$fragment" ]]; then
-            fragments+=("$fragment")
+  for pattern in "${__yaml_patterns[@]-}"; do
+    fragment=""
+    local len=${#pattern} i=0 char next
+    while ((i < len)); do
+      char="${pattern:i:1}"
+      next=""
+      if ((i + 1 < len)); then
+        next="${pattern:i+1:1}"
+      fi
+      case "$char" in
+      '*')
+        if [[ $next == "*" ]]; then
+          fragment+=".*"
+          ((i++))
+        else
+          fragment+="[^/]*"
         fi
+        ;;
+      '?')
+        fragment+='.'
+        ;;
+      '[')
+        fragment+='['
+        ((i++))
+        while ((i < len)); do
+          char="${pattern:i:1}"
+          fragment+="$char"
+          if [[ $char == "]" ]]; then
+            break
+          fi
+          ((i++))
+        done
+        ;;
+      '.' | '+' | '(' | ')' | '{' | '}' | '|' | '$' | '^' | '\\')
+        fragment+="\\$char"
+        ;;
+      *)
+        fragment+="$char"
+        ;;
+      esac
+      ((i++))
     done
+    if [[ -n $fragment ]]; then
+      fragments+=("$fragment")
+    fi
+  done
 
-    (( ${#fragments[@]} )) || return 1
+  ((${#fragments[@]})) || return 1
 
-    local combined
-    combined=$(printf '%s|' "${fragments[@]}")
-    combined="${combined%|}"
-    printf '(%s)' "$combined"
+  local combined
+  combined=$(printf '%s|' "${fragments[@]}")
+  combined="${combined%|}"
+  printf '(%s)' "$combined"
 }

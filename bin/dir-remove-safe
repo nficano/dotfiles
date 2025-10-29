@@ -8,23 +8,23 @@
 #/    dir-remove-safe old_project_dir
 #/    dir-remove-safe temp_folder
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
+set -o errexit # Exit on most errors (see the manual)
+set -o nounset # Disallow expansion of unset variables
 #set -o errtrace        # Make sure any error trap is inherited (BASH only)
 #set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 1
+usage() {
+  grep '^#/' <"$0" | cut -c4-
+  exit 1
 }
 
 [ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 1 ] && usage
 
 # Check if target exists and is a directory
 if [ ! -d "$1" ]; then
-    echo "Error: '$1' is not a directory or does not exist"
-    exit 1
+  echo "Error: '$1' is not a directory or does not exist"
+  exit 1
 fi
 
 # Execute rm -rf on the specified directory

@@ -2,19 +2,19 @@
 
 # Formatting helpers comparable to Python's humanize utilities.
 fmt.duration_us() {
-    local micros="${1:-0}"
-    if (( micros >= 1000000 )); then
-        awk -v value="$micros" 'BEGIN { printf "%.2fs", value / 1000000.0 }'
-    elif (( micros >= 1000 )); then
-        awk -v value="$micros" 'BEGIN { printf "%.1fms", value / 1000.0 }'
-    else
-        printf '%dus' "$micros"
-    fi
+  local micros="${1:-0}"
+  if ((micros >= 1000000)); then
+    awk -v value="$micros" 'BEGIN { printf "%.2fs", value / 1000000.0 }'
+  elif ((micros >= 1000)); then
+    awk -v value="$micros" 'BEGIN { printf "%.1fms", value / 1000.0 }'
+  else
+    printf '%dus' "$micros"
+  fi
 }
 
 fmt.bytes() {
-    local bytes="${1:-0}"
-    awk -v value="$bytes" 'BEGIN {
+  local bytes="${1:-0}"
+  awk -v value="$bytes" 'BEGIN {
         if (value + 0 <= 0) {
             printf "0 B"
             exit

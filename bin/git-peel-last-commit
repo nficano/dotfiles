@@ -5,7 +5,7 @@
 
 usage() {
   status=${1:-0}
-  grep '^#/' < "$0" | cut -c4-
+  grep '^#/' <"$0" | cut -c4-
   exit $status
 }
 

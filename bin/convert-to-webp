@@ -26,23 +26,23 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        script.usage
-        ;;
-      -v|--verbose)
-        verbose=1
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -52,7 +52,7 @@ parse_args() {
     shift
   done
 
-  if (( ${#positional[@]} != 1 )); then
+  if ((${#positional[@]} != 1)); then
     log.error "Expected exactly one input file"
     script.usage 1
   fi
@@ -68,7 +68,7 @@ ensure_dependencies() {
 lowercase_extension() {
   local filename="$1"
   local ext="${filename##*.}"
-  if [[ "$filename" == "$ext" ]]; then
+  if [[ $filename == "$ext" ]]; then
     echo ""
   else
     echo "$ext" | tr '[:upper:]' '[:lower:]'
@@ -80,41 +80,41 @@ build_ffmpeg_args() {
   ffmpeg_args=()
 
   case "$ext" in
-    png|jpg|jpeg|bmp|tif|tiff|heic|heif|raw|ppm|pgm|pnm)
-      ffmpeg_args=(-c:v libwebp -lossless 0 -quality 85 -compression_level 6)
-      ;;
-    svg)
-      ffmpeg_args=(-c:v libwebp -lossless 0 -quality 85 -compression_level 6)
-      ;;
-    gif)
-      ffmpeg_args=(
-        -vf "fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2"
-        -c:v libwebp
-        -lossless 0
-        -quality 80
-        -compression_level 6
-        -loop 0
-        -an
-      )
-      ;;
-    mp4|mov|mkv|webm|avi|m4v|mpg|mpeg|3gp|ts|m2ts|ogv)
-      ffmpeg_args=(
-        -vf "fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2"
-        -c:v libwebp
-        -lossless 0
-        -quality 80
-        -compression_level 6
-        -loop 0
-        -an
-      )
-      ;;
-    webp)
-      ffmpeg_args=()
-      ;;
-    *)
-      log.error "Unsupported input extension: .$ext"
-      exit 1
-      ;;
+  png | jpg | jpeg | bmp | tif | tiff | heic | heif | raw | ppm | pgm | pnm)
+    ffmpeg_args=(-c:v libwebp -lossless 0 -quality 85 -compression_level 6)
+    ;;
+  svg)
+    ffmpeg_args=(-c:v libwebp -lossless 0 -quality 85 -compression_level 6)
+    ;;
+  gif)
+    ffmpeg_args=(
+      -vf "fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2"
+      -c:v libwebp
+      -lossless 0
+      -quality 80
+      -compression_level 6
+      -loop 0
+      -an
+    )
+    ;;
+  mp4 | mov | mkv | webm | avi | m4v | mpg | mpeg | 3gp | ts | m2ts | ogv)
+    ffmpeg_args=(
+      -vf "fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2"
+      -c:v libwebp
+      -lossless 0
+      -quality 80
+      -compression_level 6
+      -loop 0
+      -an
+    )
+    ;;
+  webp)
+    ffmpeg_args=()
+    ;;
+  *)
+    log.error "Unsupported input extension: .$ext"
+    exit 1
+    ;;
   esac
 }
 
@@ -124,7 +124,7 @@ main() {
 
   local input_file="${positional[0]}"
 
-  if [[ ! -f "$input_file" ]]; then
+  if [[ ! -f $input_file ]]; then
     log.error "Input file not found: $input_file"
     exit 1
   fi
@@ -132,12 +132,12 @@ main() {
   local ext
   ext=$(lowercase_extension "$input_file")
 
-  if [[ -z "$ext" ]]; then
+  if [[ -z $ext ]]; then
     log.error "Input file must have an extension"
     exit 1
   fi
 
-  if [[ "$ext" == "webp" ]]; then
+  if [[ $ext == "webp" ]]; then
     log.warn "Input is already a WebP file"
     exit 0
   fi
@@ -146,13 +146,13 @@ main() {
 
   local output_file="${input_file%.*}.webp"
 
-  if [[ -e "$output_file" ]]; then
+  if [[ -e $output_file ]]; then
     log.error "Output file already exists: $output_file"
     exit 1
   fi
 
   local ffmpeg_loglevel="error"
-  (( verbose )) && ffmpeg_loglevel="info"
+  ((verbose)) && ffmpeg_loglevel="info"
 
   log.info "Converting $input_file -> $output_file"
 

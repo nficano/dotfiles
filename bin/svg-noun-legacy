@@ -23,7 +23,7 @@ parse_args() {
   local remaining
   remaining=$(script.parse_common "$@")
 
-  if [[ -n "$remaining" ]]; then
+  if [[ -n $remaining ]]; then
     log.error "This script does not accept positional arguments"
     script.usage 1
   fi
@@ -61,7 +61,7 @@ main() {
   local updated
   updated=$(process_svgs)
 
-  if (( verbose )); then
+  if ((verbose)); then
     log.info "Processed noun*.svg files (updated $updated files)"
   else
     log.info "Noun SVG cleanup complete"

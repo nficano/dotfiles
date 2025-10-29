@@ -7,8 +7,8 @@
 #   -h    Show this help message
 
 usage() {
-    grep '^# ' "$0" | cut -c3-
-    exit 1
+  grep '^# ' "$0" | cut -c3-
+  exit 1
 }
 
 flag=0

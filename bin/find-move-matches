@@ -9,15 +9,15 @@
 #/    find-move-matches "*.svg" ~/vectors/
 #/
 
-set -o errexit          # Exit on most errors (see the manual)
-set -o nounset          # Disallow expansion of unset variables
+set -o errexit # Exit on most errors (see the manual)
+set -o nounset # Disallow expansion of unset variables
 #set -o errtrace        # Make sure any error trap is inherited (BASH only)
 #set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
-usage () {
-    grep '^#/' < "$0" | cut -c4-
-    exit 1
+usage() {
+  grep '^#/' <"$0" | cut -c4-
+  exit 1
 }
 [ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 2 ] && usage
 exec find . -type f -name "$1" -exec mv {} $2 \;

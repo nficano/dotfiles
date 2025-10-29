@@ -2,16 +2,16 @@
 
 # Alias helpers for consistent command behavior.
 alias.setup_ls() {
-    if os.platform.is_linux; then
-        alias ls='ls --color=auto -gXF'
-        alias ll='ls --color=auto -algX'
+  if os.platform.is_linux; then
+    alias ls='ls --color=auto -gXF'
+    alias ll='ls --color=auto -algX'
+  else
+    if sys.path.contains gls; then
+      alias ls='gls --color=auto -gXF --group-directories-first --human-readable'
+      alias ll='gls --color=auto -algX --human-readable --group-directories-first'
     else
-        if sys.path.contains gls; then
-            alias ls='gls --color=auto -gXF --group-directories-first --human-readable'
-            alias ll='gls --color=auto -algX --human-readable --group-directories-first'
-        else
-            alias ls='ls -GF --group-directories-first --human-readable'
-            alias ll='ls -alG --group-directories-first --human-readable'
-        fi
+      alias ls='ls -GF --group-directories-first --human-readable'
+      alias ll='ls -alG --group-directories-first --human-readable'
     fi
+  fi
 }
