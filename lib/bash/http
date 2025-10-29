@@ -1,0 +1,665 @@
+#!/usr/bin/env bash
+
+# Minimal HTTP client inspired by Python's `requests`. Provides `http.request`
+# along with convenience helpers (`http.get`, `http.post`, `http.put`,
+# `http.delete`) that accept keyword-like flags for query parameters, headers,
+# payloads, and timeouts. Responses are stored on the caller's chosen prefix,
+# e.g. `http.get resp "https://api.example.com"` populates variables such as
+# `resp_status`, `resp_body`, `resp_headers`, etc.
+
+if [[ -n ${__LIB_BASH_HTTP:-} ]]; then
+  return 0
+fi
+__LIB_BASH_HTTP=1
+
+http._error() {
+  if declare -F log.error >/dev/null 2>&1; then
+    log.error "$@"
+  else
+    printf '%s\n' "$*" >&2
+  fi
+}
+
+http._validate_var_name() {
+  [[ $1 =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+}
+
+http._ensure_curl() {
+  if ! command -v curl >/dev/null 2>&1; then
+    http._error "curl is required for http.request"
+    return 1
+  fi
+  return 0
+}
+
+http._tmpfile() {
+  local prefix="${1:-http}"
+  if declare -F fs.mktmp >/dev/null 2>&1; then
+    fs.mktmp file "$prefix"
+  else
+    mktemp "${TMPDIR:-/tmp}/${prefix}.XXXXXX"
+  fi
+}
+
+http._trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
+}
+
+http._urlencode() {
+  local value="$1"
+  if declare -F str.urlencode >/dev/null 2>&1; then
+    str.urlencode "$value"
+    return
+  fi
+  local encoded="" char
+  local LC_ALL=C
+  local i
+  for ((i = 0; i < ${#value}; i++)); do
+    char=${value:i:1}
+    case "$char" in
+    [a-zA-Z0-9._~-]) encoded+="$char" ;;
+    ' ') encoded+='%20' ;;
+    *)
+      printf -v encoded '%s%%%02X' "$encoded" "'$char"
+      ;;
+    esac
+  done
+  printf '%s\n' "$encoded"
+}
+
+http._collect_params() {
+  local array_name="$1"
+  shift
+  local value="$1"
+  local -a parts=()
+  local IFS='&'
+  read -r -a parts <<<"$value"
+  local part
+  for part in "${parts[@]}"; do
+    [[ -z $part ]] && continue
+    eval "$array_name+=(\"\$part\")"
+  done
+}
+
+http._apply_params() {
+  local url="$1"
+  shift || true
+  (($#)) || {
+    printf '%s\n' "$url"
+    return 0
+  }
+
+  local fragment=""
+  if [[ $url == *'#'* ]]; then
+    fragment="${url#*#}"
+    url="${url%%#*}"
+  fi
+
+  local query="" entry key value encoded_key encoded_value part
+  for entry in "$@"; do
+    [[ -n $entry ]] || continue
+    if [[ $entry == *=* ]]; then
+      key="${entry%%=*}"
+      value="${entry#*=}"
+    else
+      key="$entry"
+      value=""
+    fi
+    encoded_key=$(http._urlencode "$key")
+    encoded_value=$(http._urlencode "$value")
+    part="${encoded_key}=${encoded_value}"
+    if [[ -z $query ]]; then
+      query="$part"
+    else
+      query+="&$part"
+    fi
+  done
+
+  local joiner='?'
+  if [[ $url == *\?* ]]; then
+    joiner='&'
+    if [[ -n $url ]]; then
+      local last_char="${url:${#url}-1:1}"
+      if [[ $last_char == '?' || $last_char == '&' ]]; then
+        joiner=''
+      fi
+    fi
+  fi
+
+  local final="${url}${joiner}${query}"
+  if [[ -n $fragment ]]; then
+    final+="#$fragment"
+  fi
+  printf '%s\n' "$final"
+}
+
+http._final_header_block() {
+  local file="$1"
+  [[ -f $file ]] || return 0
+  local line block=""
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%$'\r'}
+    if [[ $line == HTTP/* ]]; then
+      block="$line"
+    else
+      if [[ -n $block ]]; then
+        block+=$'\n'"$line"
+      fi
+    fi
+  done <"$file"
+  printf '%s\n' "$block"
+}
+
+http._header_from_block() {
+  local block="$1"
+  local lookup="$2"
+  [[ -n $lookup ]] || return 1
+  local lookup_lower
+  lookup_lower=$(printf '%s' "$lookup" | tr '[:upper:]' '[:lower:]')
+  local line name value name_lower
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    [[ -n $line ]] || continue
+    [[ $line == HTTP/* ]] && continue
+    name="${line%%:*}"
+    value="${line#*:}"
+    value="${value# }"
+    name_lower=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+    if [[ $name_lower == "$lookup_lower" ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  done <<<"$block"
+  return 1
+}
+
+http._response_init() {
+  local name="$1"
+  local key
+  for key in status ok reason body text headers elapsed url request_url method error curl_exit content_type encoding request_headers request_body; do
+    unset "${name}_${key}"
+  done
+}
+
+http._response_set() {
+  local name="$1" key="$2" value="$3"
+  local var="${name}_${key}"
+  printf -v "$var" '%s' "$value"
+}
+
+http.response_get() {
+  local name="$1" key="$2"
+  local var="${name}_${key}"
+  printf '%s\n' "${!var-}"
+}
+
+http.response_header() {
+  local name="$1" header="$2"
+  local block
+  block=$(http.response_get "$name" headers)
+  [[ -n $block ]] || return 1
+  http._header_from_block "$block" "$header"
+}
+
+http.response_headers() {
+  local name="$1"
+  http.response_get "$name" headers
+}
+
+http.response_ok() {
+  local ok
+  ok=$(http.response_get "$1" ok)
+  [[ $ok == "1" ]]
+}
+
+http.raise_for_status() {
+  local name="$1"
+  local status
+  status=$(http.response_get "$name" status)
+  [[ -n $status ]] || return 1
+  if [[ $status =~ ^[0-9]+$ ]] && ((status >= 400)); then
+    local url reason message
+    url=$(http.response_get "$name" url)
+    reason=$(http.response_get "$name" reason)
+    message="HTTP $status: ${reason:-Request failed}"
+    if [[ -n $url ]]; then
+      message+=" ($url)"
+    fi
+    http._error "$message"
+    return 1
+  fi
+  return 0
+}
+
+http._looks_like_url() {
+  local candidate="$1"
+  [[ $candidate == *"://"* ]] || [[ $candidate == /* ]]
+}
+
+http._normalize_bool() {
+  local value="$1"
+  value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+  case "$value" in
+  1 | true | yes | on) printf '1\n' ;;
+  0 | false | no | off) printf '0\n' ;;
+  *) return 1 ;;
+  esac
+}
+
+http._join_lines() {
+  local array_name="$1"
+  eval "local -a __items=(\"\${$array_name[@]}\")"
+  local line out=""
+  for line in "${__items[@]}"; do
+    if [[ -z $out ]]; then
+      out="$line"
+    else
+      out+=$'\n'"$line"
+    fi
+  done
+  printf '%s\n' "$out"
+}
+
+# Usage:
+#   http.request <response_var> <METHOD> <url> [options]
+# Options loosely mirror python-requests:
+#   --params/--param/--query    Query string entries (accepts &-separated lists)
+#   --header/--headers          Header lines (repeatable)
+#   --data / --json             Request body payloads (mutually exclusive)
+#   --auth / --basic-auth       user:pass (or user pass)
+#   --bearer                    Bearer token shortcut
+#   --timeout / --connect-timeout  Timeouts passed to curl
+#   --allow-redirects / --no-redirects / --max-redirects
+#   --user-agent                Override User-Agent header
+#   --curl-option               Pass-through to curl (repeatable)
+# Remaining arguments after `--` are appended to the curl command.
+http.request() {
+  local response_var method url
+  if (($# < 3)); then
+    http._error "http.request <response_var> <METHOD> <url> [...options]"
+    return 1
+  fi
+
+  response_var="$1"
+  shift
+  method="$1"
+  shift
+  method=$(printf '%s' "$method" | tr '[:lower:]' '[:upper:]')
+  url="$1"
+  shift
+
+  if ! http._validate_var_name "$response_var"; then
+    http._error "Invalid response variable name: $response_var"
+    return 1
+  fi
+
+  if ! http._ensure_curl; then
+    return 1
+  fi
+
+  http._response_init "$response_var"
+
+  local -a params=()
+  local -a headers=()
+  local -a curl_extra=()
+  local data="" json="" timeout="" connect_timeout="" auth="" user_agent=""
+  local allow_redirects=1 max_redirects=""
+
+  while (($#)); do
+    case "$1" in
+    --params | --param | --query)
+      if (($# < 2)); then
+        http._error "Missing value for $1"
+        return 1
+      fi
+      http._collect_params params "$2"
+      shift 2
+      ;;
+    --header | --headers)
+      if (($# < 2)); then
+        http._error "Missing value for $1"
+        return 1
+      fi
+      headers+=("$2")
+      shift 2
+      ;;
+    --data | -d | --data-binary)
+      if (($# < 2)); then
+        http._error "Missing value for $1"
+        return 1
+      fi
+      data="$2"
+      shift 2
+      ;;
+    --json)
+      if (($# < 2)); then
+        http._error "Missing value for --json"
+        return 1
+      fi
+      json="$2"
+      shift 2
+      ;;
+    --timeout)
+      if (($# < 2)); then
+        http._error "Missing value for --timeout"
+        return 1
+      fi
+      timeout="$2"
+      shift 2
+      ;;
+    --connect-timeout)
+      if (($# < 2)); then
+        http._error "Missing value for --connect-timeout"
+        return 1
+      fi
+      connect_timeout="$2"
+      shift 2
+      ;;
+    --auth | --basic-auth)
+      if (($# >= 3)) && [[ $3 != -* ]]; then
+        auth="$2:$3"
+        shift 3
+      else
+        if (($# < 2)); then
+          http._error "Missing value for $1"
+          return 1
+        fi
+        auth="$2"
+        shift 2
+      fi
+      ;;
+    --bearer)
+      if (($# < 2)); then
+        http._error "Missing value for --bearer"
+        return 1
+      fi
+      headers+=("Authorization: Bearer $2")
+      shift 2
+      ;;
+    --user-agent)
+      if (($# < 2)); then
+        http._error "Missing value for --user-agent"
+        return 1
+      fi
+      user_agent="$2"
+      shift 2
+      ;;
+    --allow-redirects)
+      if (($# < 2)); then
+        http._error "Missing value for --allow-redirects"
+        return 1
+      fi
+      local normalized
+      if ! normalized=$(http._normalize_bool "$2"); then
+        http._error "Invalid boolean for --allow-redirects: $2"
+        return 1
+      fi
+      allow_redirects="$normalized"
+      shift 2
+      ;;
+    --no-redirects)
+      allow_redirects=0
+      shift
+      ;;
+    --max-redirects)
+      if (($# < 2)); then
+        http._error "Missing value for --max-redirects"
+        return 1
+      fi
+      max_redirects="$2"
+      shift 2
+      ;;
+    --curl-option)
+      if (($# < 2)); then
+        http._error "Missing value for --curl-option"
+        return 1
+      fi
+      curl_extra+=("$2")
+      shift 2
+      ;;
+    --)
+      shift
+      curl_extra+=("$@")
+      break
+      ;;
+    *)
+      if [[ $1 == -* ]]; then
+        http._error "Unknown option: $1"
+        return 1
+      fi
+      curl_extra+=("$1")
+      shift
+      ;;
+    esac
+  done
+
+  if [[ -n $json && -n $data ]]; then
+    http._error "Use either --json or --data, not both"
+    return 1
+  fi
+
+  local request_url="$url"
+  if ((${#params[@]})); then
+    if ! request_url=$(http._apply_params "$url" "${params[@]}"); then
+      return 1
+    fi
+  fi
+
+  local header_file body_file error_file
+  header_file=$(http._tmpfile http_headers) || return 1
+  body_file=$(http._tmpfile http_body) || {
+    rm -f "$header_file"
+    return 1
+  }
+  error_file=$(http._tmpfile http_error) || {
+    rm -f "$header_file" "$body_file"
+    return 1
+  }
+
+  local content_type_set=0 header_lower
+  for header_lower in "${headers[@]}"; do
+    local lower_name
+    lower_name=$(printf '%s' "$header_lower" | tr '[:upper:]' '[:lower:]')
+    if [[ $lower_name == content-type:* ]]; then
+      content_type_set=1
+      break
+    fi
+  done
+
+  local send_body=""
+  if [[ -n $json ]]; then
+    send_body="$json"
+    if ((!content_type_set)); then
+      headers+=("Content-Type: application/json")
+    fi
+  elif [[ -n $data ]]; then
+    send_body="$data"
+  fi
+
+  local -a curl_cmd=(
+    curl
+    --silent
+    --show-error
+    --dump-header "$header_file"
+    --output "$body_file"
+    --write-out '%{http_code}\n%{time_total}\n%{url_effective}'
+    --request "$method"
+  )
+
+  if ((allow_redirects)); then
+    curl_cmd+=(--location)
+  fi
+  if [[ -n $max_redirects ]]; then
+    curl_cmd+=(--max-redirs "$max_redirects")
+  fi
+  if [[ -n $timeout ]]; then
+    curl_cmd+=(--max-time "$timeout")
+  fi
+  if [[ -n $connect_timeout ]]; then
+    curl_cmd+=(--connect-timeout "$connect_timeout")
+  fi
+  if [[ -n $user_agent ]]; then
+    curl_cmd+=(--user-agent "$user_agent")
+  fi
+  if [[ -n $auth ]]; then
+    curl_cmd+=(--user "$auth")
+  fi
+  if ((${#headers[@]})); then
+    local header_value
+    for header_value in "${headers[@]}"; do
+      curl_cmd+=(--header "$header_value")
+    done
+  fi
+  if [[ -n $send_body ]]; then
+    curl_cmd+=(--data-binary "$send_body")
+  fi
+  if ((${#curl_extra[@]})); then
+    curl_cmd+=("${curl_extra[@]}")
+  fi
+  curl_cmd+=("$request_url")
+
+  local curl_output="" curl_status=0
+  curl_output=$("${curl_cmd[@]}" 2>"$error_file") || curl_status=$?
+
+  local http_code="" elapsed="" effective_url=""
+  if [[ -n $curl_output ]]; then
+    IFS=$'\n' read -r http_code elapsed effective_url <<<"$curl_output"
+  fi
+  http_code=${http_code:-0}
+  elapsed=${elapsed:-0}
+  effective_url=${effective_url:-$request_url}
+
+  local header_block body=""
+  header_block=$(http._final_header_block "$header_file")
+  if [[ -f $body_file ]]; then
+    body=$(<"$body_file")
+  fi
+
+  local error_message=""
+  if [[ -f $error_file ]]; then
+    error_message=$(<"$error_file")
+    error_message=$(http._trim "$error_message")
+  fi
+
+  rm -f "$header_file" "$body_file" "$error_file"
+
+  local status_line="${header_block%%$'\n'*}"
+  status_line=${status_line%$'\r'}
+  local reason=""
+  if [[ $status_line =~ ^HTTP/[0-9.]+\ ([0-9]{3})\ (.*)$ ]]; then
+    http_code="${BASH_REMATCH[1]}"
+    reason="${BASH_REMATCH[2]}"
+  fi
+
+  local ok="0"
+  if [[ $http_code =~ ^[0-9]+$ ]] && ((http_code >= 200 && http_code < 400)); then
+    ok="1"
+  fi
+
+  if ((curl_status != 0)); then
+    if [[ -z $error_message ]]; then
+      error_message="curl exited with status $curl_status"
+    fi
+  elif [[ $ok != "1" ]]; then
+    if [[ -n $reason ]]; then
+      error_message="$reason"
+    else
+      error_message="HTTP $http_code"
+    fi
+  else
+    error_message=""
+  fi
+
+  local content_type="" encoding=""
+  if [[ -n $header_block ]]; then
+    content_type=$(http._header_from_block "$header_block" "Content-Type")
+    if [[ -n $content_type ]]; then
+      local -a ct_parts=()
+      IFS=';' read -r -a ct_parts <<<"$content_type"
+      local part
+      for part in "${ct_parts[@]}"; do
+        local trimmed
+        trimmed=$(http._trim "$part")
+        local lower
+        lower=$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')
+        if [[ $lower == charset=* ]]; then
+          encoding="${trimmed#*=}"
+          encoding=$(http._trim "$encoding")
+          encoding=${encoding%\"}
+          encoding=${encoding#\"}
+          break
+        fi
+      done
+    fi
+  fi
+
+  local request_headers=""
+  if ((${#headers[@]})); then
+    request_headers=$(http._join_lines headers)
+  fi
+
+  http._response_set "$response_var" method "$method"
+  http._response_set "$response_var" request_url "$request_url"
+  http._response_set "$response_var" status "$http_code"
+  http._response_set "$response_var" ok "$ok"
+  http._response_set "$response_var" reason "$reason"
+  http._response_set "$response_var" body "$body"
+  http._response_set "$response_var" text "$body"
+  http._response_set "$response_var" headers "$header_block"
+  http._response_set "$response_var" elapsed "$elapsed"
+  http._response_set "$response_var" url "$effective_url"
+  http._response_set "$response_var" error "$error_message"
+  http._response_set "$response_var" curl_exit "$curl_status"
+  http._response_set "$response_var" content_type "$content_type"
+  http._response_set "$response_var" encoding "$encoding"
+  http._response_set "$response_var" request_headers "$request_headers"
+  http._response_set "$response_var" request_body "$send_body"
+
+  return "$curl_status"
+}
+
+http._dispatch() {
+  local method="$1"
+  shift
+  local method_lower
+  method_lower=$(printf '%s' "$method" | tr '[:upper:]' '[:lower:]')
+  local response_var url
+  if (($# == 0)); then
+    http._error "http.${method_lower} requires a URL"
+    return 1
+  fi
+  if http._looks_like_url "$1"; then
+    response_var="HTTP_RESPONSE"
+    url="$1"
+    shift
+  else
+    response_var="$1"
+    shift
+    if (($# == 0)); then
+      http._error "http.${method_lower} requires a URL"
+      return 1
+    fi
+    url="$1"
+    shift
+  fi
+  http.request "$response_var" "$method" "$url" "$@"
+}
+
+http.get() {
+  http._dispatch "GET" "$@"
+}
+
+http.post() {
+  http._dispatch "POST" "$@"
+}
+
+http.put() {
+  http._dispatch "PUT" "$@"
+}
+
+http.delete() {
+  http._dispatch "DELETE" "$@"
+}
