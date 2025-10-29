@@ -1,151 +1,364 @@
 #!/usr/bin/env bash
+shopt -s nullglob dotglob
 
-# Path manipulation utilities for working with filesystem and URI-like strings.
+# _path__is_abs PATH
+_path__is_abs() {
+  [[ $1 == /* ]]
+}
+
+# _path__norm_no_symlink PATH  -> normalize ., .. and duplicate slashes (no symlink resolution)
+_path__norm_no_symlink() {
+  local IFS='/'
+  local -a parts out=()
+  local p=$1
+  local leading=''
+  if _path__is_abs "$p"; then leading='/'; fi
+  read -ra parts <<<"$p"
+  for seg in "${parts[@]}"; do
+    case "$seg" in
+    '' | '.') ;; # skip empties and '.'
+    '..') [[ ${#out[@]} -gt 0 ]] && unset 'out[-1]' || [[ $leading == '' ]] && out+=("..") ;;
+    *) out+=("$seg") ;;
+    esac
+  done
+  local joined
+  if [[ ${#out[@]} -eq 0 ]]; then joined=''; else joined=$(
+    IFS='/'
+    printf '%s' "${out[*]}"
+  ); fi
+  if [[ $leading == '/' ]]; then printf '/%s\n' "$joined"; else printf '%s\n' "$joined"; fi
+}
+
+# path.strip_trailing_slashes PATH
 path.strip_trailing_slashes() {
-    local value="$1"
-    while [[ -n "$value" && "$value" != "/" && ${value: -1} == '/' ]]; do
-        value="${value%/}"
-    done
-    printf '%s\n' "$value"
+  local value="$1"
+  while [[ -n $value && $value != "/" && ${value: -1} == '/' ]]; do
+    value="${value%/}"
+  done
+  printf '%s\n' "$value"
 }
 
+# path.join SEG1 [SEG2 ...]
+# Generalized to N segments. Keeps file-two name; handles duplicate slashes.
 path.join() {
-    local base="$1" suffix="$2"
-    if [[ -z "$suffix" ]]; then
-        printf '%s\n' "$base"
-        return
-    fi
-    if [[ -z "$base" ]]; then
-        printf '%s\n' "$suffix"
-        return
-    fi
-    if [[ ${base: -1} == '/' ]]; then
-        printf '%s%s\n' "$base" "$suffix"
+  local p="$1"
+  shift || true
+  local seg
+  for seg in "$@"; do
+    if [[ -z $p || $seg == /* ]]; then
+      p="$seg"
     else
-        printf '%s/%s\n' "$base" "$suffix"
+      # remove trailing slash from p, leading slash from seg
+      p="${p%/}/${seg#/}"
     fi
+  done
+  printf '%s\n' "$p"
 }
 
-path.expand_env() {
-    local value="$1"
-    if [[ -z "$value" ]]; then
-        printf '%s\n' "$value"
-        return
-    fi
-    if [[ "$value" == *'${HOME}'* ]]; then
-        value="${value//\$\{HOME\}/$HOME}"
-    fi
-    if [[ "$value" == *'$HOME'* ]]; then
-        value="${value//\$HOME/$HOME}"
-    fi
-    printf '%s\n' "$value"
+# path.dirname PATH
+path.dirname() {
+  local p
+  p=$(path.strip_trailing_slashes "$1")
+  printf '%s\n' "${p%/*}"
 }
 
-path.expand_user() {
-    local value="$1"
-    if [[ -n "$value" && ${value:0:1} == '~' ]]; then
-        case "$value" in
-            "~") value="$HOME" ;;
-            ~/*) value="$HOME/${value:2}" ;;
-        esac
-    fi
-    printf '%s\n' "$value"
+# path.basename PATH
+path.basename() {
+  local p
+  p=$(path.strip_trailing_slashes "$1")
+  printf '%s\n' "${p##*/}"
 }
 
-path.resolve() {
-    local path="$1" base_dir="${2:-$PWD}"
-    path=$(path.expand_env "$path")
-    path=$(path.expand_user "$path")
-    if [[ -n "$base_dir" && "$path" != /* && "$path" != s3://* ]]; then
-        path="$base_dir/$path"
-    fi
-    if command -v realpath >/dev/null 2>&1; then
-        realpath "$path" 2>/dev/null || printf '%s\n' "$path"
-        return
-    fi
-    local dir part
-    dir=$(dirname -- "$path")
-    part=$(basename -- "$path")
-    (
-        cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd)" "$part"
-    ) || printf '%s\n' "$path"
+# path.name PATH  (alias of basename)
+path.name() {
+  path.basename "$1"
 }
 
-path.pattern_to_glob() {
-    local pattern="$1" base_dir="$2"
-    pattern=$(path.expand_env "$pattern")
-    pattern=$(path.expand_user "$pattern")
-    if [[ -n "$base_dir" && "$pattern" != /* && "$pattern" != s3://* ]]; then
-        pattern="$base_dir/$pattern"
-    fi
-    printf '%s\n' "$pattern"
+# path.parent PATH  (one level up; never empty -> '.')
+path.parent() {
+  local d
+  d=$(path.dirname "$1")
+  [[ -z $d ]] && d='.'
+  printf '%s\n' "$d"
 }
 
-# Determine whether a path should be skipped based on exclusion patterns.
-path.is_excluded() {
-    local candidate="$1"
-    local root="${2:-}"
-    local patterns_ref_name="$3"
-    if ! array._has_var "$patterns_ref_name"; then
-        return 1
-    fi
-    eval "local -a __patterns_ref=(\"\${$patterns_ref_name[@]}\")"
+# _path__splitext NAME -> echo "<stem> <suffix>"
+_path__splitext() {
+  local name=$1
+  # hidden files: ".env" => no suffix; ".a.rc" -> stem ".a", suffix ".rc"
+  if [[ $name == .* && $name != *.* ]]; then
+    printf '%s %s\n' "$name" ''
+    return
+  fi
+  local base=${name##*/}
+  local stem=${base%.*}
+  local ext=${base#"$stem"}
+  if [[ -z $stem || $base == "$stem" ]]; then printf '%s %s\n' "$base" ''; else printf '%s %s\n' "$stem" "$ext"; fi
+}
 
-    local relative="$candidate"
-    if [[ -n "$root" ]]; then
-        relative="${relative#"$root"}"
-    fi
-    relative="${relative#/}"
-    relative="${relative%/}"
-    [[ -z "$relative" ]] && return 1
+# path.stem PATH (filename without final suffix)
+path.stem() {
+  local base
+  base=$(path.basename "$1")
+  read -r stem _ < <(_path__splitext "$base")
+  printf '%s\n' "$stem"
+}
 
-    local pattern trimmed
-    for pattern in "${__patterns_ref[@]-}"; do
-        trimmed="${pattern%/}"
+# path.suffix PATH (final suffix, including dot; empty if none)
+path.suffix() {
+  local base
+  base=$(path.basename "$1")
+  read -r _ ext < <(_path__splitext "$base")
+  printf '%s\n' "$ext"
+}
 
-        if [[ "$relative" == "$trimmed" || "$relative" == $trimmed/* ]]; then
-            return 0
-        fi
+# path.suffixes PATH (all suffixes; space-separated)
+path.suffixes() {
+  local base
+  base=$(path.basename "$1")
+  local rest=$base
+  local -a exts=()
+  while [[ $rest == *.* ]]; do
+    local stem=${rest%.*}
+    exts=(".${rest#"$stem"}" "${exts[@]}")
+    rest=$stem
+  done
+  printf '%s\n' "${exts[*]}"
+}
 
-        if [[ "$trimmed" != */* ]]; then
-            if [[ "/$relative/" == *"/$trimmed/"* ]]; then
-                return 0
-            fi
-        fi
-    done
+# path.with_name PATH NEWNAME
+path.with_name() {
+  local dir
+  dir=$(path.dirname "$1")
+  printf '%s\n' "${dir:+$dir/}$2"
+}
 
+# path.with_suffix PATH NEW_SUFFIX (.ext or empty string to drop)
+path.with_suffix() {
+  local base dir stem ext
+  base=$(path.basename "$1")
+  dir=$(path.dirname "$1")
+  read -r stem ext < <(_path__splitext "$base")
+  if [[ -z $2 ]]; then printf '%s\n' "${dir:+$dir/}$stem"; else printf '%s\n' "${dir:+$dir/}$stem$2"; fi
+}
+
+# path.parts PATH -> prints NUL-separated parts (use: while IFS= read -r -d '' p; do ...; done < <(path.parts ...))
+path.parts() {
+  local p=$1
+  local IFS='/'
+  read -ra segs <<<"$p"
+  local s
+  if _path__is_abs "$p"; then printf '/\0'; fi
+  for s in "${segs[@]}"; do [[ -n $s ]] && printf '%s\0' "$s"; done
+}
+
+# path.isabs PATH -> exit code + prints '1' or '0'
+path.isabs() {
+  if _path__is_abs "$1"; then
+    printf '1\n'
+    return 0
+  else
+    printf '0\n'
     return 1
+  fi
 }
 
-# Produce a stable backup label for a filesystem path.
+# FS tests
+path.exists() {
+  [[ -e $1 ]]
+}
+path.isfile() {
+  [[ -f $1 ]]
+}
+path.isdir() {
+  [[ -d $1 ]]
+}
+
+# path.expand_env STR (expands $HOME and ${HOME})
+path.expand_env() {
+  local value="$1"
+  if [[ -z $value ]]; then
+    printf '\n'
+    return
+  fi
+  if [[ $value == *'${HOME}'* ]]; then value="${value//\$\{HOME\}/$HOME}"; fi
+  if [[ $value == *'$HOME'* ]]; then value="${value//\$HOME/$HOME}"; fi
+  printf '%s\n' "$value"
+}
+
+# path.expand_user STR (expands ~ and ~/...)
+path.expand_user() {
+  local value="$1"
+  if [[ -n $value && ${value:0:1} == '~' ]]; then
+    case "$value" in
+    "~") value="$HOME" ;;
+    ~/*) value="$HOME/${value:2}" ;;
+    esac
+  fi
+  printf '%s\n' "$value"
+}
+
+# path.expand STR  (compat wrapper: expands env + user)
+path.expand() {
+  local v
+  v=$(path.expand_env "$1")
+  v=$(path.expand_user "$v")
+  printf '%s\n' "$v"
+}
+
+# path.absolute PATH (no symlink resolution)
+path.absolute() {
+  local p=$1
+  if _path__is_abs "$p"; then
+    printf '%s\n' "$(_path__norm_no_symlink "$p")"
+    return
+  fi
+  local cwd
+  cwd=$(pwd)
+  _path__norm_no_symlink "${cwd%/}/$p"
+}
+
+# path.resolve PATH [BASE_DIR]  (expands env/user; prefers symlink resolution if available)
+path.resolve() {
+  local path="$1" base_dir="${2:-$PWD}"
+  path=$(path.expand_env "$path")
+  path=$(path.expand_user "$path")
+  if [[ -n $base_dir && $path != /* && $path != s3://* ]]; then
+    path="$base_dir/$path"
+  fi
+  if command -v realpath >/dev/null 2>&1; then
+    # -m tolerates non-existent bits if available; fall back to plain realpath
+    realpath -m "$path" 2>/dev/null || realpath "$path" 2>/dev/null || printf '%s\n' "$path"
+    return
+  fi
+  if command -v readlink >/dev/null 2>&1 && readlink -f / >/dev/null 2>&1; then
+    readlink -f "$path" 2>/dev/null || printf '%s\n' "$path"
+    return
+  fi
+  # Fallback: absolute + normalize (no symlink resolution)
+  path=$(path.absolute "$path") || return 1
+  _path__norm_no_symlink "$path"
+}
+
+# path.pattern_to_glob PATTERN [BASE_DIR]
+path.pattern_to_glob() {
+  local pattern="$1" base_dir="$2"
+  pattern=$(path.expand_env "$pattern")
+  pattern=$(path.expand_user "$pattern")
+  if [[ -n $base_dir && $pattern != /* && $pattern != s3://* ]]; then
+    pattern="$base_dir/$pattern"
+  fi
+  printf '%s\n' "$pattern"
+}
+
+# path.is_excluded CANDIDATE [ROOT] [PATTERNS_ARRAY_NAME]
+# NOTE: expects array._has_var helper to exist when using PATTERNS_ARRAY_NAME.
+path.is_excluded() {
+  local candidate="$1"
+  local root="${2:-}"
+  local patterns_ref_name="$3"
+  if [[ -n $patterns_ref_name ]]; then
+    if ! array._has_var "$patterns_ref_name"; then
+      return 1
+    fi
+  else
+    return 1
+  fi
+  eval "local -a __patterns_ref=(\"\${$patterns_ref_name[@]}\")"
+
+  local relative="$candidate"
+  if [[ -n $root ]]; then
+    relative="${relative#"$root"}"
+  fi
+  relative="${relative#/}"
+  relative="${relative%/}"
+  [[ -z $relative ]] && return 1
+
+  local pattern trimmed
+  for pattern in "${__patterns_ref[@]-}"; do
+    trimmed="${pattern%/}"
+
+    if [[ $relative == "$trimmed" || $relative == $trimmed/* ]]; then
+      return 0
+    fi
+
+    if [[ $trimmed != */* ]]; then
+      if [[ "/$relative/" == *"/$trimmed/"* ]]; then
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+# path.backup_label SOURCE_PATH [HOME_PATH=$HOME] [HOME_PREFIX=home] [ROOT_LABEL=root]
 path.backup_label() {
-    local source_path="$1"
-    local home_path="${2:-$HOME}"
-    local home_prefix="${3:-home}"
-    local root_label="${4:-root}"
+  local source_path="$1"
+  local home_path="${2:-$HOME}"
+  local home_prefix="${3:-home}"
+  local root_label="${4:-root}"
 
-    source_path=$(path.strip_trailing_slashes "$source_path")
-    if [[ -n "$home_path" ]]; then
-        home_path=$(path.strip_trailing_slashes "$home_path")
-    fi
+  source_path=$(path.strip_trailing_slashes "$source_path")
+  if [[ -n $home_path ]]; then
+    home_path=$(path.strip_trailing_slashes "$home_path")
+  fi
 
-    if [[ -n "$home_path" && "$source_path" == "$home_path"* ]]; then
-        local home_name rest
-        home_name=$(basename -- "$home_path")
-        rest="${source_path#"$home_path"}"
-        rest="${rest#/}"
-        if [[ -n "$rest" ]]; then
-            printf '%s/%s/%s\n' "$home_prefix" "$home_name" "$rest"
-        else
-            printf '%s/%s\n' "$home_prefix" "$home_name"
-        fi
-        return
-    fi
-
-    local without_root="${source_path#/}"
-    if [[ -z "$without_root" ]]; then
-        printf '%s\n' "$root_label"
+  if [[ -n $home_path && $source_path == "$home_path"* ]]; then
+    local home_name rest
+    home_name=$(basename -- "$home_path")
+    rest="${source_path#"$home_path"}"
+    rest="${rest#/}"
+    if [[ -n $rest ]]; then
+      printf '%s/%s/%s\n' "$home_prefix" "$home_name" "$rest"
     else
-        printf '%s\n' "$without_root"
+      printf '%s/%s\n' "$home_prefix" "$home_name"
     fi
+    return
+  fi
+
+  local without_root="${source_path#/}"
+  if [[ -z $without_root ]]; then
+    printf '%s\n' "$root_label"
+  else
+    printf '%s\n' "$without_root"
+  fi
+}
+
+# Convenience
+path.cwd() {
+  pwd
+}
+path.home() {
+  printf '%s\n' "$HOME"
+}
+
+# path.mkdir PATH [-p]
+path.mkdir() {
+  if [[ $2 == -p || $1 == -p ]]; then mkdir -p -- "${@: -1}"; else mkdir -- "$1"; fi
+}
+
+# path.unlink PATH
+path.unlink() {
+  rm -f -- "$1"
+}
+
+# path.iterdir DIR  -> prints entries, one per line (not recursive)
+path.iterdir() {
+  local d=$1
+  [[ -z $d ]] && d='.'
+  for f in "$d"/* "$d"/.[!.]* "$d"/..?*; do [[ -e $f ]] && printf '%s\n' "$f"; done
+}
+
+# path.stat.size PATH -> bytes
+path.stat.size() {
+  local f=$1
+  [[ -e $f ]] || return 1
+  printf '%s\n' "$(wc -c <"$f")"
+}
+
+# path.match PATH GLOB (bash glob, not regex)  [case-insensitive]
+path.match() {
+  local p=$1 g=$2
+  shopt -s nocasematch >/dev/null 2>&1
+  case "$p" in $g) return 0 ;; *) return 1 ;; esac
 }
