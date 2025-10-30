@@ -1,0 +1,76 @@
+title: "Dotfiles Bash Stdlib"
+description: "Reference documentation for the reusable Bash helpers that power these dotfiles."
+lang: en
+
+# When publishing via GitHub Pages from the /docs directory the site URL will
+# resolve to https://nficano.github.io/dotfiles. Update these values if you host
+# the site elsewhere.
+url: "https://nficano.github.io"
+baseurl: "/dotfiles"
+repository: "nficano/dotfiles"
+
+permalink: pretty
+markdown: kramdown
+highlighter: rouge
+
+kramdown:
+  input: GFM
+  hard_wrap: false
+  syntax_highlighter_opts:
+    default_lang: bash
+
+# Widely used plugins that are all supported on GitHub Pages.
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Just the Docs is one of the most popular documentation themes on GitHub Pages.
+remote_theme: just-the-docs/just-the-docs
+
+just_the_docs:
+  search_enabled: true
+  # Encourage consistent automatic ordering while still respecting explicit nav_order.
+  nav_sort: case_insensitive
+  heading_anchors: true
+  # Enable linkable callouts that mirror the upstream defaults.
+  callouts_level: quiet
+  callouts:
+    note:
+      color: blue
+    warning:
+      color: yellow
+    important:
+      color: red
+  # Surface repo links directly in the header.
+  aux_links:
+    "View on GitHub":
+      - "https://github.com/nficano/dotfiles"
+  # Show last-edited metadata pulled from Git history.
+  last_edit_url: "https://github.com/nficano/dotfiles/edit/main/:path"
+  last_edit_timestamp: true
+  last_edit_time_format: "%b %e %Y at %H:%M %Z"
+
+# Generate an RSS/Atom feed for page updates.
+feed:
+  path: atom.xml
+
+# Front matter defaults so the markdown under docs/ renders with the theme layout.
+defaults:
+  - scope:
+      path: "docs"
+    values:
+      layout: default
+
+# Common build-time excludes to keep the output clean.
+exclude:
+  - "Gemfile"
+  - "Gemfile.lock"
+  - "node_modules"
+  - "vendor"
+  - ".gitignore"
+  - "README.md"
+  - "LICENSE"
+
+# Keep Markdown pages in /docs as the published source for GitHub Pages.
+source: docs
