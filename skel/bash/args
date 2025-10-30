@@ -26,7 +26,7 @@ parse_args() {
 }
 
 main() {
-  (( verbose )) && log.info "Verbose mode enabled"
+  ((verbose)) && log.info "Verbose mode enabled"
 
   log.info "Arguments: ${args[*]}"
   # TODO: implement script logic

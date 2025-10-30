@@ -24,14 +24,14 @@ parse_args() {
   local remaining_args
   remaining_args=$(script.parse_common "$@")
 
-  if [[ -n "$remaining_args" ]]; then
+  if [[ -n $remaining_args ]]; then
     log.error "This script does not accept positional arguments"
     script.usage 1
   fi
 }
 
 main() {
-  (( verbose )) && log.info "Verbose mode enabled"
+  ((verbose)) && log.info "Verbose mode enabled"
 
   # TODO: implement script logic
 }

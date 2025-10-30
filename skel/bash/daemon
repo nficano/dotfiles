@@ -36,36 +36,39 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --interval)
-        shift
-        [[ $# -gt 0 ]] || { log.error "--interval requires a value"; script.usage 1; }
-        transformed+=('-i' "$1")
-        shift
-        continue
-        ;;
-      --interval=*)
-        transformed+=('-i' "${1#*=}")
-        shift
-        continue
-        ;;
-      --oneshot)
-        oneshot=1
-        shift
-        continue
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --interval)
+      shift
+      [[ $# -gt 0 ]] || {
+        log.error "--interval requires a value"
         script.usage 1
-        ;;
-      *)
-        break
-        ;;
+      }
+      transformed+=('-i' "$1")
+      shift
+      continue
+      ;;
+    --interval=*)
+      transformed+=('-i' "${1#*=}")
+      shift
+      continue
+      ;;
+    --oneshot)
+      oneshot=1
+      shift
+      continue
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -75,11 +78,17 @@ parse_args() {
 
   while getopts ':hvi:' opt; do
     case "$opt" in
-      h) script.usage ;;
-      v) verbose=1 ;;
-      i) interval="$OPTARG" ;;
-      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    h) script.usage ;;
+    v) verbose=1 ;;
+    i) interval="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires an argument"
+      script.usage 1
+      ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
     esac
   done
 
@@ -98,28 +107,28 @@ main() {
 
   while :; do
     iteration=$((iteration + 1))
-    (( verbose )) && log.info "Iteration $iteration"
+    ((verbose)) && log.info "Iteration $iteration"
 
     log.info "Running iteration $iteration"
     # TODO: perform recurring work here
 
-    if (( oneshot )); then
+    if ((oneshot)); then
       break
     fi
 
-    if (( should_exit )); then
-      (( verbose )) && log.info "Exit requested; stopping loop"
+    if ((should_exit)); then
+      ((verbose)) && log.info "Exit requested; stopping loop"
       break
     fi
 
     sleep "$interval" &
     local sleep_pid=$!
     if ! wait "$sleep_pid"; then
-      (( verbose )) && log.info "Sleep interrupted"
+      ((verbose)) && log.info "Sleep interrupted"
     fi
 
-    if (( should_exit )); then
-      (( verbose )) && log.info "Exit requested after sleep"
+    if ((should_exit)); then
+      ((verbose)) && log.info "Exit requested after sleep"
       break
     fi
   done

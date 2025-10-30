@@ -32,7 +32,7 @@ cleanup() {
 
   proc.wait_for_pids pids had_failure
 
-  if (( had_failure )) && [[ $exit_code -eq 0 ]]; then
+  if ((had_failure)) && [[ $exit_code -eq 0 ]]; then
     exit_code=1
   fi
 
@@ -48,31 +48,34 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --jobs)
-        shift
-        [[ $# -gt 0 ]] || { log.error "--jobs requires a value"; script.usage 1; }
-        transformed+=('-j' "$1")
-        shift
-        continue
-        ;;
-      --jobs=*)
-        transformed+=('-j' "${1#*=}")
-        shift
-        continue
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --jobs)
+      shift
+      [[ $# -gt 0 ]] || {
+        log.error "--jobs requires a value"
         script.usage 1
-        ;;
-      *)
-        break
-        ;;
+      }
+      transformed+=('-j' "$1")
+      shift
+      continue
+      ;;
+    --jobs=*)
+      transformed+=('-j' "${1#*=}")
+      shift
+      continue
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -82,11 +85,17 @@ parse_args() {
 
   while getopts ':hvj:' opt; do
     case "$opt" in
-      h) script.usage ;;
-      v) verbose=1 ;;
-      j) max_jobs="$OPTARG" ;;
-      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    h) script.usage ;;
+    v) verbose=1 ;;
+    j) max_jobs="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires an argument"
+      script.usage 1
+      ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
     esac
   done
 
@@ -100,7 +109,7 @@ launch_task() {
   local task="$1"
 
   (
-    (( verbose )) && log.info "Starting task: $task" >&2
+    ((verbose)) && log.info "Starting task: $task" >&2
     log.info "Processing task: $task"
     # TODO: replace with actual task logic for "$task"
   ) &
@@ -122,20 +131,20 @@ wait_for_slot() {
 main() {
   if [[ ${#tasks[@]} -eq 0 ]]; then
     while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
+      [[ -z $line ]] && continue
       tasks+=("$line")
     done
   fi
 
   if [[ ${#tasks[@]} -eq 0 ]]; then
-    (( verbose )) && log.warn "No tasks provided"
+    ((verbose)) && log.warn "No tasks provided"
     return 0
   fi
 
   local task
   for task in "${tasks[@]}"; do
-    if (( stop_launch )); then
-      (( verbose )) && log.warn "Launch halted by signal; draining workers"
+    if ((stop_launch)); then
+      ((verbose)) && log.warn "Launch halted by signal; draining workers"
       break
     fi
 
@@ -151,7 +160,7 @@ main() {
     pids=("${pids[@]:1}")
   done
 
-  if (( had_failure )); then
+  if ((had_failure)); then
     return 1
   fi
 }

@@ -8,7 +8,10 @@ set -euo pipefail
 SQLITE_BIN=${SQLITE_BIN:-sqlite3}
 
 err() { printf "%s\n" "$*" >&2; }
-die() { err "$*"; exit 1; }
+die() {
+  err "$*"
+  exit 1
+}
 
 require_sqlite() {
   command -v "$SQLITE_BIN" >/dev/null 2>&1 || die "sqlite3 not found; install SQLite or set SQLITE_BIN"
@@ -88,13 +91,15 @@ wrongtype() {
 }
 
 key_type() {
-  local k; k=$(sql_escape "$1")
+  local k
+  k=$(sql_escape "$1")
   "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
     "SELECT type FROM keys WHERE key='${k}' LIMIT 1;" | head -n1 || true
 }
 
 key_exists() {
-  local k; k=$(sql_escape "$1")
+  local k
+  k=$(sql_escape "$1")
   local c
   c=$("$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
     "SELECT COUNT(1) FROM keys WHERE key='${k}';")
@@ -104,9 +109,11 @@ key_exists() {
 ensure_type_or_new() {
   # ensure_type_or_new key expected_type
   local key="$1" expected="$2"
-  local t; t=$(key_type "$key" || true)
+  local t
+  t=$(key_type "$key" || true)
   if [ -z "${t:-}" ]; then
-    local k; k=$(sql_escape "$key")
+    local k
+    k=$(sql_escape "$key")
     "$SQLITE_BIN" -batch -noheader -cmd 'PRAGMA foreign_keys=ON;' "$REDISQL_DB" \
       "INSERT OR REPLACE INTO keys(key, type) VALUES ('${k}','${expected}');" >/dev/null
   elif [ "$t" != "$expected" ]; then

@@ -6,10 +6,10 @@ case $- in
 *) return ;; esac
 
 # Resolve dotfiles root so sourcing works via symlinks
-if [[ -z "${DOTFILES_ROOT:-}" ]]; then
+if [[ -z ${DOTFILES_ROOT:-} ]]; then
   DOTFILES_ROOT="$(
     src="${BASH_SOURCE[0]}"
-    while [[ -h "$src" ]]; do
+    while [[ -L $src ]]; do
       dir="$(cd -P -- "$(dirname -- "$src")" && pwd)"
       src="$(readlink "$src")"
       [[ $src != /* ]] && src="$dir/$src"
@@ -124,13 +124,13 @@ sys.path.contains "most" && os.setenv "MANPAGER" "most"
 # Use "vscode" for text editing when available, otherwise use "nano".
 sys.path.contains "cursor" && os.setenv "VISUAL" "cursor"
 sys.path.contains "cursor" && os.setenv "EDITOR" "cursor"
-when.cmd ngrok  'shell.eval "ngrok completion"'
-when.cmd aws    'shell.eval "complete -C aws_completer aws"'
+when.cmd ngrok 'shell.eval "ngrok completion"'
+when.cmd aws 'shell.eval "complete -C aws_completer aws"'
 when.cmd direnv 'shell.eval "direnv hook bash"'
-when.cmd pyenv  'shell.eval "pyenv init --path"'
-when.cmd pyenv  'shell.eval "pyenv init -"'
-when.cmd pyenv  'shell.eval "pyenv virtualenv-init -"'
-when.cmd rbenv  'shell.eval "rbenv init -"'
+when.cmd pyenv 'shell.eval "pyenv init --path"'
+when.cmd pyenv 'shell.eval "pyenv init -"'
+when.cmd pyenv 'shell.eval "pyenv virtualenv-init -"'
+when.cmd rbenv 'shell.eval "rbenv init -"'
 when.cmd dircolors 'shell.eval "dircolors -b $HOME/.dircolors"'
 # sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 

@@ -30,21 +30,25 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --non-interactive) non_interactive=1; shift; continue ;;
-      --yes) transformed+=('-y') ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --non-interactive)
+      non_interactive=1
+      shift
+      continue
+      ;;
+    --yes) transformed+=('-y') ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -54,10 +58,13 @@ parse_args() {
 
   while getopts ':hvy' opt; do
     case "$opt" in
-      h) script.usage ;;
-      v) verbose=1 ;;
-      y) assume_yes=1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    h) script.usage ;;
+    v) verbose=1 ;;
+    y) assume_yes=1 ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
     esac
   done
 
@@ -77,7 +84,7 @@ main() {
 
   local input_value
   input_value=$(prompt.read_required 'Enter a value' "$non_interactive" 'INPUT_VALUE')
-  (( $? != 0 )) && return 1
+  (($? != 0)) && return 1
 
   log.info "Captured value: $input_value"
   # TODO: implement interactive workflow

@@ -39,18 +39,18 @@ parse_args() {
   OPTIND=1
   while getopts ':hvfp:' opt; do
     case "$opt" in
-      h) script.usage ;;
-      v) verbose=1 ;;
-      f) flag=1 ;;
-      p) param="$OPTARG" ;;
-      :)
-        log.error "Option -$OPTARG requires an argument"
-        script.usage 1
-        ;;
-      \?)
-        log.error "Invalid option: -$OPTARG"
-        script.usage 1
-        ;;
+    h) script.usage ;;
+    v) verbose=1 ;;
+    f) flag=1 ;;
+    p) param="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires an argument"
+      script.usage 1
+      ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
     esac
   done
 
@@ -68,9 +68,8 @@ parse_args() {
   fi
 }
 
-
 main() {
-  (( verbose )) && log.info "Verbose mode enabled"
+  ((verbose)) && log.info "Verbose mode enabled"
 
   log.info "Flag set: $flag"
   log.info "Param value: $param"

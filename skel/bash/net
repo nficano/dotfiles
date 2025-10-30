@@ -31,7 +31,7 @@ retries=3
 timeout=10
 
 usage() {
-  grep '^#/' < "$0" | cut -c4-
+  grep '^#/' <"$0" | cut -c4-
   exit "${1:-0}"
 }
 
@@ -45,79 +45,94 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --url)
-        shift
-        [[ $# -gt 0 ]] || { printf 'Error: --url requires a value\n' >&2; usage 1; }
-        transformed+=('-u' "$1")
-        shift
-        continue
-        ;;
-      --url=*)
-        transformed+=('-u' "${1#*=}")
-        shift
-        continue
-        ;;
-      --method)
-        shift
-        [[ $# -gt 0 ]] || { printf 'Error: --method requires a value\n' >&2; usage 1; }
-        transformed+=('-m' "$1")
-        shift
-        continue
-        ;;
-      --method=*)
-        transformed+=('-m' "${1#*=}")
-        shift
-        continue
-        ;;
-      --data)
-        shift
-        [[ $# -gt 0 ]] || { printf 'Error: --data requires a value\n' >&2; usage 1; }
-        transformed+=('-d' "$1")
-        shift
-        continue
-        ;;
-      --data=*)
-        transformed+=('-d' "${1#*=}")
-        shift
-        continue
-        ;;
-      --retries)
-        shift
-        [[ $# -gt 0 ]] || { printf 'Error: --retries requires a value\n' >&2; usage 1; }
-        retries="$1"
-        shift
-        continue
-        ;;
-      --retries=*)
-        retries="${1#*=}"
-        shift
-        continue
-        ;;
-      --timeout)
-        shift
-        [[ $# -gt 0 ]] || { printf 'Error: --timeout requires a value\n' >&2; usage 1; }
-        timeout="$1"
-        shift
-        continue
-        ;;
-      --timeout=*)
-        timeout="${1#*=}"
-        shift
-        continue
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        printf 'Error: Unknown option: %s\n' "$1" >&2
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --url)
+      shift
+      [[ $# -gt 0 ]] || {
+        printf 'Error: --url requires a value\n' >&2
         usage 1
-        ;;
-      *)
-        break
-        ;;
+      }
+      transformed+=('-u' "$1")
+      shift
+      continue
+      ;;
+    --url=*)
+      transformed+=('-u' "${1#*=}")
+      shift
+      continue
+      ;;
+    --method)
+      shift
+      [[ $# -gt 0 ]] || {
+        printf 'Error: --method requires a value\n' >&2
+        usage 1
+      }
+      transformed+=('-m' "$1")
+      shift
+      continue
+      ;;
+    --method=*)
+      transformed+=('-m' "${1#*=}")
+      shift
+      continue
+      ;;
+    --data)
+      shift
+      [[ $# -gt 0 ]] || {
+        printf 'Error: --data requires a value\n' >&2
+        usage 1
+      }
+      transformed+=('-d' "$1")
+      shift
+      continue
+      ;;
+    --data=*)
+      transformed+=('-d' "${1#*=}")
+      shift
+      continue
+      ;;
+    --retries)
+      shift
+      [[ $# -gt 0 ]] || {
+        printf 'Error: --retries requires a value\n' >&2
+        usage 1
+      }
+      retries="$1"
+      shift
+      continue
+      ;;
+    --retries=*)
+      retries="${1#*=}"
+      shift
+      continue
+      ;;
+    --timeout)
+      shift
+      [[ $# -gt 0 ]] || {
+        printf 'Error: --timeout requires a value\n' >&2
+        usage 1
+      }
+      timeout="$1"
+      shift
+      continue
+      ;;
+    --timeout=*)
+      timeout="${1#*=}"
+      shift
+      continue
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      printf 'Error: Unknown option: %s\n' "$1" >&2
+      usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -127,13 +142,19 @@ parse_args() {
 
   while getopts ':hvu:m:d:' opt; do
     case "$opt" in
-      h) usage ;;
-      v) verbose=1 ;;
-      u) url="$OPTARG" ;;
-      m) method="$OPTARG" ;;
-      d) data="$OPTARG" ;;
-      :) printf 'Error: Option -%s requires an argument\n' "$OPTARG" >&2; usage 1 ;;
-      \?) printf 'Error: Invalid option: -%s\n' "$OPTARG" >&2; usage 1 ;;
+    h) usage ;;
+    v) verbose=1 ;;
+    u) url="$OPTARG" ;;
+    m) method="$OPTARG" ;;
+    d) data="$OPTARG" ;;
+    :)
+      printf 'Error: Option -%s requires an argument\n' "$OPTARG" >&2
+      usage 1
+      ;;
+    \?)
+      printf 'Error: Invalid option: -%s\n' "$OPTARG" >&2
+      usage 1
+      ;;
     esac
   done
 
@@ -144,17 +165,17 @@ parse_args() {
     usage 1
   fi
 
-  if [[ -z "$url" ]]; then
+  if [[ -z $url ]]; then
     printf 'Error: --url is required\n' >&2
     usage 1
   fi
 
-  if ! [[ "$retries" =~ ^[0-9]+$ ]] || [[ "$retries" -le 0 ]]; then
+  if ! [[ $retries =~ ^[0-9]+$ ]] || [[ $retries -le 0 ]]; then
     printf 'Error: --retries must be a positive integer\n' >&2
     usage 1
   fi
 
-  if ! [[ "$timeout" =~ ^[0-9]+$ ]] || [[ "$timeout" -le 0 ]]; then
+  if ! [[ $timeout =~ ^[0-9]+$ ]] || [[ $timeout -le 0 ]]; then
     printf 'Error: --timeout must be a positive integer\n' >&2
     usage 1
   fi
@@ -169,8 +190,8 @@ main() {
   local success=0
   local exit_code=0
 
-  while (( attempt <= retries )); do
-    (( verbose )) && printf 'Attempt %d/%d\n' "$attempt" "$retries" >&2
+  while ((attempt <= retries)); do
+    ((verbose)) && printf 'Attempt %d/%d\n' "$attempt" "$retries" >&2
 
     if response=$(curl --fail-with-body --show-error --silent \
       --max-time "$timeout" \
@@ -187,8 +208,8 @@ main() {
       break
     else
       exit_code=$?
-      (( verbose )) && printf 'Request failed with exit code %d\n' "$exit_code" >&2
-      if (( attempt == retries )); then
+      ((verbose)) && printf 'Request failed with exit code %d\n' "$exit_code" >&2
+      if ((attempt == retries)); then
         printf 'Error: Request failed after %d attempts\n' "$retries" >&2
         break
       fi
@@ -199,7 +220,7 @@ main() {
     attempt=$((attempt + 1))
   done
 
-  if (( success )); then
+  if ((success)); then
     return 0
   fi
 

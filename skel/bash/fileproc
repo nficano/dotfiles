@@ -37,20 +37,20 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --dry-run) transformed+=('-n') ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --dry-run) transformed+=('-n') ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
     esac
     shift
   done
@@ -60,10 +60,13 @@ parse_args() {
 
   while getopts ':hvn' opt; do
     case "$opt" in
-      h) script.usage ;;
-      v) verbose=1 ;;
-      n) dry_run=1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+    h) script.usage ;;
+    v) verbose=1 ;;
+    n) dry_run=1 ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
     esac
   done
 
@@ -72,17 +75,17 @@ parse_args() {
 }
 
 main() {
-  (( verbose )) && log.info "Verbose mode enabled"
+  ((verbose)) && log.info "Verbose mode enabled"
 
   if [[ ${#paths[@]} -eq 0 ]]; then
     while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
+      [[ -z $line ]] && continue
       paths+=("$line")
     done
   fi
 
   if [[ ${#paths[@]} -eq 0 ]]; then
-    (( verbose )) && log.warn "No input paths provided"
+    ((verbose)) && log.warn "No input paths provided"
     return 0
   fi
 
@@ -92,7 +95,7 @@ main() {
 
   local target
   for target in "${paths[@]}"; do
-    if (( dry_run )); then
+    if ((dry_run)); then
       log.info "[dry-run] Would process: $target (tmp: $temp_dir)"
     else
       log.info "Processing: $target (tmp: $temp_dir)"

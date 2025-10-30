@@ -233,7 +233,7 @@ parse_args() {
     print_only=1
   fi
 
-  if ((probe_which)) && (( ! allow_alternatives )); then
+  if ((probe_which)) && ((!allow_alternatives)); then
     autoflags_usage_error "--which requires --allow-alt"
   fi
 
@@ -374,7 +374,6 @@ autoflags_join_array() {
 
   printf '%s' "$output"
 }
-
 
 autoflags_confirm() {
   local prompt="$1"
@@ -587,7 +586,7 @@ main() {
     exit 0
   fi
 
-  if (( ! auto_execute )); then
+  if ((!auto_execute)); then
     printf '%s\n' "Prompting user for confirmation"
     if ! autoflags_confirm "Proceed with execution?" "$confirm_default_yes"; then
       printf '%s\n' "Execution cancelled by user"
