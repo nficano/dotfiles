@@ -52,6 +52,124 @@ script.parse_common() {
   echo "$@"
 }
 
+# script.parse_with_opts OPTSPEC [--long key=short ... --] ARGS...
+# Converts recognised long options into their short-form equivalents so callers
+# can safely run getopts with a single option spec. Returns the transformed argv
+# vector as space-separated words on stdout. Long option mappings should be
+# provided via `--long`, for example:
+#   local parsed
+#   parsed=$(script.parse_with_opts ':hvf:' --long flag=f -- "$@")
+#   read -r -a argv <<<"$parsed"
+#   set -- "${argv[@]}"
+#   while getopts ':hvf:' opt; do ...; done
+script.parse_with_opts() {
+  if (($# < 1)); then
+    log.error "script.parse_with_opts requires an optspec"
+    return 2
+  fi
+  local optspec="$1"
+  shift
+
+  local -a long_keys=()
+  local -a long_vals=()
+  if [[ ${1:-} == "--long" ]]; then
+    shift
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+      --)
+        shift
+        break
+        ;;
+      *)
+        local entry="$1"
+        local key="${entry%%=*}"
+        local short="${entry#*=}"
+        [[ $key == --* ]] || key="--$key"
+        short="${short#-}"
+        long_keys+=("$key")
+        long_vals+=("$short")
+        ;;
+      esac
+      shift
+    done
+  fi
+
+  local -a args=("$@")
+  local -a normalized=()
+  local idx=0
+  while ((idx < ${#args[@]})); do
+    local token="${args[idx]}"
+    case "$token" in
+    --help)
+      normalized+=('-h')
+      ;;
+    --verbose)
+      normalized+=('-v')
+      ;;
+    --*=*)
+      local key="${token%%=*}"
+      local value="${token#*=}"
+      local short=""
+      local ll_idx
+      for ll_idx in "${!long_keys[@]}"; do
+        if [[ ${long_keys[ll_idx]} == "$key" ]]; then
+          short="${long_vals[ll_idx]}"
+          break
+        fi
+      done
+      if [[ -z $short ]]; then
+        log.error "Unknown option: $key"
+        script.usage 1
+      fi
+      normalized+=("-$short" "$value")
+      ;;
+    --)
+      normalized+=("${args[@]:idx}")
+      break
+      ;;
+    --*)
+      local key="$token"
+      local short=""
+      local ll_idx
+      for ll_idx in "${!long_keys[@]}"; do
+        if [[ ${long_keys[ll_idx]} == "$key" ]]; then
+          short="${long_vals[ll_idx]}"
+          break
+        fi
+      done
+      if [[ -z $short ]]; then
+        log.error "Unknown option: $key"
+        script.usage 1
+      fi
+      local requires_arg=0
+      if [[ $optspec == *"$short:"* ]]; then
+        requires_arg=1
+      fi
+      if ((requires_arg)); then
+        if ((idx + 1 >= ${#args[@]})); then
+          log.error "$key requires a value"
+          script.usage 1
+        fi
+        normalized+=("-$short" "${args[idx + 1]}")
+        ((idx++))
+      else
+        normalized+=("-$short")
+      fi
+      ;;
+    -*)
+      normalized+=("$token")
+      ;;
+    *)
+      normalized+=("${args[@]:idx}")
+      break
+      ;;
+    esac
+    ((idx++))
+  done
+
+  printf '%s\n' "${normalized[*]}"
+}
+
 script.validate_positive_int() {
   local value="$1" name="$2"
   if ! [[ $value =~ ^[0-9]+$ ]] || [[ $value -le 0 ]]; then

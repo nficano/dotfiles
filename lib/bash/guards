@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+
+# guards — validation helpers that raise structured exceptions on failure.
+# Functions prefer the exceptions module when available but fall back to a
+# standalone reporter so they remain useful in isolation.
+
+: "${GUARDS_PREFIX:=GUARD}"
+: "${GUARDS_TRACE:=1}"
+: "${GUARDS_RAISE_FN:=}"
+
+guards._timestamp() {
+  date +%Y-%m-%dT%H:%M:%S%z
+}
+
+guards._call_site() {
+  if [[ ${GUARDS_TRACE:-1} -ne 1 ]]; then
+    return
+  fi
+  local depth="${1:-3}"
+  local src line fn
+  if ! read -r src line fn < <(caller "$depth" 2>/dev/null); then
+    depth=$((depth - 1))
+    read -r src line fn < <(caller "$depth" 2>/dev/null || true)
+  fi
+  printf ' [%s:%s %s]' "${src:-?}" "${line:-?}" "${fn:-main}"
+}
+
+guards._raise_default() {
+  local name="$1" message="${2:-}" code="${3:-1}"
+  printf '%s %s %s: %s (code=%s)%s\n' \
+    "$(guards._timestamp)" "${GUARDS_PREFIX}" "$name" "$message" "$code" "$(guards._call_site 4)" >&2
+  return "$code"
+}
+
+guards._raise_exception() {
+  local name="$1" message="${2:-}" code="${3:-}"
+  if [[ -n ${code:-} ]] && declare -F exception.register >/dev/null && declare -p ERR_CODE >/dev/null 2>&1; then
+    if [[ -z ${ERR_CODE[$name]+x} ]]; then
+      exception.register "$name" "$code"
+    fi
+  fi
+  exception.raise "$name" "$message"
+}
+
+guards.raise() {
+  local fn="${GUARDS_RAISE_FN:-}"
+  if [[ -z $fn ]]; then
+    if declare -F exception.raise >/dev/null; then
+      fn=guards._raise_exception
+    else
+      fn=guards._raise_default
+    fi
+    GUARDS_RAISE_FN="$fn"
+  fi
+  if ! declare -F "$fn" >/dev/null; then
+    fn=guards._raise_default
+  fi
+  "$fn" "$@"
+}
+
+# --- type/value checks ------------------------------------------------------
+guards.nonempty() {
+  local value="$1" label="${2:-value}"
+  [[ -n $value ]] || guards.raise ValueError "$label must be non-empty" 132
+}
+
+guards.is_int() {
+  [[ $1 =~ ^-?[0-9]+$ ]]
+}
+
+guards.require_int() {
+  local value="$1" label="${2:-value}"
+  guards.is_int "$value" || guards.raise ValueError "$label must be integer, got '$value'" 132
+}
+
+guards.is_uint() {
+  [[ $1 =~ ^[0-9]+$ ]]
+}
+
+guards.require_uint() {
+  local value="$1" label="${2:-value}"
+  guards.is_uint "$value" || guards.raise ValueError "$label must be unsigned integer, got '$value'" 132
+}
+
+guards.require_bool() {
+  local value="$1" label="${2:-value}"
+  case "$value" in
+  true | false | 0 | 1 | yes | no | on | off) ;;
+  *) guards.raise ValueError "$label must be boolean-ish" 132 ;;
+  esac
+}
+
+guards.require_range() {
+  local value="$1" min="$2" max="$3" label="${4:-value}"
+  guards.require_int "$value" "$label"
+  ((value >= min && value <= max)) || guards.raise ValueError "$label must be in [$min,$max], got $value" 132
+}
+
+# --- filesystem / env -------------------------------------------------------
+guards.require_file() {
+  local path="$1"
+  [[ -f $path ]] || guards.raise FileNotFoundError "no such file: $path" 159
+}
+
+guards.require_dir() {
+  local path="$1"
+  [[ -d $path ]] || guards.raise NotADirectoryError "no such directory: $path" 162
+}
+
+guards.require_readable() {
+  local path="$1"
+  [[ -r $path ]] || guards.raise PermissionError "not readable: $path" 163
+}
+
+guards.require_writable() {
+  local path="$1"
+  [[ -w $path ]] || guards.raise PermissionError "not writable: $path" 163
+}
+
+guards.require_executable() {
+  local path="$1"
+  [[ -x $path ]] || guards.raise PermissionError "not executable: $path" 163
+}
+
+guards.require_exec() {
+  local name="$1"
+  command -v "$name" >/dev/null 2>&1 || guards.raise FileNotFoundError "missing executable: $name" 159
+}
+
+guards.require_vars() {
+  local key
+  for key in "$@"; do
+    [[ -n ${!key+x} ]] || guards.raise NameError "env var not set: $key" 120
+    [[ -n ${!key} ]] || guards.raise ValueError "env var empty: $key" 132
+  done
+}
+
+# --- strings / patterns -----------------------------------------------------
+guards.require_matches() {
+  local value="$1" regex="$2" label="${3:-value}"
+  [[ $value =~ $regex ]] || guards.raise ValueError "$label does not match /$regex/" 132
+}
+
+guards.require_oneof() {
+  local value="$1" options="$2" label="${3:-value}"
+  [[ "|$options|" == *"|$value|"* ]] || guards.raise ValueError "$label must be one of {$options}, got '$value'" 132
+}
+
+# --- URLs/hosts -------------------------------------------------------------
+guards.require_url() {
+  local value="$1" label="${2:-url}"
+  [[ $value =~ ^https?://[A-Za-z0-9._~-]+(:[0-9]+)?(/.*)?$ ]] || guards.raise ValueError "$label must be http(s) URL" 132
+}

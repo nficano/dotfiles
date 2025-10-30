@@ -86,7 +86,7 @@ ai._join_lines() {
   eval "local -a __lines=(\"\${$array_name[@]}\")"
 
   while ((${#__lines[@]})); do
-    local __idx=$(( ${#__lines[@]} - 1 ))
+    local __idx=$((${#__lines[@]} - 1))
     if [[ -n ${__lines[$__idx]} ]]; then
       break
     fi
@@ -201,7 +201,7 @@ ai._load_agents() {
       state=""
       local instruction_joined=""
       ai._join_lines instruction_lines instruction_joined
-      if (( current_index >= 0 )); then
+      if ((current_index >= 0)); then
         ai__agent_instructions[$current_index]="$instruction_joined"
       fi
       instruction_lines=()
@@ -216,7 +216,7 @@ ai._load_agents() {
         state=""
         local rules_joined=""
         ai._join_lines rules_lines rules_joined
-        if (( current_index >= 0 )); then
+        if ((current_index >= 0)); then
           ai__agent_rules[$current_index]="$rules_joined"
         fi
         rules_lines=()
@@ -329,7 +329,7 @@ ai._ensure_agents_loaded() {
     if [[ ${ai__agents_mtime:-} != "$current_mtime" ]]; then
       need_reload=1
     fi
-  elif (( ! ai__agents_initialized )); then
+  elif ((!ai__agents_initialized)); then
     need_reload=1
   fi
 
@@ -627,7 +627,10 @@ ai.openai_log_error() {
 ai.openai_message_text() {
   local ref="$1"
   [[ -n $ref ]] || return 1
-  command -v jq >/dev/null 2>&1 || { log.error "jq is required to parse OpenAI responses"; return 1; }
+  command -v jq >/dev/null 2>&1 || {
+    log.error "jq is required to parse OpenAI responses"
+    return 1
+  }
 
   local body
   body=$(http.response_get "$ref" body 2>/dev/null) || return 1

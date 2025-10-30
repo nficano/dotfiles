@@ -27,54 +27,37 @@ declare -a args=()
 
 parse_args() {
   local opt
-  local -a transformed=()
+  local normalized
+  normalized=$(script.parse_with_opts ':hvfp:' --long --flag=f --param=p -- "$@")
+  local -a argv=()
+  if [[ -n $normalized ]]; then
+    read -r -a argv <<<"$normalized"
+  fi
 
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --help) transformed+=('-h') ;;
-      --verbose) transformed+=('-v') ;;
-      --flag) transformed+=('-f') ;;
-      --param)
-        [[ $# -gt 1 ]] || { log.error "--param requires a value"; script.usage 1; }
-        transformed+=('-p' "$2")
-        shift
-        ;;
-      --param=*)
-        transformed+=('-p' "${1#*=}")
-        ;;
-      --)
-        shift
-        break
-        ;;
-      --*)
-        log.error "Unknown option: $1"
-        script.usage 1
-        ;;
-      *)
-        break
-        ;;
-    esac
-    shift
-  done
+  set -- "${argv[@]}"
 
-  transformed+=("$@")
-  set -- "${transformed[@]}"
-
+  OPTIND=1
   while getopts ':hvfp:' opt; do
     case "$opt" in
       h) script.usage ;;
       v) verbose=1 ;;
       f) flag=1 ;;
       p) param="$OPTARG" ;;
-      :) log.error "Option -$OPTARG requires an argument"; script.usage 1 ;;
-      \?) log.error "Invalid option: -$OPTARG"; script.usage 1 ;;
+      :)
+        log.error "Option -$OPTARG requires an argument"
+        script.usage 1
+        ;;
+      \?)
+        log.error "Invalid option: -$OPTARG"
+        script.usage 1
+        ;;
     esac
   done
 
   shift $((OPTIND - 1))
   args=("$@")
 
-  if [[ -z "$param" ]]; then
+  if [[ -z $param ]]; then
     log.error "Missing required option --param"
     script.usage 1
   fi
@@ -84,6 +67,7 @@ parse_args() {
     script.usage 1
   fi
 }
+
 
 main() {
   (( verbose )) && log.info "Verbose mode enabled"

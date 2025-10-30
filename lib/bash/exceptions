@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+
+# exceptions — Python-inspired exception taxonomy and helpers for Bash.
+# Provides structured error codes, formatted output, and lightweight guard
+# utilities for shell scripts.
+
+# If the caller already prepared ERR_CODE, respect it; otherwise load defaults.
+if ! declare -p ERR_CODE >/dev/null 2>&1; then
+  declare -Ag ERR_CODE=(
+    # Base
+    [BaseException]=100
+    [SystemExit]=101
+
+    # Core
+    [Exception]=110
+    [AssertionError]=111
+    [AttributeError]=112
+    [EOFError]=113
+    [ImportError]=114
+    [ModuleNotFoundError]=115
+    [LookupError]=116
+    [IndexError]=117
+    [KeyError]=118
+    [MemoryError]=119
+    [NameError]=120
+    [UnboundLocalError]=121
+    [ReferenceError]=122
+    [RuntimeError]=123
+    [NotImplementedError]=124
+    [RecursionError]=125
+    [StopIteration]=126
+    [StopAsyncIteration]=127
+    [SyntaxError]=128
+    [IndentationError]=129
+    [TabError]=130
+    [TypeError]=131
+    [ValueError]=132
+    [SystemError]=133
+    [BufferError]=134
+
+    # ArithmeticError family
+    [ArithmeticError]=140
+    [ZeroDivisionError]=141
+    [OverflowError]=142
+    [FloatingPointError]=143
+
+    # OSError / Environment
+    [OSError]=150
+    [BlockingIOError]=151
+    [ChildProcessError]=152
+    [ConnectionError]=153
+    [BrokenPipeError]=154
+    [ConnectionAbortedError]=155
+    [ConnectionRefusedError]=156
+    [ConnectionResetError]=157
+    [FileExistsError]=158
+    [FileNotFoundError]=159
+    [InterruptedError]=160
+    [IsADirectoryError]=161
+    [NotADirectoryError]=162
+    [PermissionError]=163
+    [ProcessLookupError]=164
+    [TimeoutError]=165
+
+    # UnicodeError family (grouped with ValueError-like codes)
+    [UnicodeError]=170
+    [UnicodeEncodeError]=171
+    [UnicodeDecodeError]=172
+    [UnicodeTranslateError]=173
+  )
+fi
+
+# Build reverse lookup table from the active ERR_CODE map.
+declare -Ag ERR_NAME=()
+for _exception_name in "${!ERR_CODE[@]}"; do
+  ERR_NAME["${ERR_CODE[$_exception_name]}"]="$_exception_name"
+done
+unset _exception_name
+
+: "${ERR_STRATEGY:=return}" # return | exit
+: "${ERR_PREFIX:=ERROR}"    # prefix label
+: "${ERR_TRACE:=1}"         # include file:line context
+
+exception._timestamp() {
+  date +%Y-%m-%dT%H:%M:%S%z
+}
+
+exception._call_site() {
+  local depth="${1:-2}"
+  local src line fn
+  read -r src line fn < <(caller "$depth" || true)
+  printf ' [%s:%s %s]' "${src:-?}" "${line:-?}" "${fn:-main}"
+}
+
+# exception.register Name Code
+# Extends the taxonomy while keeping reverse lookups in sync.
+exception.register() {
+  if (($# != 2)); then
+    printf 'exception.register requires Name and Code\n' >&2
+    return 2
+  fi
+  local name="$1" code="$2"
+  ERR_CODE["$name"]="$code"
+  ERR_NAME["$code"]="$name"
+}
+
+exception.code() { # Name -> numeric code
+  local name="$1"
+  printf '%s\n' "${ERR_CODE[$name]:-110}"
+}
+
+exception.name() { # Code -> Name
+  local code="$1"
+  printf '%s\n' "${ERR_NAME[$code]:-Exception}"
+}
+
+exception.format() { # Name "message" [code]
+  local name="$1" message="$2" code="${3:-$(exception.code "$1")}"
+  local where=""
+  if [[ ${ERR_TRACE:-1} -eq 1 ]]; then
+    where="$(exception._call_site 3)"
+  fi
+  printf '%s %s %s: %s (code=%s)%s\n' \
+    "$(exception._timestamp)" "${ERR_PREFIX}" "$name" "${message:-}" "$code" "$where" >&2
+}
+
+# exception.raise Name ["message"]
+# Obeys ERR_STRATEGY: return (default) or exit.
+exception.raise() {
+  if (($# == 0)); then
+    printf 'exception.raise requires a Name argument\n' >&2
+    return 2
+  fi
+  local name="$1"
+  shift || true
+  local message="${*:-}"
+  local code
+  code="$(exception.code "$name")"
+  exception.format "$name" "$message" "$code"
+  if [[ ${ERR_STRATEGY} == "exit" ]]; then
+    exit "$code"
+  fi
+  return "$code"
+}
+
+# exception.wrap Name "message fmt" [fmt-args ...] -- command [arg...]
+exception.wrap() {
+  if (($# < 2)); then
+    exception.raise ValueError "exception.wrap requires an exception name and message"
+  fi
+  local name="$1"
+  shift
+  local format="$1"
+  shift
+
+  local -a fmt_args=()
+  while (($#)); do
+    if [[ $1 == "--" ]]; then
+      shift
+      break
+    fi
+    fmt_args+=("$1")
+    shift
+  done
+
+  local message="$format"
+  if ((${#fmt_args[@]})); then
+    printf -v message "$format" "${fmt_args[@]}"
+  fi
+
+  if (($# == 0)); then
+    exception.raise ValueError "exception.wrap requires a command after --"
+  fi
+
+  "$@" || exception.raise "$name" "$message"
+}
+
+# exception.try <cmd...> || exception.as Name "message"
+exception.try() {
+  "$@"
+}
+
+exception.as() {
+  if (($# < 1)); then
+    exception.raise ValueError "exception.as requires an exception name"
+  fi
+  local name="$1"
+  shift || true
+  local message="${*:-wrapped failure}"
+  exception.raise "$name" "$message"
+}
+
+: "${exception__depth:=0}"
+: "${exception__oldopts:=}"
+
+# trap-based pretty printer for unhandled nonzero exits inside a guarded block.
+# Usage:
+#   exception.guard begin
+#   ... your code ...
+#   exception.guard end
+exception.guard() {
+  if (($# != 1)); then
+    exception.raise ValueError "usage: exception.guard begin|end"
+  fi
+  case "$1" in
+  begin)
+    ((exception__depth++))
+    if ((exception__depth == 1)); then
+      exception__oldopts="$-"
+      set -E -o pipefail
+      trap 'rc=$?; if (( rc != 0 )); then
+        exception.format "$(exception.name "$rc")" "unhandled exit status" "$rc"
+        return "$rc" 2>/dev/null || exit "$rc"
+      fi' ERR
+    fi
+    ;;
+  end)
+    if ((exception__depth == 0)); then
+      exception.raise RuntimeError "exception.guard end without begin"
+    fi
+    ((exception__depth--))
+    if ((exception__depth == 0)); then
+      trap - ERR
+      [[ $exception__oldopts == *e* ]] || set +e
+      exception__oldopts=""
+    fi
+    ;;
+  *)
+    exception.raise ValueError "usage: exception.guard begin|end"
+    ;;
+  esac
+}

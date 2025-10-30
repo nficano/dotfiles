@@ -12,9 +12,10 @@
 #/    $(basename "$0") exspecally
 
 set -Eeuo pipefail
-trap script.cleanup SIGINT SIGTERM ERR EXIT
+trap script.cleanup SIGINT SIGTERM EXIT
 
 source "$(dirname "$0")/../lib/bash/initrc"
+ERR_STRATEGY=exit
 
 verbose=0
 declare -a args=()
@@ -30,8 +31,7 @@ parse_args() {
   fi
 
   if ((${#args[@]} == 0)); then
-    log.error "Please provide the text to correct"
-    script.usage 1
+    exception.raise ValueError "Text to correct is required (pass words or run with --help)"
   fi
 }
 
@@ -39,19 +39,22 @@ main() {
   local model="${SPELL_CORRECT_OPENAI_MODEL:-gpt-4o-mini}"
   local agent="${SPELL_CORRECT_OPENAI_AGENT:-spell-check}"
 
-  require.cmd curl jq
+  guards.require_exec curl
+  guards.require_exec jq
   if os.platform.is_darwin; then
-    require.cmd pbcopy
+    guards.require_exec pbcopy
   else
-    require.cmd xclip
+    guards.require_exec xclip
   fi
 
-  if ! ai.openai_require_api_key; then
-    exit 1
+  local api_key
+  api_key=$(ai.openai_api_key)
+  if [[ -z $api_key ]]; then
+    exception.raise PermissionError "OPENAI_API_KEY is not set"
   fi
 
-  if ! ai.agent_require "$agent"; then
-    exit 1
+  if ! ai.agent_exists "$agent"; then
+    exception.raise LookupError "Unknown AI agent: $agent"
   fi
 
   local api_base
@@ -70,39 +73,33 @@ main() {
   local payload correction temperature
   temperature="${SPELL_CORRECT_OPENAI_TEMPERATURE:-0}"
 
-  if ! payload=$(ai.openai_agent_chat_payload "$model" "$agent" "$text" "$temperature"); then
-    log.error "Failed to build OpenAI payload"
-    exit 1
-  fi
+  payload=$(exception.wrap RuntimeError "Failed to build OpenAI payload" -- ai.openai_agent_chat_payload "$model" "$agent" "$text" "$temperature")
 
   ((verbose)) && log.info "Requesting spell correction from OpenAI"
 
   if ! ai.openai_chat_completion spell_response "$payload"; then
     ai.openai_log_error spell_response "Failed to contact OpenAI API"
-    exit 1
+    exception.raise ConnectionError "Failed to contact OpenAI API"
   fi
 
   if ! http.response_ok spell_response; then
     ai.openai_log_error spell_response "OpenAI API request failed"
-    exit 1
+    exception.raise RuntimeError "OpenAI API request failed"
   fi
 
   if ! correction=$(ai.openai_message_text spell_response); then
-    log.error "Unable to parse OpenAI response"
-    exit 1
+    exception.raise ValueError "Unable to parse OpenAI response"
   fi
 
   correction=$(str.trim "$correction")
   if [[ -z $correction ]]; then
-    log.error "No correction returned by OpenAI"
-    exit 1
+    exception.raise ValueError "No correction returned by OpenAI"
   fi
 
   ((verbose)) && log.info "Correction: $correction"
 
   if ! printf '%s' "$correction" | clip.copy; then
-    log.error "Failed to copy correction to clipboard"
-    exit 1
+    exception.raise OSError "Failed to copy correction to clipboard"
   fi
 
   printf 'Copied correction "%s" to the clipboard\n' "$correction"
