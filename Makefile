@@ -1,4 +1,10 @@
 DOTFILES := $(PWD)
+PENTOOL_DIR := $(DOTFILES)/tools/pentool
+PENTOOL_VENV := $(PENTOOL_DIR)/.venv
+PENTOOL_PYTHON := $(PENTOOL_VENV)/bin/python
+PENTOOL_DIST := $(PENTOOL_DIR)/dist
+PENTOOL_DEPS := $(PENTOOL_DIST)/deps
+PENTOOL_PEX := $(PENTOOL_DIST)/pentool.pex
 
 install:
 	setup-tree
@@ -48,3 +54,20 @@ setup-tree:
 	ln -fsn $(DOTFILES)/home/tmux.conf ${HOME}/.tmux.conf
 	ln -fsn $(DOTFILES)/home/lesskey ${HOME}/.lesskey
 	ln -s $(DOTFILES)/bin ${HOME}/.bin
+
+.PHONY: pentool-pex
+pentool-pex: $(PENTOOL_PEX)
+	@echo "PEX artifact created at $(PENTOOL_PEX)"
+
+$(PENTOOL_PEX): $(PENTOOL_PYTHON)
+	rm -rf $(PENTOOL_DIST)
+	mkdir -p $(PENTOOL_DIST)
+	$(PENTOOL_PYTHON) -m build --wheel --no-isolation --outdir $(PENTOOL_DIST) $(PENTOOL_DIR)
+	mkdir -p $(PENTOOL_DEPS)
+	$(PENTOOL_PYTHON) -m pip download --dest $(PENTOOL_DEPS) --only-binary=:all: "pydantic>=2.7,<3.0"
+	$(PENTOOL_PYTHON) -m pex pentool --find-links $(PENTOOL_DIST) --find-links $(PENTOOL_DEPS) --no-index -c pentool -o $(PENTOOL_PEX)
+
+$(PENTOOL_PYTHON):
+	python3 -m venv $(PENTOOL_VENV)
+	$(PENTOOL_PYTHON) -m pip install --upgrade pip
+	$(PENTOOL_PYTHON) -m pip install build pex "setuptools>=67" wheel

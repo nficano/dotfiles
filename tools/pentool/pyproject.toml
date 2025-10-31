@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=67"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pentool"
+version = "0.1.0"
+description = "Penetration testing automation harness built around containerised tooling."
+authors = [{name = "Nick Ficano"}]
+license = "MIT"
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: POSIX",
+]
+dependencies = [
+  "pydantic>=2.7,<3.0",
+]
+
+[project.scripts]
+pentool = "pentool.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"pentool.resources" = ["Dockerfile"]
