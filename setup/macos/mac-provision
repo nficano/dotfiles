@@ -27,6 +27,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 repo_root=$(cd "$script_dir/../.." &>/dev/null && pwd -P)
 BREWFILE_PATH="$script_dir/Brewfile"
 DEFAULTS_FILE="$script_dir/defaults.conf"
+DOCK_FILE="$script_dir/dock.conf"
 
 verbose=0
 assume_yes=0
@@ -39,6 +40,7 @@ update_only=0
 declare -a SUMMARY_CHANGES=()
 declare -a SUMMARY_WARNINGS=()
 declare -a DEFAULTS_ENTRIES=()
+declare -a DOCK_CONFIG_ITEMS=()
 
 summary.add() {
   SUMMARY_CHANGES+=("$1")
@@ -514,12 +516,121 @@ step_apply_user_defaults() {
   killall cfprefsd >/dev/null 2>&1 || true
 }
 
+dock_config_load() {
+  DOCK_CONFIG_ITEMS=()
+  local path="$1"
+  if [[ ! -f $path ]]; then
+    return 1
+  fi
+
+  local line trimmed
+  while IFS= read -r line || [[ -n $line ]]; do
+    trimmed=$(str.trim "$line")
+    [[ -z $trimmed ]] && continue
+    [[ ${trimmed:0:1} == "#" ]] && continue
+    DOCK_CONFIG_ITEMS+=("$trimmed")
+  done <"$path"
+
+  ((${#DOCK_CONFIG_ITEMS[@]} > 0)) || return 1
+  return 0
+}
+
+dock_config_apply_item() {
+  local item="$1"
+  local section="apps"
+  case "$item" in
+  spacer)
+    dockutil --add '' --type spacer --section "$section" --no-restart
+    return
+  ;;
+  small-spacer)
+    dockutil --add '' --type small-spacer --section "$section" --no-restart
+    return
+  ;;
+  folder:*)
+    local config="${item#folder:}"
+    local path="${config%%|*}"
+    local options="${config#"$path"}"
+    path=$(expand_path "$path")
+    if [[ ! -e $path ]]; then
+      log.warn "Skipping Dock folder (not found): $path"
+      return 1
+    fi
+    local args=(--add "$path" --section others --no-restart)
+    if [[ $options == *"|view=grid"* ]]; then
+      args+=(--view grid)
+    elif [[ $options == *"|view=list"* ]]; then
+      args+=(--view list)
+    fi
+    if [[ $options == *"|display=folder"* ]]; then
+      args+=(--display folder)
+    elif [[ $options == *"|display=stack"* ]]; then
+      args+=(--display stack)
+    fi
+    dockutil "${args[@]}"
+    return
+  ;;
+  app:*)
+    item="${item#app:}"
+    ;;
+  esac
+
+  local path
+  path=$(expand_path "$item")
+  if [[ ! -e $path ]]; then
+    log.warn "Skipping Dock item (not found): $path"
+    return 1
+  fi
+  dockutil --add "$path" --no-restart
+}
+
 step_configure_directories() {
   ensure_directory_flag "$HOME/Library" "visible"
   ensure_directory_flag "$HOME/Music" "hidden"
   ensure_directory_flag "$HOME/Movies" "hidden"
   ensure_directory_flag "$HOME/Pictures" "hidden"
   ensure_directory_flag "$HOME/Public" "hidden"
+}
+
+step_configure_dock() {
+  if [[ ! -f $DOCK_FILE ]]; then
+    ((verbose)) && log.info "Dock config not found at $DOCK_FILE; skipping"
+    return 0
+  fi
+
+  if ! command -v dockutil >/dev/null 2>&1; then
+    summary.warn "dockutil not installed; cannot configure Dock"
+    return 0
+  fi
+
+  if ! dock_config_load "$DOCK_FILE"; then
+    summary.warn "Dock config at $DOCK_FILE is empty or invalid"
+    return 0
+  fi
+
+  summary.add "Configure Dock items from $DOCK_FILE"
+
+  if ((dry_run)); then
+    log.info "[dry-run] Would remove all Dock items"
+    local item
+    for item in "${DOCK_CONFIG_ITEMS[@]}"; do
+      log.info "[dry-run] Would add Dock item: $item"
+    done
+    return 0
+  fi
+
+  if ! dockutil --remove all --no-restart >/dev/null 2>&1; then
+    summary.warn "Failed to clear Dock before applying configuration"
+  fi
+
+  local item
+  for item in "${DOCK_CONFIG_ITEMS[@]}"; do
+    if ! dock_config_apply_item "$item"; then
+      summary.warn "Failed to add Dock item: $item"
+    fi
+  done
+
+  killall Dock >/dev/null 2>&1 || true
 }
 
 step_configure_shell_profiles() {
@@ -745,6 +856,7 @@ main() {
   run_step "Apply Brew bundle" step_ensure_brew_bundle
   run_step "Refresh file associations" step_setup_default_file_associations
   run_step "Apply macOS defaults" step_apply_user_defaults
+  run_step "Configure Dock" step_configure_dock
   run_step "Configure special directories" step_configure_directories
   run_step "Ensure shell profile files" step_configure_shell_profiles
   run_step "Quit System Preferences" step_quit_system_preferences
