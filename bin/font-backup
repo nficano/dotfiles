@@ -1,0 +1,305 @@
+#!/usr/bin/env bash
+#/ Back up and restore user fonts using compressed tar archives.
+#/
+#/ Usage: $(basename "$0") [options]
+#/
+#/ Options:
+#/   -h, --help               Show this help and exit
+#/   -v, --verbose            Enable additional logging
+#/   -o, --export-file PATH   Write the archive to PATH (default: ./fonts-YYYYmmdd-HHMMSS.tar.gz)
+#/   -r, --restore SOURCE     Restore fonts from SOURCE (local path or URL to a .tar.gz archive)
+#/
+#/ Examples:
+#/   $(basename "$0")
+#/   $(basename "$0") --export-file ~/Backups/my-fonts.tar.gz
+#/   $(basename "$0") --restore ~/Backups/my-fonts.tar.gz
+#/   $(basename "$0") --restore https://example.com/my-fonts.tar.gz
+
+cleanup() {
+  local exit_code=$?
+  trap - SIGINT SIGTERM ERR EXIT
+
+  if ((exit_code == 130)); then
+    log.warn "Font operation aborted by user (Ctrl+C)"
+  elif ((exit_code == 143)); then
+    log.warn "Font operation terminated (SIGTERM)"
+  elif ((exit_code != 0)); then
+    log.error "Font utility failed (exit code $exit_code)"
+  fi
+
+  exit "$exit_code"
+}
+
+readonly FONT_BACKUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${FONT_BACKUP_DIR}/../lib/bash/initrc"
+
+verbose=0
+export_file=""
+restore_source=""
+FONT_RELATIVE_DIRS=(
+  "Library/Fonts"
+  "Library/Fonts Disabled"
+  "Fonts"
+)
+
+usage() {
+  script.usage "$@"
+}
+
+parse_args() {
+  local normalized
+  normalized=$(script.parse_with_opts ':hvo:r:' --long --export-file=o --restore=r -- "$@")
+  local -a argv=()
+  if [[ -n $normalized ]]; then
+    read -r -a argv <<<"$normalized"
+  fi
+
+  set -- "${argv[@]}"
+
+  local opt
+  OPTIND=1
+  while getopts ':hvo:r:' opt; do
+    case "$opt" in
+    h) usage ;;
+    v) verbose=1 ;;
+    o) export_file="$OPTARG" ;;
+    r) restore_source="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires a value"
+      usage 1
+      ;;
+    \?)
+      log.error "Unknown option: -$OPTARG"
+      usage 1
+      ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  if (($#)); then
+    log.error "Unexpected positional arguments: $*"
+    usage 1
+  fi
+
+  if [[ -n $restore_source && -n $export_file ]]; then
+    log.error "Cannot use --export-file when restoring fonts"
+    usage 1
+  fi
+}
+
+default_archive_name_for() {
+  local timestamp="$1"
+  printf 'fonts-%s.tar.gz\n' "$timestamp"
+}
+
+default_archive_name() {
+  default_archive_name_for "$(date +%Y%m%d-%H%M%S)"
+}
+
+resolve_export_path() {
+  local target="$1"
+  local base_dir="${2:-$PWD}"
+  local default_name="${3:-}"
+
+  if [[ -z $target ]]; then
+    [[ -n $default_name ]] || default_name="$(default_archive_name)"
+    printf '%s\n' "$(path.join "$base_dir" "$default_name")"
+    return
+  fi
+
+  target=$(path.expand "$target")
+  if path.isabs "$target" >/dev/null 2>&1; then
+    printf '%s\n' "$target"
+  else
+    printf '%s\n' "$(path.join "$base_dir" "$target")"
+  fi
+}
+
+collect_font_dirs() {
+  local home_dir="$1"
+  local -a found=()
+
+  log.info "Inspecting ${#FONT_RELATIVE_DIRS[@]} known font locations"
+  local relative_path absolute_path
+  for relative_path in "${FONT_RELATIVE_DIRS[@]}"; do
+    log.info "Checking $relative_path"
+    absolute_path=$(path.join "$home_dir" "$relative_path")
+    [[ -d $absolute_path ]] || continue
+    found+=("$relative_path")
+  done
+
+  local count=${#found[@]}
+  local noun="directories"
+  ((count == 1)) && noun="directory"
+  log.info "Found $count font $noun"
+
+  if ((count == 0)); then
+    return 1
+  fi
+
+  printf '%s\n' "${found[@]}"
+}
+
+is_url() {
+  local candidate="$1"
+  [[ $candidate == http://* || $candidate == https://* ]]
+}
+
+download_archive() {
+  local url="$1" dest="$2"
+  if ! command -v curl >/dev/null 2>&1; then
+    log.error "Downloading from URLs requires curl (not found in PATH)"
+    return 1
+  fi
+  if ! curl --fail --location --silent --show-error --output "$dest" "$url"; then
+    log.error "Failed to download font archive from: $url"
+    return 1
+  fi
+  return 0
+}
+
+mktemp_template_for_source() {
+  local source="$1"
+  case "$source" in
+  *.tar.gz)
+    printf 'font-restore.XXXXXX.tar.gz\n'
+    ;;
+  *.tgz)
+    printf 'font-restore.XXXXXX.tgz\n'
+    ;;
+  *.tar)
+    printf 'font-restore.XXXXXX.tar\n'
+    ;;
+  *)
+    printf 'font-restore.XXXXXX.tar.gz\n'
+    ;;
+  esac
+}
+
+restore_fonts() {
+  local source="$1"
+  local archive_path="$source"
+  local cleanup_file=0
+
+  if is_url "$source"; then
+    local template
+    template=$(mktemp_template_for_source "$source")
+    archive_path=$(mktemp "${TMPDIR:-/tmp}/${template}") || return 1
+    log.info "Downloading font archive from: $source"
+    if ! download_archive "$source" "$archive_path"; then
+      rm -f "$archive_path"
+      return 1
+    fi
+    cleanup_file=1
+  else
+    archive_path=$(path.expand "$source")
+    if ! fs.isfile "$archive_path"; then
+      log.error "Archive not found: $archive_path"
+      return 1
+    fi
+    log.info "Using local archive: $archive_path"
+  fi
+
+  log.info "Restoring fonts into $HOME"
+  local extracted=0
+  case "$archive_path" in
+  *.tar.gz | *.tgz)
+    if tar -xzf "$archive_path" -C "$HOME"; then
+      extracted=1
+    fi
+    ;;
+  *.tar)
+    if tar -xf "$archive_path" -C "$HOME"; then
+      extracted=1
+    fi
+    ;;
+  *)
+    log.error "Unsupported archive format: $archive_path (expected .tar.gz or .tar)"
+    ((cleanup_file)) && rm -f "$archive_path"
+    return 1
+    ;;
+  esac
+
+  if ((extracted == 0)); then
+    log.error "Failed to extract archive: $archive_path"
+    ((cleanup_file)) && rm -f "$archive_path"
+    return 1
+  fi
+
+  if ((cleanup_file)); then
+    rm -f "$archive_path"
+  fi
+
+  log.info "Font restore complete"
+}
+
+create_archive() {
+  local archive="$1"
+  shift
+  local -a sources=("$@")
+  local parent
+  parent=$(dirname -- "$archive")
+  mkdir -p "$parent"
+
+  if [[ -e $archive ]]; then
+    log.error "Refusing to overwrite existing file: $archive"
+    exit 1
+  fi
+
+  local -a tar_cmd=(tar -czf "$archive" --exclude='.DS_Store' --exclude='._*' -C "$HOME")
+  tar_cmd+=("${sources[@]}")
+
+  log.info "Writing fonts to $(basename "$archive")"
+  "${tar_cmd[@]}"
+}
+
+print_sources() {
+  ((verbose)) || return 0
+  log.info "Including the following font directories:"
+  local source
+  for source in "$@"; do
+    log.info "  $source"
+  done
+}
+
+main() {
+  parse_args "$@"
+
+  if [[ -n $restore_source ]]; then
+    restore_fonts "$restore_source"
+    return 0
+  fi
+
+  local archive
+  archive=$(resolve_export_path "$export_file")
+
+  log.info "Scanning for fonts (checking standard user locations)"
+  local -a font_sources=()
+  local font_sources_output
+  if font_sources_output=$(collect_font_dirs "$HOME"); then
+    while IFS= read -r line; do
+      [[ -z $line ]] && continue
+      font_sources+=("$line")
+    done <<<"$font_sources_output"
+  else
+    log.error "No user font directories found under $HOME"
+    exit 1
+  fi
+
+  print_sources "${font_sources[@]}"
+  log.info "Creating font backup at: $archive"
+  create_archive "$archive" "${font_sources[@]}"
+
+  local size='unknown'
+  if fs.isfile "$archive"; then
+    size=$(fs.file_size_bytes "$archive" || printf 'unknown')
+  fi
+
+  log.info "Font archive created ($size bytes)"
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  set -Eeuo pipefail
+  trap cleanup SIGINT SIGTERM ERR EXIT
+  main "$@"
+fi
