@@ -6,68 +6,73 @@
 
 # If the caller already prepared ERR_CODE, respect it; otherwise load defaults.
 if ! declare -p ERR_CODE >/dev/null 2>&1; then
-  declare -Ag ERR_CODE=(
-    # Base
-    [BaseException]=100
-    [SystemExit]=101
+  declare -Ag ERR_CODE
+  while IFS='|' read -r _exception_name _exception_code; do
+    [[ -z $_exception_name ]] && continue
+    [[ $_exception_name == \#* ]] && continue
+    ERR_CODE["$_exception_name"]="${_exception_code}"
+  done <<'EOF'
+# Base
+BaseException|100
+SystemExit|101
 
-    # Core
-    [Exception]=110
-    [AssertionError]=111
-    [AttributeError]=112
-    [EOFError]=113
-    [ImportError]=114
-    [ModuleNotFoundError]=115
-    [LookupError]=116
-    [IndexError]=117
-    [KeyError]=118
-    [MemoryError]=119
-    [NameError]=120
-    [UnboundLocalError]=121
-    [ReferenceError]=122
-    [RuntimeError]=123
-    [NotImplementedError]=124
-    [RecursionError]=125
-    [StopIteration]=126
-    [StopAsyncIteration]=127
-    [SyntaxError]=128
-    [IndentationError]=129
-    [TabError]=130
-    [TypeError]=131
-    [ValueError]=132
-    [SystemError]=133
-    [BufferError]=134
+# Core
+Exception|110
+AssertionError|111
+AttributeError|112
+EOFError|113
+ImportError|114
+ModuleNotFoundError|115
+LookupError|116
+IndexError|117
+KeyError|118
+MemoryError|119
+NameError|120
+UnboundLocalError|121
+ReferenceError|122
+RuntimeError|123
+NotImplementedError|124
+RecursionError|125
+StopIteration|126
+StopAsyncIteration|127
+SyntaxError|128
+IndentationError|129
+TabError|130
+TypeError|131
+ValueError|132
+SystemError|133
+BufferError|134
 
-    # ArithmeticError family
-    [ArithmeticError]=140
-    [ZeroDivisionError]=141
-    [OverflowError]=142
-    [FloatingPointError]=143
+# ArithmeticError family
+ArithmeticError|140
+ZeroDivisionError|141
+OverflowError|142
+FloatingPointError|143
 
-    # OSError / Environment
-    [OSError]=150
-    [BlockingIOError]=151
-    [ChildProcessError]=152
-    [ConnectionError]=153
-    [BrokenPipeError]=154
-    [ConnectionAbortedError]=155
-    [ConnectionRefusedError]=156
-    [ConnectionResetError]=157
-    [FileExistsError]=158
-    [FileNotFoundError]=159
-    [InterruptedError]=160
-    [IsADirectoryError]=161
-    [NotADirectoryError]=162
-    [PermissionError]=163
-    [ProcessLookupError]=164
-    [TimeoutError]=165
+# OSError / Environment
+OSError|150
+BlockingIOError|151
+ChildProcessError|152
+ConnectionError|153
+BrokenPipeError|154
+ConnectionAbortedError|155
+ConnectionRefusedError|156
+ConnectionResetError|157
+FileExistsError|158
+FileNotFoundError|159
+InterruptedError|160
+IsADirectoryError|161
+NotADirectoryError|162
+PermissionError|163
+ProcessLookupError|164
+TimeoutError|165
 
-    # UnicodeError family (grouped with ValueError-like codes)
-    [UnicodeError]=170
-    [UnicodeEncodeError]=171
-    [UnicodeDecodeError]=172
-    [UnicodeTranslateError]=173
-  )
+# UnicodeError family (grouped with ValueError-like codes)
+UnicodeError|170
+UnicodeEncodeError|171
+UnicodeDecodeError|172
+UnicodeTranslateError|173
+EOF
 fi
 
 # Build reverse lookup table from the active ERR_CODE map.

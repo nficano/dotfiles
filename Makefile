@@ -7,8 +7,8 @@ PENTOOL_DEPS := $(PENTOOL_DIST)/deps
 PENTOOL_PEX := $(PENTOOL_DIST)/pentool.pex
 
 install:
-	setup-tree
-	bash $(DOTFILES)/setup/macos/mac-provision
+	$(MAKE) setup-tree
+	"$(DOTFILES)/setup/macos/mac-provision"
 
 deploy-patch:
 	bumpversion patch
