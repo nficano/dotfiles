@@ -41,6 +41,8 @@ declare -a SUMMARY_CHANGES=()
 declare -a SUMMARY_WARNINGS=()
 declare -a DEFAULTS_ENTRIES=()
 declare -a DOCK_CONFIG_ITEMS=()
+declare -a BREW_FAILURES=()
+declare -a BREW_CAVEATS=()
 
 summary.add() {
   SUMMARY_CHANGES+=("$1")
@@ -64,6 +66,26 @@ summary.print() {
     local warn
     for warn in "${SUMMARY_WARNINGS[@]}"; do
       printf '    %s\n' "$warn"
+    done
+  fi
+
+  if ((${#BREW_FAILURES[@]})); then
+    log.error "Brew failures"
+    local block line
+    for block in "${BREW_FAILURES[@]}"; do
+      while IFS= read -r line; do
+        printf '  %s\n' "$line"
+      done <<<"$block"
+    done
+  fi
+
+  if ((${#BREW_CAVEATS[@]})); then
+    log.info "Brew caveats"
+    local block line
+    for block in "${BREW_CAVEATS[@]}"; do
+      while IFS= read -r line; do
+        printf '  %s\n' "$line"
+      done <<<"$block"
     done
   fi
 }
@@ -293,6 +315,46 @@ ensure_homebrew_prefix_permissions() {
   fi
 }
 
+collect_brew_failure() {
+  local label="$1" details="${2:-}"
+  local block="Command: $label"
+  if [[ -n ${details//[[:space:]]/} ]]; then
+    block+=$'\n'"$details"
+  fi
+  BREW_FAILURES+=("$block")
+}
+
+collect_brew_caveat() {
+  local label="$1" details="${2:-}"
+  local block="Command: $label"
+  if [[ -n ${details//[[:space:]]/} ]]; then
+    block+=$'\n'"$details"
+  fi
+  BREW_CAVEATS+=("$block")
+}
+
+brew_capture() {
+  local label="$1"
+  shift || true
+  local output exit_code caveats
+  if ! output=$("$@" 2>&1); then
+    exit_code=$?
+    printf '%s\n' "$output"
+    collect_brew_failure "$label (exit $exit_code)" "$output"
+    return "$exit_code"
+  fi
+  printf '%s\n' "$output"
+  caveats=$(printf '%s\n' "$output" | awk '
+    /^==> Caveats/ {collect=1; next}
+    /^==>/ {if (collect) {collect=0}}
+    { if (collect) print }
+  ')
+  if [[ -n ${caveats//[[:space:]]/} ]]; then
+    collect_brew_caveat "$label" "$caveats"
+  fi
+  return 0
+}
+
 run_step() {
   local label="$1" func="$2"
   printf '\n'
@@ -400,6 +462,7 @@ step_ensure_brew_bundle() {
     return 0
   fi
 
+  collect_brew_failure "brew bundle check --file=$BREWFILE_PATH" "$check_output"
   summary.add "Install missing Homebrew formulas from Brewfile"
   printf '%s\n' "$check_output"
 
@@ -408,7 +471,7 @@ step_ensure_brew_bundle() {
     return 0
   fi
 
-  brew bundle --file="$BREWFILE_PATH"
+  brew_capture "brew bundle install --file=$BREWFILE_PATH" brew bundle --file="$BREWFILE_PATH"
 }
 
 step_setup_default_file_associations() {
@@ -699,7 +762,7 @@ step_install_pipx() {
     return 0
   fi
 
-  brew install pipx
+  brew_capture "brew install pipx" brew install pipx
   pipx ensurepath >/dev/null 2>&1 || true
   sudo pipx --global ensurepath >/dev/null 2>&1 || true
   pipx completions >/dev/null 2>&1 || true
@@ -769,7 +832,8 @@ update_brewfile_from_system() {
     return 0
   fi
 
-  if ui.loader.run "Updating Brewfile" -- brew bundle dump --file="$BREWFILE_PATH" --force; then
+  log.info "Updating Brewfile from current system"
+  if brew_capture "brew bundle dump --file=$BREWFILE_PATH --force" brew bundle dump --file="$BREWFILE_PATH" --force; then
     summary.add "Brewfile updated from current system"
   else
     summary.warn "Failed to update Brewfile"
