@@ -34,8 +34,12 @@ guards._raise_default() {
 
 guards._raise_exception() {
   local name="$1" message="${2:-}" code="${3:-}"
-  if [[ -n ${code:-} ]] && declare -F exception.register >/dev/null && declare -p ERR_CODE >/dev/null 2>&1; then
-    if [[ -z ${ERR_CODE[$name]+x} ]]; then
+  if [[ -n ${code:-} ]] && declare -F exception.register >/dev/null; then
+    if declare -F exception.exists >/dev/null; then
+      if ! exception.exists "$name"; then
+        exception.register "$name" "$code"
+      fi
+    else
       exception.register "$name" "$code"
     fi
   fi

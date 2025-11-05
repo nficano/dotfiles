@@ -4,83 +4,155 @@
 # Provides structured error codes, formatted output, and lightweight guard
 # utilities for shell scripts.
 
-# If the caller already prepared ERR_CODE, respect it; otherwise load defaults.
-if ! declare -p ERR_CODE >/dev/null 2>&1; then
-  declare -Ag ERR_CODE
-  while IFS='|' read -r _exception_name _exception_code; do
-    [[ -z $_exception_name ]] && continue
-    [[ $_exception_name == \#* ]] && continue
-    ERR_CODE["$_exception_name"]="${_exception_code}"
-  done <<'EOF'
-# Base
-BaseException|100
-SystemExit|101
+# Maintain the exception registry using indexed arrays so the module remains
+# compatible with the macOS system Bash (3.2).
+exception._ensure_registry() {
+  if [[ -n ${ERR_CODE_REGISTRY_INIT:-} ]]; then
+    return
+  fi
+  ERR_CODE_REGISTRY_INIT=1
+  ERR_CODE_NAMES=(
+    BaseException
+    SystemExit
+    Exception
+    AssertionError
+    AttributeError
+    EOFError
+    ImportError
+    ModuleNotFoundError
+    LookupError
+    IndexError
+    KeyError
+    MemoryError
+    NameError
+    UnboundLocalError
+    ReferenceError
+    RuntimeError
+    NotImplementedError
+    RecursionError
+    StopIteration
+    StopAsyncIteration
+    SyntaxError
+    IndentationError
+    TabError
+    TypeError
+    ValueError
+    SystemError
+    BufferError
+    ArithmeticError
+    ZeroDivisionError
+    OverflowError
+    FloatingPointError
+    OSError
+    BlockingIOError
+    ChildProcessError
+    ConnectionError
+    BrokenPipeError
+    ConnectionAbortedError
+    ConnectionRefusedError
+    ConnectionResetError
+    FileExistsError
+    FileNotFoundError
+    InterruptedError
+    IsADirectoryError
+    NotADirectoryError
+    PermissionError
+    ProcessLookupError
+    TimeoutError
+    UnicodeError
+    UnicodeEncodeError
+    UnicodeDecodeError
+    UnicodeTranslateError
+  )
 
-# Core
-Exception|110
-AssertionError|111
-AttributeError|112
-EOFError|113
-ImportError|114
-ModuleNotFoundError|115
-LookupError|116
-IndexError|117
-KeyError|118
-MemoryError|119
-NameError|120
-UnboundLocalError|121
-ReferenceError|122
-RuntimeError|123
-NotImplementedError|124
-RecursionError|125
-StopIteration|126
-StopAsyncIteration|127
-SyntaxError|128
-IndentationError|129
-TabError|130
-TypeError|131
-ValueError|132
-SystemError|133
-BufferError|134
+  ERR_CODE_VALUES=(
+    100
+    101
+    110
+    111
+    112
+    113
+    114
+    115
+    116
+    117
+    118
+    119
+    120
+    121
+    122
+    123
+    124
+    125
+    126
+    127
+    128
+    129
+    130
+    131
+    132
+    133
+    134
+    140
+    141
+    142
+    143
+    150
+    151
+    152
+    153
+    154
+    155
+    156
+    157
+    158
+    159
+    160
+    161
+    162
+    163
+    164
+    165
+    170
+    171
+    172
+    173
+  )
+}
 
-# ArithmeticError family
-ArithmeticError|140
-ZeroDivisionError|141
-OverflowError|142
-FloatingPointError|143
+exception._ensure_registry
 
-# OSError / Environment
-OSError|150
-BlockingIOError|151
-ChildProcessError|152
-ConnectionError|153
-BrokenPipeError|154
-ConnectionAbortedError|155
-ConnectionRefusedError|156
-ConnectionResetError|157
-FileExistsError|158
-FileNotFoundError|159
-InterruptedError|160
-IsADirectoryError|161
-NotADirectoryError|162
-PermissionError|163
-ProcessLookupError|164
-TimeoutError|165
+exception._find_index_by_name() {
+  exception._ensure_registry
+  local target="$1"
+  local i count
+  count=${#ERR_CODE_NAMES[@]}
+  for ((i = 0; i < count; i++)); do
+    if [[ ${ERR_CODE_NAMES[i]} == "$target" ]]; then
+      printf '%s\n' "$i"
+      return 0
+    fi
+  done
+  return 1
+}
 
-# UnicodeError family (grouped with ValueError-like codes)
-UnicodeError|170
-UnicodeEncodeError|171
-UnicodeDecodeError|172
-UnicodeTranslateError|173
-EOF
-fi
+exception._find_index_by_code() {
+  exception._ensure_registry
+  local target="$1"
+  local i count
+  count=${#ERR_CODE_VALUES[@]}
+  for ((i = 0; i < count; i++)); do
+    if [[ ${ERR_CODE_VALUES[i]} == "$target" ]]; then
+      printf '%s\n' "$i"
+      return 0
+    fi
+  done
+  return 1
+}
 
-# Build reverse lookup table from the active ERR_CODE map.
-declare -Ag ERR_NAME=()
-for _exception_name in "${!ERR_CODE[@]}"; do
-  ERR_NAME["${ERR_CODE[$_exception_name]}"]="$_exception_name"
-done
-unset _exception_name
+exception.exists() {
+  exception._find_index_by_name "$1" >/dev/null
+}
 
 : "${ERR_STRATEGY:=return}" # return | exit
 : "${ERR_PREFIX:=ERROR}"    # prefix label
@@ -104,19 +176,31 @@ exception.register() {
     printf 'exception.register requires Name and Code\n' >&2
     return 2
   fi
-  local name="$1" code="$2"
-  ERR_CODE["$name"]="$code"
-  ERR_NAME["$code"]="$name"
+  local name="$1" code="$2" idx
+  if idx=$(exception._find_index_by_name "$name"); then
+    ERR_CODE_VALUES[idx]="$code"
+  else
+    ERR_CODE_NAMES+=("$name")
+    ERR_CODE_VALUES+=("$code")
+  fi
 }
 
 exception.code() { # Name -> numeric code
-  local name="$1"
-  printf '%s\n' "${ERR_CODE[$name]:-110}"
+  local name="$1" idx
+  if idx=$(exception._find_index_by_name "$name"); then
+    printf '%s\n' "${ERR_CODE_VALUES[idx]}"
+  else
+    printf '110\n'
+  fi
 }
 
 exception.name() { # Code -> Name
-  local code="$1"
-  printf '%s\n' "${ERR_NAME[$code]:-Exception}"
+  local code="$1" idx
+  if idx=$(exception._find_index_by_code "$code"); then
+    printf '%s\n' "${ERR_CODE_NAMES[idx]}"
+  else
+    printf 'Exception\n'
+  fi
 }
 
 exception.format() { # Name "message" [code]
