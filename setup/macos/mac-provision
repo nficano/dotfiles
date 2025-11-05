@@ -18,6 +18,18 @@
 #/   $(basename "$0") --dry-run
 #/   $(basename "$0") --update-brewfile --update-defaults --update-only
 
+# Ensure we are running under a Bash with associative array support.
+if [[ -z "${BASH_VERSINFO:-}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+  for _candidate in "/opt/homebrew/bin/bash" "/usr/local/bin/bash"; do
+    if [[ -x "$_candidate" ]]; then
+      exec "$_candidate" "$0" "$@"
+    fi
+  done
+  printf 'mac-provision requires Bash 4.0+ (found %s); install a newer Bash or add it to PATH.\n' "${BASH_VERSION:-unknown}" >&2
+  exit 1
+fi
+unset _candidate
+
 set -Eeuo pipefail
 trap script.cleanup SIGINT SIGTERM ERR EXIT
 
