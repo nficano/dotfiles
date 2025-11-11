@@ -1,0 +1,849 @@
+#!/usr/bin/env bash
+#/ ai-file-organizer — rename media files with AI metadata-aware suggestions.
+#/ brew install exiftool ffmpeg mediainfo poppler tesseract
+#/
+#/ Usage: $(basename "$0") [options]
+#/
+#/ Options:
+#/   --dir DIR                 Directory to scan (default: cwd or AIFO_DIR)
+#/   --dry-run                 Show planned renames without applying them
+#/   --continue-on-error       Skip failures instead of aborting
+#/   --concurrency N           Parallel workers (default: 1)
+#/   --include-glob PAT        Glob to include (repeatable)
+#/   --exclude-glob PAT        Glob to exclude (repeatable)
+#/   --max-len N               Maximum filename length (default: 120)
+#/   --rate-limit N_per_min    Max AI calls per minute (default: unlimited)
+#/   --ai-model NAME           OpenAI model (default: gpt-4.5-flash)
+#/   --ai-temp FLOAT           Sampling temperature (default: 0.2)
+#/   --log-level LEVEL         DEBUG, INFO, WARN, ERROR (default: INFO)
+#/   --verbose                 Shortcut for --log-level DEBUG
+#/   --ocr                     Enable OCR for images when tesseract exists
+#/
+#/ Environment overrides (CLI precedence is higher):
+#/   AIFO_DIR, AIFO_CONTINUE_ON_ERROR, AIFO_CONCURRENCY, AIFO_INCLUDE_GLOB,
+#/   AIFO_EXCLUDE_GLOB, AIFO_MAX_LEN, AIFO_RATE_LIMIT, AIFO_AI_MODEL, AIFO_OCR,
+#/   AIFO_UPLOAD_STRATEGY
+
+# set -Eeuo pipefail
+
+__aifo_script="$0"
+if [[ -n ${BASH_SOURCE[0]:-} ]]; then
+  __aifo_script="${BASH_SOURCE[0]}"
+fi
+while [[ -L $__aifo_script ]]; do
+  __aifo_dir="$(cd "$(dirname "$__aifo_script")" && pwd)"
+  __aifo_link="$(readlink "$__aifo_script")"
+  if [[ $__aifo_link != /* ]]; then
+    __aifo_script="$__aifo_dir/$__aifo_link"
+  else
+    __aifo_script="$__aifo_link"
+  fi
+done
+__aifo_dir="$(cd "$(dirname "$__aifo_script")" && pwd)"
+
+source "$__aifo_dir/../lib/bash/initrc"
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+unset __aifo_script __aifo_dir __aifo_link __aifo_candidate
+
+ERR_STRATEGY=exit
+
+declare -A CONFIG=()
+declare -A STATS=([processed]=0 [renamed]=0 [skipped]=0 [errors]=0)
+declare -A TOOLS=()
+declare -a INCLUDE_GLOBS=()
+declare -a EXCLUDE_GLOBS=()
+declare -a RATE_LOG=()
+declare -a PARSED_ARGV=()
+declare -A UPLOAD_CACHE=()
+UPLOAD_SOURCE_PATH=""
+UPLOAD_SOURCE_CLEANUP=""
+AI_LAST_STATUS=0
+AI_LAST_REASON=""
+
+readonly AIFO_MAX_RETRIES=5
+readonly AIFO_BACKOFF_BASE=2
+readonly AIFO_BACKOFF_INITIAL=1
+readonly AIFO_AGENT_NAME="ai-file-organizer"
+
+# aifo_log_format formats key=value tokens for logging.
+# TODO: move to lib/bash/logging as a reusable formatter.
+aifo_log_format() {
+  local token key value
+  local -a parts=()
+  for token in "$@"; do
+    if [[ $token == *=* ]]; then
+      key="${token%%=*}"
+      value="${token#*=}"
+      printf -v token '%s=%q' "$key" "$value"
+    else
+      printf -v token '%q' "$token"
+    fi
+    parts+=("$token")
+  done
+  printf '%s\n' "${parts[*]}"
+}
+
+aifo_log() {
+  local level="$1"
+  shift
+  local message
+  message=$(aifo_log_format "$@")
+  "log.$level" "$message"
+}
+
+aifo_log_info() { aifo_log info "$@"; }
+aifo_log_warn() { aifo_log warn "$@"; }
+aifo_log_error() { aifo_log error "$@"; }
+aifo_log_debug() { aifo_log debug "$@"; }
+
+debug_dump_prompt() {
+  local path="$1" prompt="$2"
+  [[ -n ${LOG_DEBUG:-} ]] || return 0
+  aifo_log_debug event=prompt_start path="$path"
+  while IFS= read -r line || [[ -n $line ]]; do
+    aifo_log_debug event=prompt_line path="$path" text="$line"
+  done <<<"$prompt"
+  aifo_log_debug event=prompt_end path="$path"
+}
+
+aifo_rate_limit_wait() {
+  local wait_seconds="$1" limit="$2"
+  aifo_log_info event=rate_wait seconds="$wait_seconds" limit="$limit"
+}
+
+aifo_rel_path() {
+  local path="$1"
+  path.relative_to "$path" "${CONFIG[dir]}"
+}
+
+# append_metadata_field injects an additional key/value into the JSON blob.
+# TODO: surface a json.merge helper to replace this ad-hoc builder.
+append_metadata_field() {
+  local metadata="$1" key="$2" value="$3"
+  [[ -z $metadata ]] && metadata="{}"
+  value=$(json.escape "$value")
+  if [[ $metadata != *\"$key\"* ]]; then
+    metadata="${metadata%}}"
+    if [[ ${#metadata} -gt 1 ]]; then
+      metadata+=","
+    fi
+    metadata+="\"$key\":\"$value\"}"
+  fi
+  printf '%s\n' "$metadata"
+}
+
+# generate_pdf_embed creates an embedding URL for PDFs if supported.
+# TODO: Hoist PDF embed logic into a shared document preview helper.
+generate_pdf_embed() {
+  local path="$1" kind="$2" asset_url="$3"
+  if [[ $kind != "pdf" ]]; then
+    printf '\n'
+    return 0
+  fi
+  [[ -n ${CONFIG[pdf_embed]} ]] || printf '%s\n' "$asset_url"
+}
+
+# aifo_prepare_upload_source optionally converts media prior to upload.
+aifo_prepare_upload_source() {
+  local path="$1" kind="$2"
+  UPLOAD_SOURCE_PATH="$path"
+  UPLOAD_SOURCE_CLEANUP=""
+
+  if [[ $kind != "pdf" ]]; then
+    return 0
+  fi
+
+  if ! command -v pdftoppm >/dev/null 2>&1; then
+    aifo_log_debug event=pdf_preview_skipped reason=pdftoppm_missing path="$(aifo_rel_path "$path")"
+    return 0
+  fi
+
+  local tmpdir
+  tmpdir=$(fs.mktmp dir aifo-preview)
+  if pdftoppm -jpeg -singlefile "$path" "$tmpdir/preview" >/dev/null 2>&1; then
+    local preview="$tmpdir/preview.jpg"
+    if [[ -f $preview ]]; then
+      UPLOAD_SOURCE_PATH="$preview"
+      UPLOAD_SOURCE_CLEANUP="$tmpdir"
+      aifo_log_debug event=pdf_preview_created path="$(aifo_rel_path "$path")" preview="$(aifo_rel_path "$preview")"
+      return 0
+    fi
+  fi
+
+  aifo_log_warn event=pdf_preview_failed path="$(aifo_rel_path "$path")"
+  rm -rf -- "$tmpdir"
+}
+
+aifo_cleanup_upload_source() {
+  if [[ -n $UPLOAD_SOURCE_CLEANUP ]]; then
+    rm -rf -- "$UPLOAD_SOURCE_CLEANUP" 2>/dev/null || true
+    UPLOAD_SOURCE_CLEANUP=""
+  fi
+  UPLOAD_SOURCE_PATH=""
+}
+
+# config_init sets default configuration values.
+# TODO: surface these defaults via a shared config profile helper.
+config_init() {
+  CONFIG[dir]="$PWD"
+  CONFIG[dry_run]=0
+  CONFIG[continue_on_error]=0
+  CONFIG[concurrency]=1
+  CONFIG[max_len]=120
+  CONFIG[rate_limit]=0
+  CONFIG[ai_model]="gpt-5-mini-2025-08-07"
+  CONFIG[ai_temp]="0.2"
+  CONFIG[log_level]="INFO"
+  CONFIG[verbose]=0
+  CONFIG[ocr_mode]="auto"
+  CONFIG[ocr_enabled]=0
+  CONFIG[s3_expires]=6000
+  CONFIG[upload_strategy]="AUTO"
+}
+
+aifo_apply_env_overrides() {
+  local value
+  value="${AIFO_DIR:-}"
+  [[ -z $value ]] || CONFIG[dir]="$(path.resolve "$value")"
+
+  config.set_bool_from_env CONFIG AIFO_CONTINUE_ON_ERROR continue_on_error
+  config.set_from_env CONFIG AIFO_CONCURRENCY concurrency
+  config.set_list_from_env INCLUDE_GLOBS AIFO_INCLUDE_GLOB
+  config.set_list_from_env EXCLUDE_GLOBS AIFO_EXCLUDE_GLOB
+  config.set_from_env CONFIG AIFO_MAX_LEN max_len
+  config.set_from_env CONFIG AIFO_RATE_LIMIT rate_limit
+  config.set_from_env CONFIG AIFO_AI_MODEL ai_model
+  config.set_from_env CONFIG AIFO_UPLOAD_STRATEGY upload_strategy
+
+  aifo_apply_ocr_env_override
+  config.ensure_uppercase CONFIG upload_strategy
+}
+
+aifo_apply_ocr_env_override() {
+  local raw="${AIFO_OCR:-}"
+  [[ -n $raw ]] || return 0
+  local normalized
+  if normalized=$(config.normalize_bool "$raw" 2>/dev/null); then
+    if [[ $normalized -eq 1 ]]; then
+      CONFIG[ocr_mode]="on"
+    else
+      CONFIG[ocr_mode]="off"
+    fi
+  fi
+}
+
+# config_apply_log_level toggles debug logging based on level.
+config_apply_log_level() {
+  local level="${CONFIG[log_level]}"
+  level=$(printf '%s' "$level" | tr '[:lower:]' '[:upper:]')
+  CONFIG[log_level]="$level"
+  case "$level" in
+  DEBUG)
+    LOG_DEBUG=1
+    CONFIG[verbose]=1
+    ;;
+  INFO | WARN | ERROR)
+    unset LOG_DEBUG
+    CONFIG[verbose]=0
+    ;;
+  *)
+    aifo_log_warn event=unknown_log_level level="$level"
+    unset LOG_DEBUG
+    ;;
+  esac
+}
+
+# parse_transform_args normalises long options via script helpers.
+parse_transform_args() {
+  local transformed
+  transformed=$(script.parse_with_opts ':hd:NCj:I:X:m:r:M:T:L:Ov' \
+    --long dir=d \
+    --long dry-run=N \
+    --long continue-on-error=C \
+    --long concurrency=j \
+    --long include-glob=I \
+    --long exclude-glob=X \
+    --long max-len=m \
+    --long rate-limit=r \
+    --long ai-model=M \
+    --long ai-temp=T \
+    --long log-level=L \
+    --long verbose=v \
+    --long ocr=O \
+    -- "$@")
+  PARSED_ARGV=()
+  if [[ -n $transformed ]]; then
+    read -r -a PARSED_ARGV <<<"$transformed"
+  fi
+}
+
+# parse_apply_option handles short option updates.
+parse_apply_option() {
+  local opt="$1" value="$2"
+  case "$opt" in
+  d) CONFIG[dir]="$(path.resolve "$value")" ;;
+  N) CONFIG[dry_run]=1 ;;
+  C) CONFIG[continue_on_error]=1 ;;
+  j) CONFIG[concurrency]="$value" ;;
+  I) array.push INCLUDE_GLOBS "$value" ;;
+  X) array.push EXCLUDE_GLOBS "$value" ;;
+  m) CONFIG[max_len]="$value" ;;
+  r) CONFIG[rate_limit]="$value" ;;
+  M) CONFIG[ai_model]="$value" ;;
+  T) CONFIG[ai_temp]="$value" ;;
+  L) CONFIG[log_level]=$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]') ;;
+  v)
+    CONFIG[log_level]="DEBUG"
+    CONFIG[verbose]=1
+    ;;
+  O) CONFIG[ocr_mode]="on" ;;
+  esac
+}
+
+# parse_args consumes CLI flags and updates configuration.
+parse_args() {
+  parse_transform_args "$@"
+  set -- "${PARSED_ARGV[@]}"
+
+  local opt
+  while getopts ':hd:NCj:I:X:m:r:M:T:L:Ov' opt; do
+    case "$opt" in
+    h) script.usage ;;
+    :)
+      aifo_log_error event=missing_option_arg option="-${OPTARG}"
+      script.usage 1
+      ;;
+    \?)
+      aifo_log_error event=invalid_option option="-${OPTARG}"
+      script.usage 1
+      ;;
+    *)
+      parse_apply_option "$opt" "$OPTARG"
+      ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  if (($# > 0)); then
+    aifo_log_error event=unexpected_args args_count="$#"
+    script.usage 1
+  fi
+}
+
+# validate_config ensures numeric options are sane.
+validate_config() {
+  local value
+  value="${CONFIG[concurrency]}"
+  guards.require_uint "$value" "concurrency"
+  ((value >= 1)) || guards.raise ValueError "concurrency must be >=1" 132
+
+  value="${CONFIG[max_len]}"
+  guards.require_uint "$value" "max length"
+  ((value >= 16)) || guards.raise ValueError "max length must be >=16 characters" 132
+
+  value="${CONFIG[rate_limit]}"
+  if [[ -n $value ]]; then
+    guards.require_uint "$value" "rate limit"
+  fi
+
+  value="${CONFIG[ai_temp]}"
+  guards.require_matches "$value" '^[0-9]+(\.[0-9]+)?$' "temperature"
+  awk -v t="$value" 'BEGIN { exit (t < 0 || t > 1) ? 1 : 0 }' || guards.raise ValueError "temperature must be between 0 and 1" 132
+}
+
+# detect_tools populates availability of external helpers.
+detect_tools() {
+  local tool
+  for tool in exiftool mdls ffprobe mediainfo pdftotext pdftoppm tesseract file jq; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      TOOLS["$tool"]=1
+    else
+      TOOLS["$tool"]=0
+    fi
+  done
+
+  if [[ ${TOOLS[jq]} -ne 1 ]]; then
+    guards.raise FileNotFoundError "missing dependency: jq" 159
+  fi
+}
+
+# config_finalize_ocr resolves OCR enablement after tool detection.
+config_finalize_ocr() {
+  local mode="${CONFIG[ocr_mode]:-auto}"
+  case "$mode" in
+  on)
+    CONFIG[ocr_enabled]=1
+    ;;
+  off)
+    CONFIG[ocr_enabled]=0
+    ;;
+  *)
+    if [[ ${TOOLS[tesseract]:-0} -eq 1 ]]; then
+      CONFIG[ocr_enabled]=1
+      aifo_log_debug event=ocr_auto_enabled
+    else
+      CONFIG[ocr_enabled]=0
+      aifo_log_warn event=ocr_auto_disabled reason=missing_tesseract hint="brew install tesseract or set AIFO_OCR=0"
+    fi
+    ;;
+  esac
+}
+
+# aifo_extract_snippet produces a short content preview suitable for prompts.
+# TODO: share snippet extraction across AI-enabled scripts.
+aifo_extract_snippet() {
+  local path="$1" kind="$2"
+  local content=""
+  case "$kind" in
+  text)
+    content=$(head -c 1024 "$path" 2>/dev/null || true)
+    ;;
+  pdf)
+    if [[ ${TOOLS[pdftotext]} -eq 1 ]]; then
+      content=$(pdftotext "$path" - 2>/dev/null | head -c 1024 || true)
+    fi
+    ;;
+  image)
+    if [[ ${CONFIG[ocr_enabled]} -eq 1 && ${TOOLS[tesseract]} -eq 1 ]]; then
+      content=$(tesseract "$path" stdout 2>/dev/null | head -c 512 || true)
+    fi
+    ;;
+  audio | video)
+    if [[ ${TOOLS[ffprobe]} -eq 1 ]]; then
+      content=$(ffprobe -v error -show_entries format=tags -of default=noprint_wrappers=1 "$path" 2>/dev/null | head -c 512 || true)
+    elif [[ ${TOOLS[mediainfo]} -eq 1 ]]; then
+      content=$(mediainfo "$path" 2>/dev/null | head -c 512 || true)
+    fi
+    ;;
+  esac
+
+  if [[ -z $content && ${TOOLS[exiftool]} -eq 1 ]]; then
+    content=$(exiftool -s "$path" 2>/dev/null | head -c 512 || true)
+  fi
+
+  content=$(metadata.sanitize_printable "$content")
+
+  if [[ -z $content && $kind == "image" && ${CONFIG[ocr_enabled]} -eq 0 ]]; then
+    aifo_log_debug event=snippet_empty path="$(aifo_rel_path "$path")" hint=enable_ocr
+  fi
+
+  printf '%s\n' "$content"
+}
+
+# build_ai_prompt formats the model input using metadata, snippets, and asset URL.
+# TODO: migrate to a structured JSON schema prompt to reuse elsewhere.
+build_ai_prompt() {
+  local path="$1" kind="$2" metadata_json="$3" snippet="$4" asset_url="$5"
+  cat <<EOF
+You are renaming media files based on their metadata/content.
+Return ONLY a lowercase, kebab-case filename BASE (no extension).
+3–7 words, descriptive, no stopwords, no dates unless present, no PII.
+
+Path: $path
+Download URL: $asset_url
+Kind: $kind
+Metadata JSON:
+$metadata_json
+Content sample:
+<<<
+$snippet
+>>>
+EOF
+}
+
+ai_response_error_message() {
+  local response_var="$1"
+  [[ -n $response_var ]] || return 0
+  local body
+  body=$(http.response_get "$response_var" body 2>/dev/null || true)
+  [[ -n $body ]] || return 0
+  local message
+  message=$(jq -r '.error.message // empty' <<<"$body" 2>/dev/null || true)
+  [[ -n $message ]] || return 0
+  printf '%s\n' "$message"
+}
+
+# ai_request_with_retries calls the AI API with exponential backoff.
+ai_request_with_retries() {
+  local path="$1" prompt="$2"
+  AI_LAST_STATUS=0
+  AI_LAST_REASON=""
+  local current_temp="${CONFIG[ai_temp]}"
+  local temp_adjusted=0
+
+  local attempt=1 delay="$AIFO_BACKOFF_INITIAL"
+  while ((attempt <= AIFO_MAX_RETRIES)); do
+    guards.rate_limit "${CONFIG[rate_limit]}" RATE_LOG 60 aifo_rate_limit_wait
+    local payload
+    # TODO: extract to ai.agent_request_with_backoff helper.
+    payload=$(ai.openai_agent_chat_payload "${CONFIG[ai_model]}" "$AIFO_AGENT_NAME" "$prompt" "$current_temp")
+    if ai.openai_chat_completion aifo_response "$payload" && http.response_ok aifo_response; then
+      AI_LAST_STATUS=$(http.response_get aifo_response status 2>/dev/null || printf '0')
+      local text
+      if text=$(ai.openai_message_text aifo_response); then
+        printf '%s\n' "$text"
+        return 0
+      fi
+      aifo_log_warn event=empty_ai_message attempt="$attempt" path="$(aifo_rel_path "$path")"
+    else
+      local status
+      status=$(http.response_get aifo_response status 2>/dev/null || printf '0')
+      AI_LAST_STATUS="$status"
+      AI_LAST_REASON=$(http.response_get aifo_response reason 2>/dev/null || printf '')
+      if ((status == 400)) && [[ $temp_adjusted -eq 0 ]] && [[ $current_temp != "1" ]]; then
+        local error_message
+        error_message=$(ai_response_error_message aifo_response)
+        if [[ $error_message == *temperature* ]]; then
+          aifo_log_warn event=temperature_reset model="${CONFIG[ai_model]}" previous="$current_temp" next="1"
+          current_temp="1"
+          CONFIG[ai_temp]="1"
+          temp_adjusted=1
+          delay="$AIFO_BACKOFF_INITIAL"
+          continue
+        fi
+      fi
+      ai.openai_log_error aifo_response "OpenAI request failed"
+      if ((status != 429 && status < 500)); then
+        return 1
+      fi
+    fi
+
+    ((attempt++))
+    aifo_log_warn event=ai_retry attempt="$attempt" delay="$delay" path="$(aifo_rel_path "$path")"
+    sleep "$delay"
+    sleep "0.$((RANDOM % 9))"
+    delay=$((delay * AIFO_BACKOFF_BASE))
+  done
+  return 1
+}
+
+# aifo_local_url constructs a local placeholder URL when S3 uploads are disabled.
+aifo_local_url() {
+  local display_path="$1"
+  printf 'local://%s\n' "$display_path"
+}
+
+# upload_source_asset pushes the file to S3 and returns a shareable URL.
+upload_source_asset() {
+  local path="$1" kind="$2"
+  local attempt=1 max_attempts=5 delay=1
+  local display_path
+  display_path=$(aifo_rel_path "$path")
+  local strategy="${CONFIG[upload_strategy]}"
+  strategy=$(printf '%s' "$strategy" | tr '[:lower:]' '[:upper:]')
+
+  aifo_prepare_upload_source "$path" "$kind"
+  local source_path="${UPLOAD_SOURCE_PATH:-$path}"
+
+  if [[ ${CONFIG[dry_run]} -eq 1 ]]; then
+    printf 'dry-run://%s\n' "$display_path"
+    aifo_cleanup_upload_source
+    return 0
+  fi
+
+  if [[ $strategy == "SKIP" ]]; then
+    aifo_log_debug event=upload_skipped strategy="$strategy" path="$display_path"
+    local fallback
+    fallback=$(aifo_local_url "$display_path")
+    printf '%s\n' "$fallback"
+    aifo_cleanup_upload_source
+    return 0
+  fi
+
+  command -v s3-upload-and-link >/dev/null 2>&1 || {
+    local fallback
+    fallback=$(aifo_local_url "$display_path")
+    if [[ $strategy == "REQUIRE" ]]; then
+      aifo_log_error event=missing_tool tool=s3-upload-and-link path="$display_path"
+      aifo_cleanup_upload_source
+      return 1
+    fi
+    aifo_log_warn event=missing_tool tool=s3-upload-and-link path="$display_path" fallback="$fallback"
+    aifo_cleanup_upload_source
+    printf '%s\n' "$fallback"
+    return 0
+  }
+
+  local expires="${CONFIG[s3_expires]}"
+  [[ -n $expires ]] || expires=6000
+
+  local url
+  while ((attempt <= max_attempts)); do
+    if url=$(S3_UPLOAD_LINK_NO_CLIP=1 S3_UPLOAD_LINK_EXPIRES_IN="$expires" s3-upload-and-link "$source_path" 2>/dev/null); then
+      url=$(str.trim "$url")
+      if [[ -n $url ]]; then
+        aifo_log_debug event=s3_upload_ok url="$url" expires="${expires}s" attempt="$attempt"
+        aifo_cleanup_upload_source
+        printf '%s\n' "$url"
+        return 0
+      fi
+      aifo_log_warn event=s3_url_empty attempt="$attempt" path="$display_path"
+    else
+      aifo_log_warn event=s3_upload_failed attempt="$attempt" path="$display_path"
+    fi
+
+    ((attempt++))
+    sleep "$delay"
+    delay=$((delay * 2))
+  done
+
+  if [[ $strategy == "REQUIRE" ]]; then
+    aifo_log_error event=s3_upload_failed attempts_exhausted path="$display_path"
+  else
+    aifo_log_warn event=s3_upload_failed attempts_exhausted path="$display_path"
+  fi
+  aifo_cleanup_upload_source
+  if [[ $strategy == "REQUIRE" ]]; then
+    return 1
+  fi
+
+  local fallback
+  fallback=$(aifo_local_url "$display_path")
+  aifo_log_warn event=upload_fallback path="$display_path" fallback="$fallback"
+  printf '%s\n' "$fallback"
+  return 0
+}
+
+# resolve_asset_url returns cached or freshly uploaded asset URL.
+resolve_asset_url() {
+  local path="$1" kind="$2"
+  if [[ -n ${UPLOAD_CACHE["$path"]:-} ]]; then
+    printf '%s\n' "${UPLOAD_CACHE["$path"]}"
+    return 0
+  fi
+  local url
+  if ! url=$(upload_source_asset "$path" "$kind"); then
+    return 1
+  fi
+  UPLOAD_CACHE["$path"]="$url"
+  printf '%s\n' "$url"
+}
+
+# ai_generate_basename calls the AI with fallbacks and returns the raw response.
+ai_generate_basename() {
+  local path="$1" display_path="$2" kind="$3" metadata_json="$4" snippet="$5" asset_url="$6"
+  local prompt response metadata_with_embed="$metadata_json"
+  local embed_url=""
+  embed_url=$(generate_pdf_embed "$path" "$kind" "$asset_url")
+  if [[ -n $embed_url ]]; then
+    metadata_with_embed=$(append_metadata_field "$metadata_with_embed" "pdf_embed" "$embed_url")
+  fi
+  prompt=$(build_ai_prompt "$display_path" "$kind" "$metadata_with_embed" "$snippet" "$asset_url")
+  debug_dump_prompt "$display_path" "$prompt"
+  if response=$(ai_request_with_retries "$path" "$prompt"); then
+    printf '%s\n' "$response"
+    return 0
+  fi
+  if [[ ${AI_LAST_STATUS:-0} == 400 && -n $snippet ]]; then
+    aifo_log_warn event=ai_retry_without_snippet path="$display_path"
+    prompt=$(build_ai_prompt "$display_path" "$kind" "$metadata_with_embed" "" "$asset_url")
+    debug_dump_prompt "$display_path" "$prompt"
+    if response=$(ai_request_with_retries "$path" "$prompt"); then
+      printf '%s\n' "$response"
+      return 0
+    fi
+  fi
+  aifo_log_error event=ai_failure path="$display_path" status="${AI_LAST_STATUS:-0}" reason="${AI_LAST_REASON:-unknown}"
+  return 1
+}
+
+aifo_move_file() {
+  local source="$1" target="$2"
+  local rel_source rel_target
+  rel_source=$(aifo_rel_path "$source")
+  rel_target=$(aifo_rel_path "$target")
+  if [[ $source == "$target" ]]; then
+    aifo_log_info event=rename_skipped reason=already_named path="$rel_source"
+    return 0
+  fi
+  if [[ ${CONFIG[dry_run]} -eq 1 ]]; then
+    aifo_log_info event=dry_run from="$rel_source" to="$rel_target"
+    return 0
+  fi
+  if os.rename_safe "$source" "$target"; then
+    aifo_log_info event=rename_ok from="$rel_source" to="$rel_target"
+    return 0
+  fi
+  aifo_log_error event=rename_failed from="$rel_source" to="$rel_target"
+  return 1
+}
+
+aifo_process_result() {
+  local status="$1" output_path="$2" file="$3"
+  local display_path
+  display_path=$(aifo_rel_path "$file")
+  if [[ ! -f $output_path ]]; then
+    ((STATS[processed]++))
+    ((STATS[errors]++))
+    aifo_log_error event=missing_result path="$display_path"
+    return "$status"
+  fi
+
+  local result_line
+  result_line=$(tail -n 1 "$output_path" 2>/dev/null || true)
+  if [[ -z $result_line ]]; then
+    ((STATS[processed]++))
+    ((STATS[errors]++))
+    aifo_log_error event=empty_result path="$display_path"
+    return "$status"
+  fi
+
+  local outcome from to message
+  IFS='|' read -r _ outcome from to message <<<"$result_line"
+  ((STATS[processed]++))
+  case "$outcome" in
+  renamed) ((STATS[renamed]++)) ;;
+  skipped) ((STATS[skipped]++)) ;;
+  error) ((STATS[errors]++)) ;;
+  esac
+
+  if [[ $outcome == "error" || $status -ne 0 ]]; then
+    local tail_output
+    tail_output=$(tail -n 20 "$output_path" 2>/dev/null || true)
+    aifo_log_error event=worker_failure path="$display_path" status="$status" outcome="$outcome" note="$message" log_tail="$tail_output"
+  fi
+
+  if ((status != 0)) && [[ ${CONFIG[continue_on_error]} -eq 0 ]]; then
+    return "$status"
+  fi
+  return 0
+}
+
+# handle_file orchestrates metadata extraction and renaming.
+handle_file() {
+  local path="$1"
+  local display_path
+  display_path=$(aifo_rel_path "$path")
+  aifo_log_info event=file_start path="$display_path"
+  [[ -f $path ]] || {
+    aifo_log_error event=file_missing path="$display_path"
+    printf 'RESULT|error|%s||missing\n' "$path"
+    return 1
+  }
+
+  local kind metadata_json snippet asset_url response suffixes ext sanitized dir target
+  kind=$(metadata.detect_kind "$path" TOOLS)
+  metadata_json=$(metadata.extract "$path" "$kind" TOOLS)
+  snippet=$(aifo_extract_snippet "$path" "$kind")
+
+  local summary
+  summary=$(metadata.summary_from_json "$metadata_json")
+
+  if [[ -z $snippet ]]; then
+    if [[ -n $summary ]]; then
+      snippet="$summary"
+    else
+      snippet="No extracted text was available. Provide a descriptive filename based on the document's structure, metadata, and visual cues."
+    fi
+  fi
+
+  if ! asset_url=$(resolve_asset_url "$path" "$kind"); then
+    aifo_log_error event=upload_failed path="$display_path"
+    printf 'RESULT|error|%s||upload_failed\n' "$path"
+    return 1
+  fi
+
+  if ! response=$(ai_generate_basename "$path" "$display_path" "$kind" "$metadata_json" "$snippet" "$asset_url"); then
+    printf 'RESULT|error|%s||ai_failure\n' "$path"
+    return 1
+  fi
+
+  response=$(str.trim "$response")
+  [[ -n $response ]] || {
+    aifo_log_warn event=empty_response path="$display_path"
+    printf 'RESULT|skipped|%s||empty_ai\n' "$path"
+    return 0
+  }
+
+  suffixes=$(path.suffixes "$path")
+  ext="${suffixes// /}"
+  ext="${ext//../.}"
+  sanitized=$(fs.sanitize_filename "$response" "${CONFIG[max_len]}" "$ext" 2>/dev/null || true)
+  [[ -n $sanitized ]] || {
+    aifo_log_warn event=sanitize_failed path="$display_path" raw="$response"
+    printf 'RESULT|skipped|%s||sanitize_fail\n' "$path"
+    return 0
+  }
+
+  dir=$(path.dirname "$path")
+  target=$(path.join "$dir" "${sanitized}${ext}")
+  if [[ $target == "$path" ]]; then
+    aifo_log_info event=already_named path="$display_path"
+    printf 'RESULT|skipped|%s|%s|unchanged\n' "$path" "$target"
+    return 0
+  fi
+
+  target=$(dedupe_name "$dir" "$sanitized" "$ext" "$path")
+  if ! aifo_move_file "$path" "$target"; then
+    printf 'RESULT|error|%s|%s|rename_failed\n' "$path" "$target"
+    return 1
+  fi
+  printf 'RESULT|renamed|%s|%s|\n' "$path" "$target"
+  return 0
+}
+
+# dedupe_name finds a collision-free destination path.
+dedupe_name() {
+  local dir="$1" base="$2" ext="$3" current="$4"
+  local candidate="$base" path=""
+  local normalized_dir="${dir%/}"
+  [[ -n $normalized_dir ]] || normalized_dir="."
+  path="${normalized_dir}/${candidate}${ext}"
+  local index=1
+  while [[ -e $path && $path != "$current" ]]; do
+    candidate="${base}-${index}"
+    path="${normalized_dir}/${candidate}${ext}"
+    ((index++))
+  done
+  printf '%s\n' "$path"
+}
+
+# print_summary emits final counters to the user.
+print_summary() {
+  aifo_log_info event=summary processed="${STATS[processed]}" renamed="${STATS[renamed]}" skipped="${STATS[skipped]}" errors="${STATS[errors]}"
+}
+
+# main orchestrates configuration and execution.
+main() {
+  config_init
+  aifo_apply_env_overrides
+  parse_args "$@"
+  validate_config
+  config_apply_log_level
+  detect_tools
+  config_finalize_ocr
+
+  guards.require_dir "${CONFIG[dir]}"
+
+  if ! ai.agent_require "$AIFO_AGENT_NAME"; then
+    guards.raise LookupError "AI agent '$AIFO_AGENT_NAME' is not configured" 120
+  fi
+
+  local api_key
+  api_key=$(ai.openai_api_key)
+  [[ -n $api_key ]] || guards.raise PermissionError "OPENAI_API_KEY is not set" 126
+
+  aifo_log_debug agent="$AIFO_AGENT_NAME" model="${CONFIG[ai_model]}" temp="${CONFIG[ai_temp]}"
+
+  local -a files=()
+  while IFS= read -r file; do
+    files+=("$file")
+  done < <(fs.list_files "${CONFIG[dir]}" INCLUDE_GLOBS EXCLUDE_GLOBS)
+
+  if ((${#files[@]} == 0)); then
+    aifo_log_warn event=no_files dir="${CONFIG[dir]}"
+    return 0
+  fi
+
+  aifo_log_info event=start dir="${CONFIG[dir]}" count="${#files[@]}" concurrency="${CONFIG[concurrency]}"
+
+  if ! queue.process "${CONFIG[concurrency]}" files handle_file aifo_process_result; then
+    print_summary
+    guards.raise RuntimeError "processing aborted" 1
+  fi
+
+  print_summary
+}
+
+main "$@"

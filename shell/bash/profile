@@ -112,6 +112,7 @@ shell.defer --wrap docker shell.import "$HOME/.docker/init-bash.sh"
 shell.defer --wrap gcloud shell.import "$BREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
 shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
 shell.defer --wrap git shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+shell.defer --wrap caddy shell.import "$BREW_PREFIX/etc/bash_completion.d/caddy"
 shell.defer --wrap nvm shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
 shell.defer --wrap op shell.import "$HOME/.config/op/plugins.sh"
 shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
@@ -170,10 +171,8 @@ when.cmd op 'source <(op completion bash)'
 shell.setup_prompt
 ssh_agent.init "$HOME/.ssh-agent.env"
 
-# Late PATH additions
-sys.path.append "$HOME/Dropbox/.sbin"
-
 # Untracked Private Overrides
 shell.import "$HOME/.profile.local"
 
 when.my_machine sys.path.append "$HOME/.bin/personal"
+when.my_machine sys.path.append "$HOME/.bin/lab"
