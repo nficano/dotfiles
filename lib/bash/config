@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# Configuration helpers for Bash scripts that rely on associative arrays.
+# These utilities assume Bash 4+ for nameref support (`declare -n`).
+
+if [[ -n ${__LIB_BASH_CONFIG:-} ]]; then
+  return 0
+fi
+__LIB_BASH_CONFIG=1
+
+# config.normalize_bool VALUE -> prints 1 or 0 when recognised.
+config.normalize_bool() {
+  local raw="$1"
+  local lower
+  lower=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in
+  1 | true | yes | on)
+    printf '1\n'
+    return 0
+    ;;
+  0 | false | no | off | '')
+    printf '0\n'
+    return 0
+    ;;
+  esac
+  return 1
+}
+
+# config.set_from_env CONFIG_REF ENV_VAR [DEST_KEY]
+# Assigns ENV_VAR contents into CONFIG_REF[DEST_KEY] when present.
+config.set_from_env() {
+  local config_ref="$1" env_key="$2" dest_key="${3:-$2}"
+  declare -n cfg="$config_ref"
+  local value="${!env_key:-}"
+  [[ -z $value ]] || cfg["$dest_key"]="$value"
+}
+
+# config.set_bool_from_env CONFIG_REF ENV_VAR DEST_KEY
+# Parses a boolean-ish ENV_VAR and writes 1/0 into CONFIG_REF.
+config.set_bool_from_env() {
+  local config_ref="$1" env_key="$2" dest_key="$3"
+  declare -n cfg="$config_ref"
+  local raw="${!env_key:-}"
+  [[ -n $raw ]] || return 0
+  local normalized
+  if normalized=$(config.normalize_bool "$raw" 2>/dev/null); then
+    cfg["$dest_key"]="$normalized"
+    return 0
+  fi
+  return 1
+}
+
+# config.set_list_from_env ARRAY_REF ENV_VAR
+# Splits ENV_VAR on colon/comma and populates ARRAY_REF.
+config.set_list_from_env() {
+  local array_ref="$1" env_key="$2"
+  declare -n arr="$array_ref"
+  local raw="${!env_key:-}"
+  [[ -n $raw ]] || return 0
+  local previous_ifs="$IFS"
+  IFS=':,' read -r -a arr <<<"$raw"
+  IFS="$previous_ifs"
+}
+
+# config.ensure_uppercase CONFIG_REF KEY
+# Uppercases CONFIG_REF[KEY] in-place when populated.
+config.ensure_uppercase() {
+  local config_ref="$1" key="$2"
+  declare -n cfg="$config_ref"
+  local value="${cfg[$key]:-}"
+  [[ -n $value ]] || return 0
+  cfg["$key"]=$(printf '%s' "$value" | tr '[:lower:]' '[:upper:]')
+}

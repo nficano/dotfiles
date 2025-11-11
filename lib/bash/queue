@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+
+# Lightweight worker queue helpers for Bash scripts.
+
+if [[ -n ${__LIB_BASH_QUEUE:-} ]]; then
+  return 0
+fi
+__LIB_BASH_QUEUE=1
+
+queue._dispatch_callback() {
+  local callback_fn="$1"
+  local status="$2"
+  local output_path="$3"
+  local item="$4"
+
+  if [[ -z $callback_fn ]]; then
+    return "$status"
+  fi
+  if ! declare -F "$callback_fn" >/dev/null 2>&1; then
+    return "$status"
+  fi
+  "$callback_fn" "$status" "$output_path" "$item"
+}
+
+queue._run_serial() {
+  local items_ref="$1" worker_fn="$2" callback_fn="$3"
+  declare -n _queue_items="$items_ref"
+
+  local item tmp_out status
+  for item in "${_queue_items[@]}"; do
+    tmp_out=$(fs.mktmp file queue)
+    if ("$worker_fn" "$item") >"$tmp_out" 2>&1; then
+      status=0
+    else
+      status=$?
+    fi
+
+    if ! queue._dispatch_callback "$callback_fn" "$status" "$tmp_out" "$item"; then
+      rm -f -- "$tmp_out"
+      return 1
+    fi
+    rm -f -- "$tmp_out"
+  done
+  return 0
+}
+
+queue._wait_cycle() {
+  local pids_ref="$1" outs_ref="$2" jobs_ref="$3" callback_fn="$4"
+  declare -n _queue_pids="$pids_ref"
+  declare -n _queue_outs="$outs_ref"
+  declare -n _queue_jobs="$jobs_ref"
+
+  local pid="${_queue_pids[0]}"
+  local out="${_queue_outs[0]}"
+  local job="${_queue_jobs[0]}"
+
+  _queue_pids=("${_queue_pids[@]:1}")
+  _queue_outs=("${_queue_outs[@]:1}")
+  _queue_jobs=("${_queue_jobs[@]:1}")
+
+  local status=0
+  if ! wait "$pid"; then
+    status=$?
+  fi
+
+  local callback_status=0
+  if ! queue._dispatch_callback "$callback_fn" "$status" "$out" "$job"; then
+    callback_status=1
+  fi
+
+  rm -f -- "$out"
+  return "$callback_status"
+}
+
+queue._run_parallel() {
+  local concurrency="$1" items_ref="$2" worker_fn="$3" callback_fn="$4"
+  declare -n _queue_items="$items_ref"
+
+  local tmpdir
+  tmpdir=$(fs.mktmp dir queue)
+
+  local -a pids=() outs=() jobs=()
+  local idx=0 item out_file
+  for item in "${_queue_items[@]}"; do
+    out_file="$tmpdir/job-$idx.log"
+    (
+      "$worker_fn" "$item"
+    ) >"$out_file" 2>&1 &
+    pids+=("$!")
+    outs+=("$out_file")
+    jobs+=("$item")
+    ((idx++))
+
+    while ((${#pids[@]} >= concurrency)); do
+      if ! queue._wait_cycle pids outs jobs "$callback_fn"; then
+        rm -rf -- "$tmpdir"
+        return 1
+      fi
+    done
+  done
+
+  while ((${#pids[@]})); do
+    if ! queue._wait_cycle pids outs jobs "$callback_fn"; then
+      rm -rf -- "$tmpdir"
+      return 1
+    fi
+  done
+
+  rm -rf -- "$tmpdir"
+  return 0
+}
+
+queue.process() {
+  local concurrency="$1" items_ref="$2" worker_fn="$3" callback_fn="$4"
+  declare -n _queue_items="$items_ref"
+
+  ((concurrency > 0)) || guards.raise ValueError "concurrency must be >=1" 132
+  declare -F "$worker_fn" >/dev/null 2>&1 || guards.raise NameError "unknown worker function: $worker_fn" 120
+  if [[ -n $callback_fn ]]; then
+    declare -F "$callback_fn" >/dev/null 2>&1 || guards.raise NameError "unknown callback function: $callback_fn" 120
+  fi
+
+  ((${#_queue_items[@]})) || return 0
+
+  if ((concurrency <= 1)); then
+    queue._run_serial "$items_ref" "$worker_fn" "$callback_fn"
+  else
+    queue._run_parallel "$concurrency" "$items_ref" "$worker_fn" "$callback_fn"
+  fi
+}

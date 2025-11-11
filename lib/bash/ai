@@ -27,11 +27,22 @@ ai__agent_rules=()
 
 ai._debug_emit() {
   local message="$1"
-  if declare -F log.debug >/dev/null 2>&1 && [[ -n ${LOG_DEBUG:-} ]]; then
-    log.debug "$message"
-  else
-    printf '[AI DEBUG] %s\n' "$message" >&2
+  local force="${AI_OPENAI_DEBUG:-}"
+  if declare -F contrib.logging.debug >/dev/null 2>&1; then
+    contrib.logging.debug "$message"
+    if [[ -z $force ]]; then
+      return 0
+    fi
   fi
+  if declare -F log.debug >/dev/null 2>&1; then
+    if [[ -n ${LOG_DEBUG:-} ]]; then
+      log.debug "$message"
+      if [[ -z $force ]]; then
+        return 0
+      fi
+    fi
+  fi
+  printf '[AI DEBUG] %s\n' "$message" >&2
 }
 
 ai._debug_dump_response() {
@@ -522,7 +533,50 @@ ai.openai_request() {
     http_args+=("${extra_args[@]}")
   fi
 
+  if [[ -n ${AI_OPENAI_DEBUG:-} ]]; then
+    ai._debug_emit "OpenAI request: $method $url"
+    if [[ -n $content_type ]]; then
+      ai._debug_emit "OpenAI request content-type: $content_type"
+    fi
+    if [[ -n $payload ]]; then
+      local preview="$payload"
+      local truncated=0
+      local line=""
+      if ((${#preview} > 4000)); then
+        preview="${preview:0:4000}"
+        truncated=1
+      fi
+      ai._debug_emit "OpenAI request payload:"
+      while IFS= read -r line; do
+        ai._debug_emit "  $line"
+      done <<<"$preview"
+      if ((truncated)); then
+        ai._debug_emit "  ... (payload truncated)"
+      fi
+    else
+      ai._debug_emit "OpenAI request payload: (empty)"
+    fi
+  fi
+
   http.request "$response_var" "$method" "$url" "${http_args[@]}"
+  local request_status=$?
+
+  if [[ -n ${AI_OPENAI_DEBUG:-} ]]; then
+    local status reason
+    status=$(http.response_get "$response_var" status 2>/dev/null || printf '')
+    reason=$(http.response_get "$response_var" reason 2>/dev/null || printf '')
+    if [[ -n $status ]]; then
+      if [[ -n $reason ]]; then
+        ai._debug_emit "OpenAI response status: $status ($reason)"
+      else
+        ai._debug_emit "OpenAI response status: $status"
+      fi
+    else
+      ai._debug_emit "OpenAI response status: unavailable"
+    fi
+  fi
+
+  return "$request_status"
 }
 
 ai.openai_chat_completion() {

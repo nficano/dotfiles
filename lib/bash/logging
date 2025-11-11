@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Lightweight logging helpers with ANSI coloring support.
+# Deprecated Lightweight logging helpers with ANSI coloring support. (use contrib.logging instead)
 log._color() {
   printf '\e[%sm' "$1"
 }

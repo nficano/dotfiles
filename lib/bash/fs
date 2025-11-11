@@ -40,6 +40,26 @@ fs.mktmp() {
   fi
 }
 
+fs.sanitize_filename() {
+  local raw="$1" max_len="${2:-255}" ext="${3:-}"
+  local cleaned
+  cleaned=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')
+  cleaned=${cleaned#-}
+  cleaned=${cleaned%-}
+  [[ -n $cleaned ]] || return 1
+
+  local ext_len="${#ext}"
+  local allowed=$((max_len - ext_len))
+  ((allowed < 1)) && allowed=1
+  if ((${#cleaned} > allowed)); then
+    cleaned=${cleaned:0:allowed}
+    cleaned=${cleaned%-}
+    cleaned=${cleaned#-}
+  fi
+  [[ -n $cleaned ]] || return 1
+  printf '%s\n' "$cleaned"
+}
+
 fs.extract() {
   local f="$1"
   [[ -f $f ]] || {
@@ -101,4 +121,48 @@ file.expand_globs() {
   for value in "${expanded[@]}"; do
     array.push "$paths_ref_name" "$value"
   done
+}
+
+fs.list_files() {
+  local dir="$1"
+  local include_ref="${2:-}"
+  local exclude_ref="${3:-}"
+  local -a include=() exclude=()
+
+  if [[ -n $include_ref ]] && array._has_var "$include_ref"; then
+    eval "include=(\"\${$include_ref[@]}\")"
+  fi
+  if [[ -n $exclude_ref ]] && array._has_var "$exclude_ref"; then
+    eval "exclude=(\"\${$exclude_ref[@]}\")"
+  fi
+
+  local file pattern target include_ok exclude_hit
+  while IFS= read -r file; do
+    include_ok=1
+    if ((${#include[@]})); then
+      include_ok=0
+      for pattern in "${include[@]}"; do
+        target=$(path.pattern_to_glob "$pattern" "$dir")
+        if path.match "$file" "$target"; then
+          include_ok=1
+          break
+        fi
+      done
+    fi
+
+    exclude_hit=0
+    if ((include_ok)) && ((${#exclude[@]})); then
+      for pattern in "${exclude[@]}"; do
+        target=$(path.pattern_to_glob "$pattern" "$dir")
+        if path.match "$file" "$target"; then
+          exclude_hit=1
+          break
+        fi
+      done
+    fi
+
+    if ((include_ok)) && ((exclude_hit == 0)); then
+      printf '%s\n' "$file"
+    fi
+  done < <(find "$dir" -type f -print 2>/dev/null | sort)
 }

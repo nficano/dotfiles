@@ -20,6 +20,7 @@ __lib_bash_source "json"
 __lib_bash_source "math"
 __lib_bash_source "array"
 __lib_bash_source "os"
+__lib_bash_source "config"
 __lib_bash_source "fs"
 __lib_bash_source "paths"
 __lib_bash_source "aws"
@@ -44,7 +45,10 @@ __lib_bash_source "exceptions"
 __lib_bash_source "guards"
 __lib_bash_source "http"
 __lib_bash_source "json"
+__lib_bash_source "metadata"
+__lib_bash_source "queue"
 __lib_bash_source "ai"
+__lib_bash_source "contrib/logging"
 
 unset -f __lib_bash_source
 unset lib_bash_dir

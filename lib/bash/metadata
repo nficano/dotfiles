@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+
+# Metadata helpers for media and document files.
+
+if [[ -n ${__LIB_BASH_METADATA:-} ]]; then
+  return 0
+fi
+__LIB_BASH_METADATA=1
+
+metadata.sanitize_printable() {
+  local value="$1"
+  if [[ -z $value ]]; then
+    printf '\n'
+    return
+  fi
+  printf '%s' "$value" | LC_ALL=C tr -cd '[:print:]\n\r\t'
+  printf '\n'
+}
+
+metadata.summary_from_json() {
+  local json="$1"
+  [[ -n $json ]] || {
+    printf '\n'
+    return
+  }
+  local summary
+  summary=$(printf '%s' "$json" | jq -r '.summary // empty' 2>/dev/null || true)
+  printf '%s\n' "$summary"
+}
+
+metadata._tool_available() {
+  local tool="$1" tools_ref="${2:-}"
+  if [[ -n $tools_ref ]]; then
+    declare -n tools_map="$tools_ref"
+    [[ ${tools_map[$tool]:-0} -eq 1 ]]
+  else
+    command -v "$tool" >/dev/null 2>&1
+  fi
+}
+
+metadata.detect_kind() {
+  local path="$1" tools_ref="${2:-}"
+  local ext
+  ext=$(path.suffix "$path")
+  ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
+  case "$ext" in
+  .jpg | .jpeg | .png | .gif | .heic | .tif | .tiff | .webp)
+    printf 'image\n'
+    return 0
+    ;;
+  .mp3 | .wav | .flac | .aac | .m4a | .ogg)
+    printf 'audio\n'
+    return 0
+    ;;
+  .mp4 | .mkv | .mov | .avi | .wmv | .flv | .webm)
+    printf 'video\n'
+    return 0
+    ;;
+  .pdf)
+    printf 'pdf\n'
+    return 0
+    ;;
+  .txt | .md | .rst | .log)
+    printf 'text\n'
+    return 0
+    ;;
+  esac
+
+  if metadata._tool_available file "$tools_ref"; then
+    local mime
+    mime=$(file --brief --mime-type "$path" 2>/dev/null || true)
+    case "$mime" in
+    image/*)
+      printf 'image\n'
+      return 0
+      ;;
+    audio/*)
+      printf 'audio\n'
+      return 0
+      ;;
+    video/*)
+      printf 'video\n'
+      return 0
+      ;;
+    application/pdf)
+      printf 'pdf\n'
+      return 0
+      ;;
+    text/*)
+      printf 'text\n'
+      return 0
+      ;;
+    esac
+  fi
+
+  printf 'unknown\n'
+}
+
+metadata.extract() {
+  local path="$1"
+  local kind="$2"
+  local tools_ref="${3:-}"
+
+  local size mime
+  size=$(fs.file_size_bytes "$path" 2>/dev/null || printf '0')
+  if metadata._tool_available file "$tools_ref"; then
+    mime=$(file --brief --mime-type "$path" 2>/dev/null || true)
+  else
+    mime="unknown"
+  fi
+
+  local -a extra_parts=()
+
+  if metadata._tool_available exiftool "$tools_ref"; then
+    local exif
+    exif=$(exiftool -s -ImageDescription -Title -Subject -Keywords -Make -Model "$path" 2>/dev/null | head -n 10 | tr '\n' ';' || true)
+    if [[ -n $exif ]]; then
+      exif=$(metadata.sanitize_printable "$exif")
+      extra_parts+=("exif:${exif}")
+    fi
+  fi
+
+  if metadata._tool_available mdls "$tools_ref"; then
+    local mdls_title mdls_text
+    mdls_title=$(mdls -name kMDItemTitle -raw "$path" 2>/dev/null | head -c 256 || true)
+    if [[ -n $mdls_title && $mdls_title != "(null)" ]]; then
+      mdls_title=${mdls_title//$'\n'/ }
+      mdls_title=$(metadata.sanitize_printable "$mdls_title")
+      extra_parts+=("title:${mdls_title}")
+    fi
+    mdls_text=$(mdls -name kMDItemTextContent -raw "$path" 2>/dev/null | head -c 512 || true)
+    if [[ -n $mdls_text && $mdls_text != "(null)" ]]; then
+      mdls_text=${mdls_text//$'\n'/ }
+      mdls_text=$(metadata.sanitize_printable "$mdls_text")
+      extra_parts+=("spotlight:${mdls_text}")
+    fi
+  fi
+
+  local extra=""
+  if ((${#extra_parts[@]})); then
+    extra="${extra_parts[*]}"
+  fi
+
+  printf '{'
+  printf '"size_bytes":%s,' "$size"
+  printf '"mime":"%s",' "$(json.escape "$mime")"
+  printf '"kind":"%s",' "$(json.escape "$kind")"
+  printf '"summary":"%s"' "$(json.escape "$extra")"
+  printf '}\n'
+}

@@ -155,3 +155,46 @@ guards.require_url() {
   local value="$1" label="${2:-url}"
   [[ $value =~ ^https?://[A-Za-z0-9._~-]+(:[0-9]+)?(/.*)?$ ]] || guards.raise ValueError "$label must be http(s) URL" 132
 }
+
+guards.rate_limit() {
+  local limit="$1" state_ref="$2" window="${3:-60}" callback="${4:-}"
+  ((limit > 0)) || return 0
+  [[ -n $state_ref ]] || guards.raise ValueError "rate limit state array ref required" 132
+
+  declare -n _rate_entries="$state_ref"
+  local now
+  now=$(date +%s)
+
+  local -a keep=()
+  local ts
+  for ts in "${_rate_entries[@]-}"; do
+    if ((now - ts < window)); then
+      keep+=("$ts")
+    fi
+  done
+  _rate_entries=("${keep[@]}")
+
+  while ((${#_rate_entries[@]} >= limit)); do
+    local oldest="${_rate_entries[0]}"
+    local wait_for=$((window - (now - oldest)))
+    ((wait_for < 1)) && wait_for=1
+
+    if [[ -n $callback ]] && declare -F "$callback" >/dev/null 2>&1; then
+      "$callback" "$wait_for" "$limit"
+    fi
+
+    sleep "$wait_for"
+    sleep "0.$((RANDOM % 9))"
+
+    now=$(date +%s)
+    keep=()
+    for ts in "${_rate_entries[@]-}"; do
+      if ((now - ts < window)); then
+        keep+=("$ts")
+      fi
+    done
+    _rate_entries=("${keep[@]}")
+  done
+
+  _rate_entries+=("$now")
+}

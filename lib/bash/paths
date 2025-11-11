@@ -249,6 +249,34 @@ path.pattern_to_glob() {
   printf '%s\n' "$pattern"
 }
 
+path.relative_to() {
+  local candidate="$1"
+  local root="${2:-$PWD}"
+  [[ -n $candidate ]] || {
+    printf '\n'
+    return
+  }
+  [[ -n $root ]] || {
+    printf '%s\n' "$candidate"
+    return
+  }
+
+  local root_trim="${root%/}"
+  local prefix="${root_trim}/"
+
+  if [[ $candidate == "$root_trim" ]]; then
+    printf '.\n'
+    return
+  fi
+
+  if [[ $candidate == "$prefix"* ]]; then
+    printf '%s\n' "${candidate#"$prefix"}"
+    return
+  fi
+
+  printf '%s\n' "$candidate"
+}
+
 # path.is_excluded CANDIDATE [ROOT] [PATTERNS_ARRAY_NAME]
 # NOTE: expects array._has_var helper to exist when using PATTERNS_ARRAY_NAME.
 path.is_excluded() {

@@ -71,6 +71,15 @@ clip.paste() {
   fi
 }
 
+os.rename_safe() {
+  local source="$1" target="$2"
+  [[ -n $source && -n $target ]] || return 1
+  if [[ $source == "$target" ]]; then
+    return 0
+  fi
+  mv -n -- "$source" "$target"
+}
+
 # Returns success if $HOME/.machine_id matches the current IOPlatformUUID.
 os.machine_id.matches_current() {
   local machine_id_file="$HOME/.machine_id"
