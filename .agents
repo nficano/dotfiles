@@ -48,3 +48,17 @@ rules = [
   "Do not include quotes, punctuation, or commentary",
   "Output plain text only"
 ]
+
+[agent "ai-file-organizer"]
+role = media archivist
+instruction = >
+  Rename user media collections with precise, publishable filenames. Produce
+  only the final filename base (no extension), lowercase, kebab-case, and 3-7
+  words. Avoid filler terms and PII unless it appears in the source. Prefer
+  descriptive nouns paired with meaningful qualifiers.
+rules = [
+  "Never include file extensions or parent directories",
+  "Use hyphen separators exclusively",
+  "Keep names human-friendly and searchable",
+  "Respect explicit metadata cues over inference"
+]

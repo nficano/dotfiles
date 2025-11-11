@@ -257,15 +257,24 @@ main() {
   id_len="${S3_UPLOAD_LINK_ID_LENGTH:-12}"
   script.validate_positive_int "$id_len" "S3_UPLOAD_LINK_ID_LENGTH"
 
-  if ! object_id=$(nanoid); then
-    log.error "Failed to generate NanoID filename"
-    exit 1
-  fi
+  local attempt=0
+  while true; do
+    if object_id=$(nanoid); then
+      if [[ -n $object_id ]]; then
+        break
+      fi
+      log.warn "nanoid returned empty string (attempt=$((attempt + 1)))"
+    else
+      log.warn "nanoid command failed (attempt=$((attempt + 1)))"
+    fi
 
-  if [[ -z $object_id ]]; then
-    log.error "NanoID generator returned an empty value"
-    exit 1
-  fi
+    ((attempt++))
+    if ((attempt >= 10)); then
+      log.error "Failed to generate NanoID filename after ${attempt} attempts"
+      exit 1
+    fi
+    sleep 0.1
+  done
 
   object_key=$(build_object_key "$object_id" "$prefix" "$filename" "$sanitized")
 
@@ -302,12 +311,14 @@ main() {
 
   share_url=$(build_share_url "$bucket" "$object_key")
 
-  if ! clip.copy <<<"$share_url"; then
-    log.error "Failed to copy URL to clipboard"
-    exit 1
+  local copy_pref="${S3_UPLOAD_LINK_NO_CLIP:-0}"
+  if [[ $copy_pref != 1 && $copy_pref != true && $copy_pref != True ]]; then
+    if ! clip.copy <<<"$share_url"; then
+      log.warn "Failed to copy URL to clipboard; continuing"
+    elif ((verbose)); then
+      log.info "Copied URL to clipboard"
+    fi
   fi
-
-  ((verbose)) && log.info "Copied URL to clipboard"
 
   printf '%s\n' "$share_url"
 }

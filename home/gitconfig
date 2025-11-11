@@ -68,7 +68,7 @@
     format = ssh
 
 [include]
-    path = ~/.gitconfig.local
+	path = /Users/nficano/.gitconfig.local
 
 [init]
     defaultBranch = main

@@ -507,7 +507,7 @@ step_apply_user_defaults() {
   local entry domain key type value
   local current normalized_current normalized_target
   local -a apply_queue=()
-  local changes=0 dock_restart=0 finder_restart=0 ui_restart=0
+  local changes=0 dock_restart=0 finder_restart=0 ui_restart=0 audio_restart=0
   local screenshot_dir=""
 
   for entry in "${DEFAULTS_ENTRIES[@]}"; do
@@ -536,6 +536,7 @@ step_apply_user_defaults() {
           screenshot_dir=$(expand_path "$value")
         fi
         ;;
+      com.apple.audio.SystemSettings) audio_restart=1 ;;
       esac
     else
       ((verbose)) && log.info "defaults: $domain $key already $normalized_target"
@@ -576,6 +577,9 @@ step_apply_user_defaults() {
   if ((ui_restart)); then
     killall SystemUIServer >/dev/null 2>&1 || true
   fi
+  if ((audio_restart)); then
+    killall coreaudiod >/dev/null 2>&1 || true
+  fi
   killall cfprefsd >/dev/null 2>&1 || true
 }
 
@@ -605,11 +609,11 @@ dock_config_apply_item() {
   spacer)
     dockutil --add '' --type spacer --section "$section" --no-restart
     return
-  ;;
+    ;;
   small-spacer)
     dockutil --add '' --type small-spacer --section "$section" --no-restart
     return
-  ;;
+    ;;
   folder:*)
     local config="${item#folder:}"
     local path="${config%%|*}"
@@ -632,7 +636,7 @@ dock_config_apply_item() {
     fi
     dockutil "${args[@]}"
     return
-  ;;
+    ;;
   app:*)
     item="${item#app:}"
     ;;

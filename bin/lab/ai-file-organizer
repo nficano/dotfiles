@@ -26,22 +26,8 @@
 
 # set -Eeuo pipefail
 
-__aifo_script="$0"
-if [[ -n ${BASH_SOURCE[0]:-} ]]; then
-  __aifo_script="${BASH_SOURCE[0]}"
-fi
-while [[ -L $__aifo_script ]]; do
-  __aifo_dir="$(cd "$(dirname "$__aifo_script")" && pwd)"
-  __aifo_link="$(readlink "$__aifo_script")"
-  if [[ $__aifo_link != /* ]]; then
-    __aifo_script="$__aifo_dir/$__aifo_link"
-  else
-    __aifo_script="$__aifo_link"
-  fi
-done
-__aifo_dir="$(cd "$(dirname "$__aifo_script")" && pwd)"
+source "$(dirname "$0")/../lib/bash/initrc"
 
-source "$__aifo_dir/../lib/bash/initrc"
 trap script.cleanup SIGINT SIGTERM ERR EXIT
 
 unset __aifo_script __aifo_dir __aifo_link __aifo_candidate
@@ -52,7 +38,7 @@ declare -A CONFIG=()
 declare -A STATS=([processed]=0 [renamed]=0 [skipped]=0 [errors]=0)
 declare -A TOOLS=()
 declare -a INCLUDE_GLOBS=()
-declare -a EXCLUDE_GLOBS=()
+declare -a EXCLUDE_GLOBS=("**/.DS_Store")
 declare -a RATE_LOG=()
 declare -a PARSED_ARGV=()
 declare -A UPLOAD_CACHE=()
@@ -66,50 +52,21 @@ readonly AIFO_BACKOFF_BASE=2
 readonly AIFO_BACKOFF_INITIAL=1
 readonly AIFO_AGENT_NAME="ai-file-organizer"
 
-# aifo_log_format formats key=value tokens for logging.
-# TODO: move to lib/bash/logging as a reusable formatter.
-aifo_log_format() {
-  local token key value
-  local -a parts=()
-  for token in "$@"; do
-    if [[ $token == *=* ]]; then
-      key="${token%%=*}"
-      value="${token#*=}"
-      printf -v token '%s=%q' "$key" "$value"
-    else
-      printf -v token '%q' "$token"
-    fi
-    parts+=("$token")
-  done
-  printf '%s\n' "${parts[*]}"
-}
-
-aifo_log() {
-  local level="$1"
-  shift
-  local message
-  message=$(aifo_log_format "$@")
-  "log.$level" "$message"
-}
-
-aifo_log_info() { aifo_log info "$@"; }
-aifo_log_warn() { aifo_log warn "$@"; }
-aifo_log_error() { aifo_log error "$@"; }
-aifo_log_debug() { aifo_log debug "$@"; }
+contrib.logging.init -l "$HOME/logs/ai-file-organizer.log" -j
+contrib.logging.set_color_mode "always"
 
 debug_dump_prompt() {
   local path="$1" prompt="$2"
-  [[ -n ${LOG_DEBUG:-} ]] || return 0
-  aifo_log_debug event=prompt_start path="$path"
+  contrib.logging.debug "Starting prompt dump for path \"$path\""
   while IFS= read -r line || [[ -n $line ]]; do
-    aifo_log_debug event=prompt_line path="$path" text="$line"
+    contrib.logging.debug "Prompt line event at path \"$path\" with text \"$line\""
   done <<<"$prompt"
-  aifo_log_debug event=prompt_end path="$path"
+  contrib.logging.debug "Completed prompt dump for path \"$path\""
 }
 
 aifo_rate_limit_wait() {
   local wait_seconds="$1" limit="$2"
-  aifo_log_info event=rate_wait seconds="$wait_seconds" limit="$limit"
+  contrib.logging.info "Rate limit wait: $wait_seconds seconds (limit: $limit per minute)"
 }
 
 aifo_rel_path() {
@@ -155,7 +112,7 @@ aifo_prepare_upload_source() {
   fi
 
   if ! command -v pdftoppm >/dev/null 2>&1; then
-    aifo_log_debug event=pdf_preview_skipped reason=pdftoppm_missing path="$(aifo_rel_path "$path")"
+    contrib.logging.debug "PDF preview skipped for \"$(aifo_rel_path "$path")\": pdftoppm is missing"
     return 0
   fi
 
@@ -166,12 +123,12 @@ aifo_prepare_upload_source() {
     if [[ -f $preview ]]; then
       UPLOAD_SOURCE_PATH="$preview"
       UPLOAD_SOURCE_CLEANUP="$tmpdir"
-      aifo_log_debug event=pdf_preview_created path="$(aifo_rel_path "$path")" preview="$(aifo_rel_path "$preview")"
+      contrib.logging.debug "PDF preview created for \"$(aifo_rel_path "$path")\" at \"$(aifo_rel_path "$preview")\""
       return 0
     fi
   fi
 
-  aifo_log_warn event=pdf_preview_failed path="$(aifo_rel_path "$path")"
+  contrib.logging.warn "PDF preview creation failed for \"$(aifo_rel_path "$path")\""
   rm -rf -- "$tmpdir"
 }
 
@@ -233,25 +190,26 @@ aifo_apply_ocr_env_override() {
   fi
 }
 
-# config_apply_log_level toggles debug logging based on level.
+# config_apply_log_level sets the logging level using contrib.logging.
 config_apply_log_level() {
   local level="${CONFIG[log_level]}"
   level=$(printf '%s' "$level" | tr '[:lower:]' '[:upper:]')
   CONFIG[log_level]="$level"
   case "$level" in
   DEBUG)
-    LOG_DEBUG=1
     CONFIG[verbose]=1
     ;;
   INFO | WARN | ERROR)
-    unset LOG_DEBUG
     CONFIG[verbose]=0
     ;;
   *)
-    aifo_log_warn event=unknown_log_level level="$level"
-    unset LOG_DEBUG
+    contrib.logging.warn "Unknown log level \"$level\", defaulting to INFO"
+    level="INFO"
+    CONFIG[log_level]="INFO"
+    CONFIG[verbose]=0
     ;;
   esac
+  contrib.logging.set_log_level "$level"
 }
 
 # parse_transform_args normalises long options via script helpers.
@@ -311,11 +269,11 @@ parse_args() {
     case "$opt" in
     h) script.usage ;;
     :)
-      aifo_log_error event=missing_option_arg option="-${OPTARG}"
+      contrib.logging.error "Missing argument for option \"-${OPTARG}\""
       script.usage 1
       ;;
     \?)
-      aifo_log_error event=invalid_option option="-${OPTARG}"
+      contrib.logging.error "Invalid option \"-${OPTARG}\""
       script.usage 1
       ;;
     *)
@@ -326,7 +284,7 @@ parse_args() {
 
   shift $((OPTIND - 1))
   if (($# > 0)); then
-    aifo_log_error event=unexpected_args args_count="$#"
+    contrib.logging.error "Unexpected arguments: $# extra argument(s) provided"
     script.usage 1
   fi
 }
@@ -381,10 +339,10 @@ config_finalize_ocr() {
   *)
     if [[ ${TOOLS[tesseract]:-0} -eq 1 ]]; then
       CONFIG[ocr_enabled]=1
-      aifo_log_debug event=ocr_auto_enabled
+      contrib.logging.debug "OCR auto-enabled: Tesseract is available"
     else
       CONFIG[ocr_enabled]=0
-      aifo_log_warn event=ocr_auto_disabled reason=missing_tesseract hint="brew install tesseract or set AIFO_OCR=0"
+      contrib.logging.warn "OCR auto-disable event: Tesseract missing — run brew install tesseract or set AIFO_OCR=0 to disable OCR."
     fi
     ;;
   esac
@@ -425,7 +383,7 @@ aifo_extract_snippet() {
   content=$(metadata.sanitize_printable "$content")
 
   if [[ -z $content && $kind == "image" && ${CONFIG[ocr_enabled]} -eq 0 ]]; then
-    aifo_log_debug event=snippet_empty path="$(aifo_rel_path "$path")" hint=enable_ocr
+    contrib.logging.debug "No snippet extracted for image \"$(aifo_rel_path "$path")\" — enable OCR for better results"
   fi
 
   printf '%s\n' "$content"
@@ -485,7 +443,7 @@ ai_request_with_retries() {
         printf '%s\n' "$text"
         return 0
       fi
-      aifo_log_warn event=empty_ai_message attempt="$attempt" path="$(aifo_rel_path "$path")"
+      contrib.logging.warn "Empty AI response received (attempt $attempt) for \"$(aifo_rel_path "$path")\""
     else
       local status
       status=$(http.response_get aifo_response status 2>/dev/null || printf '0')
@@ -495,7 +453,7 @@ ai_request_with_retries() {
         local error_message
         error_message=$(ai_response_error_message aifo_response)
         if [[ $error_message == *temperature* ]]; then
-          aifo_log_warn event=temperature_reset model="${CONFIG[ai_model]}" previous="$current_temp" next="1"
+          contrib.logging.warn "Temperature reset for model \"${CONFIG[ai_model]}\": changed from $current_temp to 1"
           current_temp="1"
           CONFIG[ai_temp]="1"
           temp_adjusted=1
@@ -510,7 +468,7 @@ ai_request_with_retries() {
     fi
 
     ((attempt++))
-    aifo_log_warn event=ai_retry attempt="$attempt" delay="$delay" path="$(aifo_rel_path "$path")"
+    contrib.logging.warn "AI request retry (attempt $attempt) after $delay seconds for \"$(aifo_rel_path "$path")\""
     sleep "$delay"
     sleep "0.$((RANDOM % 9))"
     delay=$((delay * AIFO_BACKOFF_BASE))
@@ -543,7 +501,7 @@ upload_source_asset() {
   fi
 
   if [[ $strategy == "SKIP" ]]; then
-    aifo_log_debug event=upload_skipped strategy="$strategy" path="$display_path"
+    contrib.logging.debug "Upload skipped (strategy: $strategy) for \"$display_path\""
     local fallback
     fallback=$(aifo_local_url "$display_path")
     printf '%s\n' "$fallback"
@@ -555,11 +513,11 @@ upload_source_asset() {
     local fallback
     fallback=$(aifo_local_url "$display_path")
     if [[ $strategy == "REQUIRE" ]]; then
-      aifo_log_error event=missing_tool tool=s3-upload-and-link path="$display_path"
+      contrib.logging.error "Missing required tool \"s3-upload-and-link\" for \"$display_path\""
       aifo_cleanup_upload_source
       return 1
     fi
-    aifo_log_warn event=missing_tool tool=s3-upload-and-link path="$display_path" fallback="$fallback"
+    contrib.logging.warn "Missing tool \"s3-upload-and-link\" for \"$display_path\", using fallback \"$fallback\""
     aifo_cleanup_upload_source
     printf '%s\n' "$fallback"
     return 0
@@ -571,16 +529,16 @@ upload_source_asset() {
   local url
   while ((attempt <= max_attempts)); do
     if url=$(S3_UPLOAD_LINK_NO_CLIP=1 S3_UPLOAD_LINK_EXPIRES_IN="$expires" s3-upload-and-link "$source_path" 2>/dev/null); then
-      url=$(str.trim "$url")
+      url=$(sanitize_upload_url "$url")
       if [[ -n $url ]]; then
-        aifo_log_debug event=s3_upload_ok url="$url" expires="${expires}s" attempt="$attempt"
+        contrib.logging.debug "S3 upload successful (attempt $attempt) for \"$display_path\": URL expires in ${expires}s"
         aifo_cleanup_upload_source
         printf '%s\n' "$url"
         return 0
       fi
-      aifo_log_warn event=s3_url_empty attempt="$attempt" path="$display_path"
+      contrib.logging.warn "S3 upload returned empty URL (attempt $attempt) for \"$display_path\""
     else
-      aifo_log_warn event=s3_upload_failed attempt="$attempt" path="$display_path"
+      contrib.logging.warn "S3 upload failed (attempt $attempt) for \"$display_path\""
     fi
 
     ((attempt++))
@@ -589,9 +547,9 @@ upload_source_asset() {
   done
 
   if [[ $strategy == "REQUIRE" ]]; then
-    aifo_log_error event=s3_upload_failed attempts_exhausted path="$display_path"
+    contrib.logging.error "S3 upload failed after exhausting all attempts for \"$display_path\""
   else
-    aifo_log_warn event=s3_upload_failed attempts_exhausted path="$display_path"
+    contrib.logging.warn "S3 upload failed after exhausting all attempts for \"$display_path\""
   fi
   aifo_cleanup_upload_source
   if [[ $strategy == "REQUIRE" ]]; then
@@ -600,7 +558,7 @@ upload_source_asset() {
 
   local fallback
   fallback=$(aifo_local_url "$display_path")
-  aifo_log_warn event=upload_fallback path="$display_path" fallback="$fallback"
+  contrib.logging.warn "Using upload fallback \"$fallback\" for \"$display_path\""
   printf '%s\n' "$fallback"
   return 0
 }
@@ -609,13 +567,14 @@ upload_source_asset() {
 resolve_asset_url() {
   local path="$1" kind="$2"
   if [[ -n ${UPLOAD_CACHE["$path"]:-} ]]; then
-    printf '%s\n' "${UPLOAD_CACHE["$path"]}"
+    printf '%s\n' "$(sanitize_upload_url "${UPLOAD_CACHE["$path"]}")"
     return 0
   fi
   local url
   if ! url=$(upload_source_asset "$path" "$kind"); then
     return 1
   fi
+  url=$(sanitize_upload_url "$url")
   UPLOAD_CACHE["$path"]="$url"
   printf '%s\n' "$url"
 }
@@ -636,7 +595,7 @@ ai_generate_basename() {
     return 0
   fi
   if [[ ${AI_LAST_STATUS:-0} == 400 && -n $snippet ]]; then
-    aifo_log_warn event=ai_retry_without_snippet path="$display_path"
+    contrib.logging.warn "Retrying AI request without snippet for \"$display_path\""
     prompt=$(build_ai_prompt "$display_path" "$kind" "$metadata_with_embed" "" "$asset_url")
     debug_dump_prompt "$display_path" "$prompt"
     if response=$(ai_request_with_retries "$path" "$prompt"); then
@@ -644,7 +603,7 @@ ai_generate_basename() {
       return 0
     fi
   fi
-  aifo_log_error event=ai_failure path="$display_path" status="${AI_LAST_STATUS:-0}" reason="${AI_LAST_REASON:-unknown}"
+  contrib.logging.error "AI request failed for \"$display_path\" (status: ${AI_LAST_STATUS:-0}, reason: ${AI_LAST_REASON:-unknown})"
   return 1
 }
 
@@ -654,18 +613,18 @@ aifo_move_file() {
   rel_source=$(aifo_rel_path "$source")
   rel_target=$(aifo_rel_path "$target")
   if [[ $source == "$target" ]]; then
-    aifo_log_info event=rename_skipped reason=already_named path="$rel_source"
+    contrib.logging.info "Rename skipped: file \"$rel_source\" is already correctly named"
     return 0
   fi
   if [[ ${CONFIG[dry_run]} -eq 1 ]]; then
-    aifo_log_info event=dry_run from="$rel_source" to="$rel_target"
+    contrib.logging.info "Dry run: would rename \"$rel_source\" to \"$rel_target\""
     return 0
   fi
   if os.rename_safe "$source" "$target"; then
-    aifo_log_info event=rename_ok from="$rel_source" to="$rel_target"
+    contrib.logging.info "File renamed from \"$rel_source\" to \"$rel_target\""
     return 0
   fi
-  aifo_log_error event=rename_failed from="$rel_source" to="$rel_target"
+  contrib.logging.error "Failed to rename file from \"$rel_source\" to \"$rel_target\""
   return 1
 }
 
@@ -676,7 +635,7 @@ aifo_process_result() {
   if [[ ! -f $output_path ]]; then
     ((STATS[processed]++))
     ((STATS[errors]++))
-    aifo_log_error event=missing_result path="$display_path"
+    contrib.logging.error "Missing result file for \"$display_path\""
     return "$status"
   fi
 
@@ -685,7 +644,7 @@ aifo_process_result() {
   if [[ -z $result_line ]]; then
     ((STATS[processed]++))
     ((STATS[errors]++))
-    aifo_log_error event=empty_result path="$display_path"
+    contrib.logging.error "Empty result file for \"$display_path\""
     return "$status"
   fi
 
@@ -701,7 +660,8 @@ aifo_process_result() {
   if [[ $outcome == "error" || $status -ne 0 ]]; then
     local tail_output
     tail_output=$(tail -n 20 "$output_path" 2>/dev/null || true)
-    aifo_log_error event=worker_failure path="$display_path" status="$status" outcome="$outcome" note="$message" log_tail="$tail_output"
+    contrib.logging.error "Worker failure for \"$display_path\" (status: $status, outcome: $outcome, note: $message)"
+    contrib.logging.debug "Worker log tail for \"$display_path\": $tail_output"
   fi
 
   if ((status != 0)) && [[ ${CONFIG[continue_on_error]} -eq 0 ]]; then
@@ -715,10 +675,9 @@ handle_file() {
   local path="$1"
   local display_path
   display_path=$(aifo_rel_path "$path")
-  aifo_log_info event=file_start path="$display_path"
+  contrib.logging.info "Processing file \"$display_path\""
   [[ -f $path ]] || {
-    aifo_log_error event=file_missing path="$display_path"
-    printf 'RESULT|error|%s||missing\n' "$path"
+    contrib.logging.error "Result error: \"$display_path\" — file is missing"
     return 1
   }
 
@@ -739,20 +698,18 @@ handle_file() {
   fi
 
   if ! asset_url=$(resolve_asset_url "$path" "$kind"); then
-    aifo_log_error event=upload_failed path="$display_path"
-    printf 'RESULT|error|%s||upload_failed\n' "$path"
+    contrib.logging.error "Result error: \"$display_path\" — upload failed"
     return 1
   fi
 
   if ! response=$(ai_generate_basename "$path" "$display_path" "$kind" "$metadata_json" "$snippet" "$asset_url"); then
-    printf 'RESULT|error|%s||ai_failure\n' "$path"
+    contrib.logging.error "Result error: \"$display_path\" — AI request failed"
     return 1
   fi
 
   response=$(str.trim "$response")
   [[ -n $response ]] || {
-    aifo_log_warn event=empty_response path="$display_path"
-    printf 'RESULT|skipped|%s||empty_ai\n' "$path"
+    contrib.logging.warn "Result skipped: \"$display_path\" — empty AI response received"
     return 0
   }
 
@@ -761,25 +718,23 @@ handle_file() {
   ext="${ext//../.}"
   sanitized=$(fs.sanitize_filename "$response" "${CONFIG[max_len]}" "$ext" 2>/dev/null || true)
   [[ -n $sanitized ]] || {
-    aifo_log_warn event=sanitize_failed path="$display_path" raw="$response"
-    printf 'RESULT|skipped|%s||sanitize_fail\n' "$path"
+    contrib.logging.warn "Result skipped: \"$display_path\" — filename sanitization failed (raw response: \"$response\")"
     return 0
   }
 
   dir=$(path.dirname "$path")
   target=$(path.join "$dir" "${sanitized}${ext}")
   if [[ $target == "$path" ]]; then
-    aifo_log_info event=already_named path="$display_path"
-    printf 'RESULT|skipped|%s|%s|unchanged\n' "$path" "$target"
+    contrib.logging.info "Result skipped: \"$display_path\" — file is already correctly named"
     return 0
   fi
 
   target=$(dedupe_name "$dir" "$sanitized" "$ext" "$path")
   if ! aifo_move_file "$path" "$target"; then
-    printf 'RESULT|error|%s|%s|rename_failed\n' "$path" "$target"
+    contrib.logging.error "Result error: \"$display_path\" — rename operation failed"
     return 1
   fi
-  printf 'RESULT|renamed|%s|%s|\n' "$path" "$target"
+  contrib.logging.info "Result renamed: \"$display_path\" — file successfully renamed"
   return 0
 }
 
@@ -801,7 +756,7 @@ dedupe_name() {
 
 # print_summary emits final counters to the user.
 print_summary() {
-  aifo_log_info event=summary processed="${STATS[processed]}" renamed="${STATS[renamed]}" skipped="${STATS[skipped]}" errors="${STATS[errors]}"
+  contrib.logging.info "Summary: processed ${STATS[processed]} files, renamed ${STATS[renamed]}, skipped ${STATS[skipped]}, errors ${STATS[errors]}"
 }
 
 # main orchestrates configuration and execution.
@@ -824,7 +779,7 @@ main() {
   api_key=$(ai.openai_api_key)
   [[ -n $api_key ]] || guards.raise PermissionError "OPENAI_API_KEY is not set" 126
 
-  aifo_log_debug agent="$AIFO_AGENT_NAME" model="${CONFIG[ai_model]}" temp="${CONFIG[ai_temp]}"
+  contrib.logging.debug "Using AI agent \"$AIFO_AGENT_NAME\" with model \"${CONFIG[ai_model]}\" (temperature: ${CONFIG[ai_temp]})"
 
   local -a files=()
   while IFS= read -r file; do
@@ -832,11 +787,11 @@ main() {
   done < <(fs.list_files "${CONFIG[dir]}" INCLUDE_GLOBS EXCLUDE_GLOBS)
 
   if ((${#files[@]} == 0)); then
-    aifo_log_warn event=no_files dir="${CONFIG[dir]}"
+    contrib.logging.warn "No files found in directory \"${CONFIG[dir]}\""
     return 0
   fi
 
-  aifo_log_info event=start dir="${CONFIG[dir]}" count="${#files[@]}" concurrency="${CONFIG[concurrency]}"
+  contrib.logging.info "Starting processing: ${#files[@]} file(s) in \"${CONFIG[dir]}\" with concurrency ${CONFIG[concurrency]}"
 
   if ! queue.process "${CONFIG[concurrency]}" files handle_file aifo_process_result; then
     print_summary
@@ -847,3 +802,10 @@ main() {
 }
 
 main "$@"
+sanitize_upload_url() {
+  local raw="$1"
+  [[ -n $raw ]] || return 0
+  raw=$(printf '%s\n' "$raw" | sed -E $'s/\x1B\\[[0-9;]*[A-Za-z]//g' | awk 'NF {line=$0} END {if (length(line)) print line}')
+  raw=$(str.trim "$raw")
+  printf '%s\n' "$raw"
+}

@@ -132,7 +132,7 @@ make_id() {
           break 2
         fi
       fi
-    done < <(LC_ALL=C hexdump -v -e '1/1 "%u\n"' -n "$chunk" /dev/urandom)
+    done < <(LC_ALL=C hexdump -v -e '1/1 "%u\n"' -n "$chunk" /dev/urandom || true)
   done
 
   printf '%s\n' "$(printf '%s' "${out[@]}")"

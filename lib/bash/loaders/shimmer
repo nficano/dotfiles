@@ -1,0 +1,249 @@
+#!/usr/bin/env bash
+# shimmer.sh — "thinking" loading indicator with a shimmering gradient wave.
+# Default usage: ./shimmer.sh
+
+set -euo pipefail
+
+TEXT="thinking"
+FPS=75
+PAUSE=0.8
+CYCLES=0 # 0 = loop forever
+RADIUS=5 # highlight reach in characters
+BASE_HEX="#37394A"
+HIGHLIGHT_HEX="#CCCDD1"
+SUBDIV=4           # sub-steps per character for smoother motion
+EASE_SCALE=1000    # scaling factor for easing math
+TRAVEL_TIME_MS=700 # target duration (ms) for highlight to traverse text
+
+usage() {
+  cat <<EOF
+usage: ${0##*/} [options]
+  --text STRING        text to display (default: $TEXT)
+  --fps N              frames per second (default: $FPS)
+  --pause SECONDS      pause between waves (default: $PAUSE)
+  --cycles N           number of waves before exiting (default: infinite)
+  --travel-ms N        milliseconds for highlight travel (default: $TRAVEL_TIME_MS)
+  --radius N           highlight reach in characters (default: $RADIUS)
+  --base HEX           base color in #RRGGBB (default: $BASE_HEX)
+  --highlight HEX      highlight color in #RRGGBB (default: $HIGHLIGHT_HEX)
+  --help               show this message
+EOF
+}
+
+die() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+assert_integer() {
+  local value=$1
+  local label=$2
+  [[ $value =~ ^-?[0-9]+$ ]] || die "$label must be an integer"
+}
+
+cleanup() {
+  if [[ -n ${_SHIMMER_DONE:-} ]]; then
+    return
+  fi
+  _SHIMMER_DONE=1
+  printf '\r\e[0m\e[?25h\n'
+}
+
+trap cleanup EXIT INT TERM
+
+strip_hash() {
+  local hex=$1
+  printf '%s' "${hex#\#}"
+}
+
+hex_to_rgb() {
+  local hex
+  hex=$(strip_hash "$1")
+  [[ ${#hex} -eq 6 ]] || die "invalid hex color: $1"
+  printf '%d %d %d\n' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+ease_in_out_quad() {
+  local p=$1
+  local scale=$EASE_SCALE
+  if ((p <= 0)); then
+    echo 0
+    return
+  fi
+  if ((p >= scale)); then
+    echo "$scale"
+    return
+  fi
+  local half=$((scale / 2))
+  if ((p <= half)); then
+    echo $((2 * p * p / scale))
+  else
+    local inv=$((scale - p))
+    echo $((scale - (2 * inv * inv / scale)))
+  fi
+}
+
+soften_intensity() {
+  local x=$1
+  echo $((x * x / EASE_SCALE))
+}
+
+render_frame() {
+  local center_units=$1
+  local output=""
+  local char char_units dist intensity seg
+
+  for ((i = 0; i < TEXT_LEN; i++)); do
+    char=${TEXT:i:1}
+    char_units=$((i * SUBDIV))
+    dist=$((center_units - char_units))
+    if ((dist < 0)); then
+      dist=$((-dist))
+    fi
+
+    intensity=0
+    if ((dist < RADIUS_UNITS)); then
+      local closeness=$((RADIUS_UNITS - dist))
+      intensity=$((closeness * EASE_SCALE / RADIUS_UNITS))
+      if ((intensity > 0)); then
+        intensity=$(soften_intensity "$intensity")
+      fi
+    fi
+
+    local r=$BASE_R
+    local g=$BASE_G
+    local b=$BASE_B
+
+    if ((intensity > 0)); then
+      r=$((BASE_R + DELTA_R * intensity / EASE_SCALE))
+      g=$((BASE_G + DELTA_G * intensity / EASE_SCALE))
+      b=$((BASE_B + DELTA_B * intensity / EASE_SCALE))
+    fi
+
+    printf -v seg '\e[38;2;%d;%d;%dm%s' "$r" "$g" "$b" "$char"
+    output+="$seg"
+  done
+
+  printf '\r%s\e[0m' "$output"
+}
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+  --text)
+    [[ $# -ge 2 ]] || die "--text requires a value"
+    TEXT=$2
+    shift 2
+    ;;
+  --fps)
+    [[ $# -ge 2 ]] || die "--fps requires a value"
+    FPS=$2
+    shift 2
+    ;;
+  --pause)
+    [[ $# -ge 2 ]] || die "--pause requires a value"
+    PAUSE=$2
+    shift 2
+    ;;
+  --cycles)
+    [[ $# -ge 2 ]] || die "--cycles requires a value"
+    CYCLES=$2
+    shift 2
+    ;;
+  --travel-ms)
+    [[ $# -ge 2 ]] || die "--travel-ms requires a value"
+    TRAVEL_TIME_MS=$2
+    shift 2
+    ;;
+  --radius)
+    [[ $# -ge 2 ]] || die "--radius requires a value"
+    RADIUS=$2
+    shift 2
+    ;;
+  --base)
+    [[ $# -ge 2 ]] || die "--base requires a value"
+    BASE_HEX=$2
+    shift 2
+    ;;
+  --highlight)
+    [[ $# -ge 2 ]] || die "--highlight requires a value"
+    HIGHLIGHT_HEX=$2
+    shift 2
+    ;;
+  --help | -h)
+    usage
+    exit 0
+    ;;
+  *)
+    die "unknown argument: $1"
+    ;;
+  esac
+done
+
+assert_integer "$FPS" "--fps"
+[[ $FPS -gt 0 ]] || die "--fps must be positive"
+
+assert_integer "$CYCLES" "--cycles"
+[[ $CYCLES -ge 0 ]] || die "--cycles must be non-negative"
+
+assert_integer "$RADIUS" "--radius"
+[[ $RADIUS -ge 0 ]] || die "--radius must be non-negative"
+
+assert_integer "$SUBDIV" "SUBDIV"
+[[ $SUBDIV -gt 0 ]] || die "SUBDIV must be positive"
+
+assert_integer "$TRAVEL_TIME_MS" "--travel-ms"
+[[ $TRAVEL_TIME_MS -gt 0 ]] || die "--travel-ms must be positive"
+
+TEXT_LEN=${#TEXT}
+((TEXT_LEN > 0)) || die "text must not be empty"
+
+read -r BASE_R BASE_G BASE_B <<<"$(hex_to_rgb "$BASE_HEX")"
+read -r HIGHLIGHT_R HIGHLIGHT_G HIGHLIGHT_B <<<"$(hex_to_rgb "$HIGHLIGHT_HEX")"
+
+DELTA_R=$((HIGHLIGHT_R - BASE_R))
+DELTA_G=$((HIGHLIGHT_G - BASE_G))
+DELTA_B=$((HIGHLIGHT_B - BASE_B))
+
+RADIUS_UNITS=$((RADIUS * SUBDIV))
+if ((RADIUS_UNITS <= 0)); then
+  RADIUS_UNITS=$SUBDIV
+fi
+
+TOTAL_UNITS=$(((TEXT_LEN - 1) * SUBDIV))
+START_POS=$((-RADIUS_UNITS))
+END_POS=$((TOTAL_UNITS + RADIUS_UNITS))
+RANGE_UNITS=$((END_POS - START_POS))
+
+TRAVEL_FRAMES=$(((TRAVEL_TIME_MS * FPS + 999) / 1000))
+if ((TRAVEL_FRAMES < 1)); then
+  TRAVEL_FRAMES=1
+fi
+
+FRAME_INTERVAL_S=$(LC_NUMERIC=C awk -v fps="$FPS" 'BEGIN { printf "%.6f", 1.0 / fps }')
+
+printf '\e[?25l'
+
+cycle=0
+while :; do
+  for ((frame = 0; frame <= TRAVEL_FRAMES; frame++)); do
+    local_progress=$((frame * EASE_SCALE / TRAVEL_FRAMES))
+    if ((frame == TRAVEL_FRAMES)); then
+      local_progress=$EASE_SCALE
+    fi
+    eased_progress=$(ease_in_out_quad "$local_progress")
+    center_units=$((START_POS + (RANGE_UNITS * eased_progress) / EASE_SCALE))
+    render_frame "$center_units"
+    sleep "$FRAME_INTERVAL_S"
+  done
+
+  if ((CYCLES > 0)); then
+    ((cycle++))
+    if ((cycle >= CYCLES)); then
+      break
+    fi
+  fi
+
+  sleep "$PAUSE"
+done
+
+cleanup
