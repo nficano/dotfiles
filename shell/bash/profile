@@ -39,7 +39,7 @@ source "${DOTFILES_ROOT}/../../lib/bash/initrc"
 os.setenv "TERM" "xterm-256color"
 os.setenv "GPG_TTY" "$(tty)"
 os.setenv "DOTFILES_VERSION" "4.2.0"
-os.setenv "DIRENV_LOG_FORMAT" ""
+os.setenv "DIRENV_SILENT_DIFF" 1
 
 # Python Shell Environment
 os.setenv "POETRY_VIRTUALENVS_PATH" "$HOME/.virtualenvs"
