@@ -233,7 +233,7 @@ if [[ -n ${_PROFILE_START_TIME:-} ]]; then
   fi
   # Only show if load time is significant (> 1ms)
   if awk "BEGIN {exit !($elapsed > 0.001)}" 2>/dev/null; then
-    printf "\033[2m[Profile loaded in %.3fs]\033[0m\n" "$elapsed"
+    printf "\033[2mready (%.3fs)\033[0m\n" "$elapsed"
   fi
   unset _PROFILE_START_TIME end_time elapsed
 fi
