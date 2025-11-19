@@ -37,6 +37,11 @@ when.linux() {
   "$@"
 }
 
+when.debian() {
+  os.platform.is_debian || return 1
+  "$@"
+}
+
 when.my_machine() {
   os.machine_id.matches_current || return 1
   "$@"

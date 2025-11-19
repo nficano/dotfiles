@@ -47,17 +47,17 @@ os.setenv "PYENV_ROOT" "$HOME/.pyenv"
 os.setenv "PYTHONDONTWRITEBYTECODE" true
 os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
 os.setenv "COPYX_CONFIG" "$HOME/.config/copyx/config.yml"
-# Homebrew Shell Environment
-os.setenv "BREW_PREFIX" "$(brew.prefix)"
-os.setenv "HOMEBREW_CASKROOM" "$BREW_PREFIX/Caskroom"
-os.setenv "HOMEBREW_CELLAR" "$BREW_PREFIX/Cellar"
-os.setenv "HOMEBREW_REPOSITORY" "$BREW_PREFIX/Homebrew"
-os.setenv "HOMEBREW_SHELLENV_PREFIX" "$BREW_PREFIX"
-os.setenv "MANPATH" "$BREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
-os.setenv "INFOPATH" "$BREW_PREFIX/share/info:${INFOPATH:-}"
-os.setenv "HOMEBREW_NO_ENV_HINTS" 1
-os.setenv "ARCHFLAGS" "-arch $(uname -m)"
-os.setenv "BASH_SILENCE_DEPRECATION_WARNING" 1
+# Homebrew Shell Environment (macOS only)
+when.darwin os.setenv "BREW_PREFIX" "$(brew.prefix)"
+when.darwin os.setenv "HOMEBREW_CASKROOM" "$BREW_PREFIX/Caskroom"
+when.darwin os.setenv "HOMEBREW_CELLAR" "$BREW_PREFIX/Cellar"
+when.darwin os.setenv "HOMEBREW_REPOSITORY" "$BREW_PREFIX/Homebrew"
+when.darwin os.setenv "HOMEBREW_SHELLENV_PREFIX" "$BREW_PREFIX"
+when.darwin os.setenv "MANPATH" "$BREW_PREFIX/share/man${MANPATH+:$MANPATH}:"
+when.darwin os.setenv "INFOPATH" "$BREW_PREFIX/share/info:${INFOPATH:-}"
+when.darwin os.setenv "HOMEBREW_NO_ENV_HINTS" 1
+when.darwin os.setenv "ARCHFLAGS" "-arch $(sys.machine)"
+when.darwin os.setenv "BASH_SILENCE_DEPRECATION_WARNING" 1
 os.setenv "HSTR_CONFIG" "hicolor"
 
 # Node.js Environment
@@ -87,17 +87,17 @@ shell.setopt "checkwinsize" # Update window size after each command.
 shell.setopt "cmdhist"      # Save multi-line commands as one.
 shell.setopt "hostcomplete"            # tab-complete hostnames.
 shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands
-# during tab completion.
+                                       # during tab completion.
 shell.setopt "nocaseglob" # Case-insensitive path expansion.
 shell.setopt "cdspell"    # Automatic spell-correct during
-# tab completion.
+                          # tab completion.
 shell.setopt "histverify" # !$ does not execute automatically.
 
 # Untracked Shell Scripts (DO NOT SORT)
 sys.path.prepend "$HOME/.bin"
 
-# Prefer GNU Utilities instead of FeeeBSD When Available
-sys.path.prepend_many \
+# Prefer GNU Utilities instead of FreeBSD When Available (macOS)
+when.darwin sys.path.prepend_many \
   "$BREW_PREFIX/opt/coreutils/libexec/gnubin" \
   "$BREW_PREFIX/opt/findutils/libexec/gnubin" \
   "$BREW_PREFIX/opt/gnu-getopt/libexec/gnubin" \
@@ -114,22 +114,42 @@ sys.path.prepend_many \
   "$BREW_PREFIX/opt/e2fsprogs/bin" \
   "$BREW_PREFIX/opt/e2fsprogs/sbin" \
   "$BREW_PREFIX/bin" \
-  "$BREW_PREFIX/sbin" \
+  "$BREW_PREFIX/sbin"
+
+# Standard Linux paths (Debian/Ubuntu)
+when.debian sys.path.prepend_many \
+  "/usr/local/bin" \
+  "/usr/local/sbin" \
+  "/usr/bin" \
+  "/usr/sbin"
+
+# Common user paths (all platforms)
+sys.path.prepend_many \
   "$HOME/.local/bin" \
   "$HOME/.docker/bin" \
   "$HOME/.pyenv/bin"
 
 shell.defer --wrap docker shell.import "$HOME/.docker/init-bash.sh"
-shell.defer --wrap gcloud shell.import "$BREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
-shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-shell.defer --wrap git shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-shell.defer --wrap caddy shell.import "$BREW_PREFIX/etc/bash_completion.d/caddy"
-shell.defer --wrap nvm shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
+# macOS Homebrew completions
+when.darwin shell.defer --wrap gcloud shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
+when.darwin shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
+when.darwin shell.defer --wrap git shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
+when.darwin shell.defer --wrap caddy shell.import "$BREW_PREFIX/etc/bash_completion.d/caddy"
+when.darwin shell.defer --wrap yt-dlp shell.import "$BREW_PREFIX/etc/bash_completion.d/yt-dlp"
+when.darwin shell.defer --wrap nvm shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
+# Defer virtualenvwrapper until workon/mkvirtualenv is used
+when.darwin shell.defer --wrap workon shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+when.darwin shell.defer --wrap mkvirtualenv shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
+when.darwin shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
+when.darwin shell.import "$HOME/.iterm2_shell_integration.bash"
+# Defer loading individual completion scripts directory until first tab completion
+# Main bash_completion is still loaded above for core completion support
+# This directory is loaded lazily via shell.import which checks file existence
+when.darwin shell.import "$BREW_PREFIX/etc/bash_completion.d" || true
+# Debian/Ubuntu bash completions
+when.debian shell.import "/usr/share/bash-completion/bash_completion" || true
+when.debian shell.import "/etc/bash_completion.d" || true
 shell.defer --wrap op shell.import "$HOME/.config/op/plugins.sh"
-shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
-shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
-shell.import "$HOME/.iterm2_shell_integration.bash"
-shell.import "$BREW_PREFIX/etc/bash_completion.d"
 
 # Use "most" for Manpages when available, otherwise use "less".
 sys.path.contains "most" && os.setenv "MANPAGER" "most"
@@ -195,7 +215,10 @@ when.my_machine sys.path.append "$HOME/.bin/lab"
 shell.setup_prompt
 
 shell.setup_tab_safe_history # prevent history loss when working with tabs
-ssh_agent.init "$HOME/.ssh-agent.env"
+# Defer SSH agent initialization until SSH is actually used
+shell.defer --wrap ssh ssh_agent.init "$HOME/.ssh-agent.env"
+shell.defer --wrap scp ssh_agent.init "$HOME/.ssh-agent.env"
+# Note: git deferral removed as git may need SSH agent immediately
 
 # Untracked Private Overrides
 shell.import "$HOME/.profile.local"

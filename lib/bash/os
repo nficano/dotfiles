@@ -22,12 +22,42 @@ sys.platform() {
   echo "$_SYS_PLATFORM"
 }
 
+sys.machine() {
+  if [[ -n ${_SYS_MACHINE:-} ]]; then
+    echo "$_SYS_MACHINE"
+    return 0
+  fi
+  _SYS_MACHINE=$(uname -m)
+  echo "$_SYS_MACHINE"
+}
+
 os.platform.is_darwin() {
   [[ $(sys.platform) == darwin ]]
 }
 
 os.platform.is_linux() {
   [[ $(sys.platform) == linux ]]
+}
+
+os.platform.is_debian() {
+  if ! os.platform.is_linux; then
+    return 1
+  fi
+  if [[ -n ${_OS_IS_DEBIAN:-} ]]; then
+    ((_OS_IS_DEBIAN == 1))
+    return
+  fi
+  if [[ -f /etc/debian_version ]] || [[ -f /etc/os-release ]] && grep -qi 'debian\|ubuntu\|mint' /etc/os-release 2>/dev/null; then
+    _OS_IS_DEBIAN=1
+    return 0
+  else
+    _OS_IS_DEBIAN=0
+    return 1
+  fi
+}
+
+os.path.is_dir() {
+  [[ -d $1 ]]
 }
 
 os.path.exists() {
