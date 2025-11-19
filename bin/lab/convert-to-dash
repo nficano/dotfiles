@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+  echo "ffmpeg and ffprobe are required" >&2
+  exit 1
+fi
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <input-video> [output-dir]" >&2
+  exit 1
+fi
+
+INPUT="$1"
+OUT_DIR="${2:-dash_output}"
+
+mkdir -p "$OUT_DIR"
+
+echo ">> Probing input…"
+
+# Get source width, height, and frame rate
+IFS=',' read -r SRC_WIDTH SRC_HEIGHT SRC_RATE <<<"$(
+  ffprobe -v error -select_streams v:0 \
+    -show_entries stream=width,height,r_frame_rate \
+    -of csv=p=0 "$INPUT"
+)"
+
+if [[ -z "$SRC_WIDTH" || -z "$SRC_HEIGHT" || "$SRC_WIDTH" == "N/A" || "$SRC_HEIGHT" == "N/A" ]]; then
+  echo "Could not determine video dimensions from ffprobe output" >&2
+  exit 1
+fi
+
+if [[ -z "$SRC_RATE" || "$SRC_RATE" == "N/A" ]]; then
+  SRC_RATE="30000/1001"
+fi
+
+# Convert r_frame_rate (e.g. 30000/1001) to float fps
+FPS=$(awk -v rate="$SRC_RATE" 'BEGIN {
+  split(rate, a, "/");
+  if (a[2] == 0) { print 30; exit }
+  print a[1] / a[2]
+}')
+
+# Cap FPS at 60 (don’t invent frames beyond source)
+FPS_INT=$(printf '%.0f\n' "$FPS")
+if (( FPS_INT > 60 )); then
+  FPS_INT=60
+fi
+if (( FPS_INT < 24 )); then
+  FPS_INT=24
+fi
+
+# GOP size ~ 2 seconds like YouTube-ish
+GOP=$((FPS_INT * 2))
+
+echo ">> Source: ${SRC_WIDTH}x${SRC_HEIGHT} @ ~${FPS_INT}fps (GOP=${GOP})"
+
+SOURCE_DAR="${SRC_WIDTH}/${SRC_HEIGHT}"
+
+# --- Bitrate ladder (YouTube-ish, tweak to taste) ---
+# Format: HEIGHT BITRATE_Kbps
+LADDER=$(
+  cat <<EOF
+2160 12000k
+1440 8000k
+1080 5800k
+720  3000k
+480  1500k
+360  800k
+240  400k
+EOF
+)
+
+# Build ffmpeg args based on what the source can actually support
+FFMPEG_VIDEO_ARGS=()
+STREAM_INDEX=0
+
+while read -r HEIGHT BITRATE; do
+  # Skip if line is empty
+  [[ -z "$HEIGHT" || -z "$BITRATE" ]] && continue
+
+  # Don’t upscale above source height
+  if (( HEIGHT > SRC_HEIGHT )); then
+    continue
+  fi
+
+  echo ">> Adding representation: ${HEIGHT}p @ ${BITRATE}"
+
+  # Video stream N
+  FFMPEG_VIDEO_ARGS+=(
+    -map 0:v:0
+    -c:v:${STREAM_INDEX} libx264
+    -preset:v:${STREAM_INDEX} slow
+    -profile:v:${STREAM_INDEX} high
+    -level:v:${STREAM_INDEX} 5.1
+    -x264-params:v:${STREAM_INDEX} "keyint=${GOP}:min-keyint=${GOP}:scenecut=0:force-cfr=1"
+    -b:v:${STREAM_INDEX} "${BITRATE}"
+    -maxrate:v:${STREAM_INDEX} "$(echo "$BITRATE" | sed 's/k$/k/')" # same order, we’ll rely on bufsize
+    -bufsize:v:${STREAM_INDEX} 2M
+    -filter:v:${STREAM_INDEX} "scale=-2:${HEIGHT},setsar=1,setdar=${SOURCE_DAR}"
+    -r:v:${STREAM_INDEX} "${FPS_INT}"
+  )
+
+  ((STREAM_INDEX += 1))
+done <<<"$LADDER"
+
+if (( STREAM_INDEX == 0 )); then
+  echo "No valid renditions found for source height=${SRC_HEIGHT}" >&2
+  exit 1
+fi
+
+# Audio – single AAC track
+echo ">> Adding audio track"
+FFMPEG_AUDIO_ARGS=(
+  -map 0:a:0?
+  -c:a aac
+  -b:a 192k
+)
+
+# --- Run ffmpeg to create DASH (CMAF-style) ---
+echo ">> Encoding & packaging to DASH…"
+
+ffmpeg -y -i "$INPUT" \
+  "${FFMPEG_VIDEO_ARGS[@]}" \
+  "${FFMPEG_AUDIO_ARGS[@]}" \
+  -use_timeline 1 \
+  -use_template 1 \
+  -window_size 5 \
+  -extra_window_size 5 \
+  -adaptation_sets "id=0,streams=v id=1,streams=a" \
+  -seg_duration 4 \
+  -init_seg_name 'init-$RepresentationID$.mp4' \
+  -media_seg_name 'chunk-$RepresentationID$-$Number$.m4s' \
+  -f dash "$OUT_DIR/manifest.mpd"
+
+echo ">> Done."
+echo "Manifest: $OUT_DIR/manifest.mpd"

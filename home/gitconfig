@@ -42,7 +42,7 @@
     fsmonitor = false
     excludesfile = ~/.gitignore
     autocrlf = input
-    pager = diff-so-fancy
+	pager = less -FRX
 
 [diff]
     tool = default-difftool
@@ -104,3 +104,8 @@
 [tag]
     gpgSign = true
     sort = version:refname
+
+[alias]
+  lg = log --decorate --pretty=format:'%C(yellow)%h%Creset - %Cgreen%ad%Creset %C(auto)%d%Creset %C(cyan)%s%Creset %C(white)- %an%Creset' --date=relative
+  lgf = log --decorate --pretty=fuller
+  lga = log --decorate --all --pretty=format:'%C(yellow)%h%Creset - %Cgreen%ad%Creset %C(auto)%d%Creset %C(cyan)%s%Creset %C(white)- %an%Creset' --date=relative

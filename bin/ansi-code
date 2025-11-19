@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+# ansi-code: Inspect and compose ANSI SGR escape sequences.
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+declare -r ESC=$'\033'
+declare -r RESET_SEQ="${ESC}[0m"
+declare -r DEMO_WORD="TEXT"
+
+declare -Ar ATTR_CODES=(
+  [reset]=0
+  [bold]=1
+  [dim]=2
+  [italic]=3
+  [underline]=4
+  [blink]=5
+  [reverse]=7
+  [hidden]=8
+  [strikethrough]=9
+  [strike]=9
+)
+
+declare -ar ATTR_SHOW_ORDER=(
+  reset
+  underline
+  strikethrough
+  italic
+  hidden
+  bold
+  blink
+  dim
+  reverse
+)
+
+declare -ar FG_CODES=(30 31 32 33 34 35 36 37 90 91 92 93 94 95 96 97)
+declare -ar BG_CODES=(40 41 42 43 44 45 46 47 100 101 102 103 104 105 106 107)
+
+print_help() {
+  printf "DESCRIPTION\n"
+  printf "  Short description of what the tool does:\n"
+  printf "  - Show ANSI attributes and colors with demos.\n"
+  printf "  - Build combined ANSI escape sequences from human-friendly flags.\n"
+  printf "\n"
+  printf "USAGE\n"
+  printf "  ansi-code --show=16\n"
+  printf "  ansi-code --show-256\n"
+  printf "  ansi-code [ATTRIBUTES...] [--fg=N] [--bg=N]\n"
+  printf "\n"
+  printf "ATTRIBUTES\n"
+  printf "  reset          Reset all attributes\n"
+  printf "  bold           Bold text\n"
+  printf "  dim            Dim text\n"
+  printf "  italic         Italic text\n"
+  printf "  underline      Underline text\n"
+  printf "  blink          Blinking text\n"
+  printf "  reverse        Reverse foreground/background\n"
+  printf "  hidden         Hidden text\n"
+  printf "  strikethrough  Strike-through text\n"
+  printf "\n"
+  printf "OPTIONS\n"
+  printf "  --show=16      Show attributes + 16-color fg/bg demo table\n"
+  printf "  --show=256     Show 256-color fg demo table\n"
+  printf "  --fg=N         Set foreground SGR code (e.g. 31, 97)\n"
+  printf "  --bg=N         Set background SGR code (e.g. 44, 107)\n"
+  printf "  -h, --help     Show this help and exit\n"
+  printf "\n"
+  printf "EXAMPLES\n"
+  printf "  # Show 16-color reference\n"
+  printf "  ansi-code --show=16\n"
+  printf "\n"
+  printf "  # Show 256-color reference\n"
+  printf "  ansi-code --show=256\n"
+  printf "\n"
+  printf "  # Build a bold + underline + bright white on blue code\n"
+  printf "  ansi-code bold underline --fg=97 --bg=44\n"
+}
+
+literal_from_code() {
+  local code=$1
+  printf "'\\033[%sm'" "$code"
+}
+
+literal_from_extended() {
+  local code=$1
+  printf "'\\033[38;5;%sm'" "$code"
+}
+
+seq_from_code() {
+  local code=$1
+  printf "%s[%sm" "$ESC" "$code"
+}
+
+seq_from_tokens() {
+  local -a tokens=("$@")
+  local joined
+  joined=$(IFS=';'; printf '%s' "${tokens[*]}")
+  printf "%s[%sm" "$ESC" "$joined"
+}
+
+emit_attr_row() {
+  local name=$1
+  local code=$2
+  local literal
+  literal=$(literal_from_code "$code")
+  local seq
+  seq=$(seq_from_code "$code")
+  printf "%-14s  literal: %-18s  demo: %s%s%s\n" \
+    "$name" "$literal" "$seq" "$name" "$RESET_SEQ"
+}
+
+render_attributes() {
+  printf "Attributes\n"
+  for name in "${ATTR_SHOW_ORDER[@]}"; do
+    emit_attr_row "$name" "${ATTR_CODES[$name]}"
+  done
+  printf "\n"
+}
+
+render_color_section() {
+  local title=$1
+  local -n codes_ref=$2
+  local kind=$3
+  printf "%s\n" "$title"
+  for code in "${codes_ref[@]}"; do
+    local literal
+    literal=$(literal_from_code "$code")
+    local seq
+    seq=$(seq_from_code "$code")
+    local demo_text=$DEMO_WORD
+    if [[ $kind == bg ]]; then
+      demo_text="$DEMO_WORD"
+    fi
+    printf "code %3s  literal: %-18s  demo: %s%s%s\n" \
+      "$code" "$literal" "$seq" "$demo_text" "$RESET_SEQ"
+  done
+  printf "\n"
+}
+
+render_show16() {
+  render_attributes
+  render_color_section "16-color Foreground" FG_CODES fg
+  render_color_section "16-color Background" BG_CODES bg
+}
+
+render_show256() {
+  printf "256-color Foreground (38;5;N)\n"
+  local code seq demo
+  for code in $(seq 0 255); do
+    seq="${ESC}[38;5;${code}m"
+    demo="The quick brown fox jumps over the lazy dog"
+    printf "%s%3d:%s%s\n" "$seq" "$code" " $demo" "$RESET_SEQ"
+  done
+}
+
+join_tokens() {
+  local -a tokens=("$@")
+  local joined
+  joined=$(IFS=';'; printf '%s' "${tokens[*]}")
+  printf '%s' "$joined"
+}
+
+emit_build_output() {
+  local -a tokens=("$@")
+  if ((${#tokens[@]} == 0)); then
+    log.error "No style arguments provided. Use -h for help."
+    return 1
+  fi
+  local joined
+  joined=$(join_tokens "${tokens[@]}")
+  printf '\\033[%sm\n' "$joined"
+  local seq
+  seq=$(seq_from_tokens "${tokens[@]}")
+  printf "demo: %s%s%s\n" "$seq" "$DEMO_WORD" "$RESET_SEQ"
+}
+
+ensure_not_mixed_mode() {
+  local mode=$1
+  if [[ $mode == show16 || $mode == show256 ]]; then
+    log.error "Cannot mix --show with build arguments."
+    return 1
+  fi
+  return 0
+}
+
+set_show_mode() {
+  local target=$1
+  local new_mode=$2
+  local current=${!target-}
+  if [[ $current == "$new_mode" ]]; then
+    return 0
+  fi
+  if [[ $current == show16 || $current == show256 ]]; then
+    log.error "Only one --show option may be specified."
+    return 1
+  fi
+  printf -v "$target" '%s' "$new_mode"
+}
+
+validate_numeric_token() {
+  local value=$1
+  if [[ -z $value ]]; then
+    log.error "Missing numeric value."
+    return 1
+  fi
+  if [[ ! $value =~ ^[0-9][0-9\;]*$ ]]; then
+    log.error "Invalid SGR component: $value"
+    return 1
+  fi
+  printf '%s' "$value"
+}
+
+add_attribute_token() {
+  local token=$1
+  local target=$2
+  local -n arr_ref=$target
+  arr_ref+=("$token")
+}
+
+resolve_attribute() {
+  local name=$1
+  local lower=${name,,}
+  if [[ -z ${ATTR_CODES[$lower]+x} ]]; then
+    log.error "Unknown attribute: $name"
+    return 1
+  fi
+  printf '%s' "${ATTR_CODES[$lower]}"
+}
+
+parse_cli() {
+  local -n mode_ref=$1
+  local -n tokens_ref=$2
+  shift 2
+  mode_ref="build"
+  while (($#)); do
+    case "$1" in
+    -h|--help)
+      mode_ref="help"
+      return 0
+      ;;
+    --show=16)
+      set_show_mode mode_ref show16 || return 1
+      ;;
+    --show)
+      if (($# < 2)); then
+        log.error "--show requires a value (e.g. --show=16)."
+        return 1
+      fi
+      shift
+      if [[ $1 != 16 ]]; then
+        log.error "Unsupported --show value: $1"
+        return 1
+      fi
+      set_show_mode mode_ref show16 || return 1
+      ;;
+    --show=256)
+      set_show_mode mode_ref show256 || return 1
+      ;;
+    --fg=*)
+      ensure_not_mixed_mode "$mode_ref" || return 1
+      local value=${1#*=}
+      value=$(validate_numeric_token "$value") || return 1
+      add_attribute_token "$value" tokens_ref
+      ;;
+    --fg)
+      ensure_not_mixed_mode "$mode_ref" || return 1
+      if (($# < 2)); then
+        log.error "--fg requires a value."
+        return 1
+      fi
+      shift
+      local value
+      value=$(validate_numeric_token "$1") || return 1
+      add_attribute_token "$value" tokens_ref
+      ;;
+    --bg=*)
+      ensure_not_mixed_mode "$mode_ref" || return 1
+      local value=${1#*=}
+      value=$(validate_numeric_token "$value") || return 1
+      add_attribute_token "$value" tokens_ref
+      ;;
+    --bg)
+      ensure_not_mixed_mode "$mode_ref" || return 1
+      if (($# < 2)); then
+        log.error "--bg requires a value."
+        return 1
+      fi
+      shift
+      local value
+      value=$(validate_numeric_token "$1") || return 1
+      add_attribute_token "$value" tokens_ref
+      ;;
+    --)
+      shift
+      while (($#)); do
+        ensure_not_mixed_mode "$mode_ref" || return 1
+        local attr_code
+        attr_code=$(resolve_attribute "$1") || return 1
+        add_attribute_token "$attr_code" tokens_ref
+        shift
+      done
+      break
+      ;;
+    -*)
+      log.error "Unknown option: $1"
+      return 1
+      ;;
+    *)
+      ensure_not_mixed_mode "$mode_ref" || return 1
+      local attr_code
+      attr_code=$(resolve_attribute "$1") || return 1
+      add_attribute_token "$attr_code" tokens_ref
+      ;;
+    esac
+    shift || true
+  done
+
+  if [[ $mode_ref == show16 || $mode_ref == show256 ]]; then
+    if ((${#tokens_ref[@]} > 0)); then
+      log.error "--show cannot be combined with style arguments."
+      return 1
+    fi
+  fi
+}
+
+main() {
+  local mode
+  local -a tokens=()
+  if ! parse_cli mode tokens "$@"; then
+    return 1
+  fi
+
+  case "$mode" in
+  help)
+    print_help
+    ;;
+  show16)
+    render_show16
+    ;;
+  show256)
+    render_show256
+    ;;
+  build)
+    emit_build_output "${tokens[@]}"
+    ;;
+  *)
+    log.error "Unknown execution mode: $mode"
+    return 1
+    ;;
+  esac
+}
+
+main "$@"

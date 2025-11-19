@@ -14,7 +14,12 @@ os.getenv() {
 }
 
 sys.platform() {
-  uname -s | tr "[:upper:]" "[:lower:]"
+  if [[ -n ${_SYS_PLATFORM:-} ]]; then
+    echo "$_SYS_PLATFORM"
+    return 0
+  fi
+  _SYS_PLATFORM=$(uname -s | tr "[:upper:]" "[:lower:]")
+  echo "$_SYS_PLATFORM"
 }
 
 os.platform.is_darwin() {
@@ -82,24 +87,36 @@ os.rename_safe() {
 
 # Returns success if $HOME/.machine_id matches the current IOPlatformUUID.
 os.machine_id.matches_current() {
+  if [[ -n ${_MACHINE_ID_MATCHES:-} ]]; then
+    ((_MACHINE_ID_MATCHES == 1))
+    return
+  fi
+
   local machine_id_file="$HOME/.machine_id"
   local stored hw_uuid
 
-  os.platform.is_darwin || return 1
-  sys.path.contains ioreg || return 1
-  [[ -f $machine_id_file ]] || return 1
+  os.platform.is_darwin || { _MACHINE_ID_MATCHES=0; return 1; }
+  sys.path.contains ioreg || { _MACHINE_ID_MATCHES=0; return 1; }
+  [[ -f $machine_id_file ]] || { _MACHINE_ID_MATCHES=0; return 1; }
 
   stored=$(<"$machine_id_file")
   stored=${stored//$'\n'/}
-  [[ -n $stored ]] || return 1
+  [[ -n $stored ]] || { _MACHINE_ID_MATCHES=0; return 1; }
 
   if ! hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
+    _MACHINE_ID_MATCHES=0
     return 1
   fi
   hw_uuid=${hw_uuid//$'\n'/}
-  [[ -n $hw_uuid ]] || return 1
+  [[ -n $hw_uuid ]] || { _MACHINE_ID_MATCHES=0; return 1; }
 
-  [[ $stored == "$hw_uuid" ]]
+  if [[ $stored == "$hw_uuid" ]]; then
+    _MACHINE_ID_MATCHES=1
+    return 0
+  else
+    _MACHINE_ID_MATCHES=0
+    return 1
+  fi
 }
 
 os.on_battery_power() {

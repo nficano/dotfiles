@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Default settings (tweak as needed)
+INTERVAL_SECONDS=5       # grab a frame every N seconds
+THUMB_WIDTH=320          # width of each thumbnail (height auto)
+OUT_DIR="thumbs"         # output directory for thumbnails
+MAKE_SPRITE=1            # set to 0 to skip sprite
+SPRITE_COLUMNS=10        # how many thumbs per row in the sprite
+
+usage() {
+  echo "Usage: $0 input-video [output-dir]" >&2
+  echo "Example: $0 input.mp4 thumbs" >&2
+  exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+INPUT="$1"
+if [[ ! -f "$INPUT" ]]; then
+  echo "Input file not found: $INPUT" >&2
+  exit 1
+fi
+
+OUT_DIR="${2:-$OUT_DIR}"
+mkdir -p "$OUT_DIR"
+
+echo "Generating thumbnails from: $INPUT"
+echo "Interval: every ${INTERVAL_SECONDS}s"
+echo "Output dir: $OUT_DIR"
+
+# 1) Generate individual thumbnails
+# thumb-0001.jpg, thumb-0002.jpg, ...
+ffmpeg -hide_banner -loglevel error \
+  -i "$INPUT" \
+  -vf "fps=1/${INTERVAL_SECONDS},scale=${THUMB_WIDTH}:-1:force_original_aspect_ratio=decrease" \
+  -qscale:v 2 \
+  "${OUT_DIR}/thumb-%04d.jpg"
+
+echo "Thumbnails written to: $OUT_DIR"
+
+# 2) Optionally generate a sprite sheet for hover/scrub previews
+if [[ "$MAKE_SPRITE" -eq 1 ]]; then
+  echo "Building sprite sheet..."
+
+  # Determine how many rows we need based on how many thumbs were produced.
+  shopt -s nullglob
+  thumb_files=("${OUT_DIR}"/thumb-*.jpg)
+  shopt -u nullglob
+  thumb_count=${#thumb_files[@]}
+
+  if (( thumb_count == 0 )); then
+    echo "No thumbnails found, skipping sprite generation." >&2
+    exit 1
+  fi
+
+  sprite_rows=$(( (thumb_count + SPRITE_COLUMNS - 1) / SPRITE_COLUMNS ))
+
+  ffmpeg -hide_banner -loglevel error \
+    -pattern_type glob -i "${OUT_DIR}/thumb-*.jpg" \
+    -vf "tile=${SPRITE_COLUMNS}x${sprite_rows}" \
+    "${OUT_DIR}/sprite.jpg"
+
+  echo "Sprite sheet: ${OUT_DIR}/sprite.jpg"
+fi
+
+echo "Done."

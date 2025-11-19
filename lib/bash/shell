@@ -75,6 +75,25 @@ shell.setup_prompt() {
   os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_path)\[\e[0m\] [\A] > "
 }
 
+shell.setup_tab_safe_history() {
+  if ! declare -f __dotfiles_history_sync >/dev/null 2>&1; then
+    __dotfiles_history_sync() {
+      builtin history -a
+      builtin history -n
+    }
+  fi
+
+  if [[ ${PROMPT_COMMAND:-} == *__dotfiles_history_sync* ]]; then
+    return 0
+  fi
+
+  if [[ -n ${PROMPT_COMMAND:-} ]]; then
+    os.setenv "PROMPT_COMMAND" "__dotfiles_history_sync; ${PROMPT_COMMAND}"
+  else
+    os.setenv "PROMPT_COMMAND" "__dotfiles_history_sync"
+  fi
+}
+
 shell.iterm2_style_path() {
   IFS="/"
   read -ra relpath <<<"$(dirs +0)"

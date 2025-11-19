@@ -1,21 +1,34 @@
 #!/usr/bin/env bash
 
-# Terminate for non-interactive sessions.
+# Terminate for non-interactive sessions or shells without a TTY (Cursor Helper spawns these).
 case $- in
-*i*) ;;
-*) return ;; esac
+*i*)
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    return
+  fi
+  ;;
+*) return ;;
+esac
+
+# Profile load timing
+if command -v date >/dev/null 2>&1 && date +%s.%N >/dev/null 2>&1; then
+  _PROFILE_START_TIME=$(date +%s.%N)
+else
+  _PROFILE_START_TIME=$SECONDS
+fi
 
 # Resolve dotfiles root so sourcing works via symlinks
 if [[ -z ${DOTFILES_ROOT:-} ]]; then
-  DOTFILES_ROOT="$(
-    src="${BASH_SOURCE[0]}"
-    while [[ -L $src ]]; do
-      dir="$(cd -P -- "$(dirname -- "$src")" && pwd)"
-      src="$(readlink "$src")"
-      [[ $src != /* ]] && src="$dir/$src"
-    done
-    cd -P -- "$(dirname -- "$src")" && pwd
-  )"
+  src=${BASH_SOURCE[0]}
+
+  while [[ -L $src ]]; do
+    dir="$(cd -P -- "$(dirname -- "$src")" && pwd)"
+    target="$(readlink "$src")"
+    [[ $target != /* ]] && target="$dir/$target"
+    src="$target"
+  done
+
+  DOTFILES_ROOT="$(cd -P -- "$(dirname -- "$src")" && pwd)"
   export DOTFILES_ROOT
 fi
 
@@ -54,25 +67,24 @@ os.setenv "NODE_REPL_MODE" "sloppy"                 # use non-strict mode code
 os.setenv "NVM_DIR" "$HOME/.nvm"
 
 # Shell Session Command History
+os.setenv "HISTFILE" "$HOME/.bash_history"
 os.setenv "HISTCONTROL" "ignoredups:erasedups:ignoreboth"
 os.setenv "HISTFILESIZE" -1
 os.setenv "HISTSIZE" -1
+shell.setopt "histappend" # Append command history instead of clobbering
 
 os.setenv "SHELL_SESSION_HISTORY" 0 # Save & reload history after each command
-os.setenv "PROMPT_COMMAND" "history -a; history -n; $PROMPT_COMMAND"
 os.setenv "MANPAGER" "less"
 os.setenv "VISUAL" "cursor"
 os.setenv "EDITOR" "cursor"
 os.setenv "HSTR_TIOCSTI" "y"
 
-os.setenv "LESS" "-R"
+os.setenv "LESS" "-RiF --mouse --wheel-lines=3" # Mouse scoll support
 
 # Set various Bash options.
 shell.setopt "cdspell"      # directory name auto-correct during cd.
 shell.setopt "checkwinsize" # Update window size after each command.
 shell.setopt "cmdhist"      # Save multi-line commands as one.
-shell.setopt "histappend"   # Append command history instead of
-# clobbering.
 shell.setopt "hostcomplete"            # tab-complete hostnames.
 shell.setopt "no_empty_cmd_completion" # Do not suggest empty commands
 # during tab completion.
@@ -80,7 +92,6 @@ shell.setopt "nocaseglob" # Case-insensitive path expansion.
 shell.setopt "cdspell"    # Automatic spell-correct during
 # tab completion.
 shell.setopt "histverify" # !$ does not execute automatically.
-shell.setopt "histappend" # Append command history instead of clobbering.
 
 # Untracked Shell Scripts (DO NOT SORT)
 sys.path.prepend "$HOME/.bin"
@@ -118,13 +129,16 @@ shell.defer --wrap op shell.import "$HOME/.config/op/plugins.sh"
 shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
 shell.import "$HOME/.iterm2_shell_integration.bash"
+shell.import "$BREW_PREFIX/etc/bash_completion.d"
 
 # Use "most" for Manpages when available, otherwise use "less".
 sys.path.contains "most" && os.setenv "MANPAGER" "most"
 
-# Use "vscode" for text editing when available, otherwise use "nano".
-sys.path.contains "cursor" && os.setenv "VISUAL" "cursor"
-sys.path.contains "cursor" && os.setenv "EDITOR" "cursor"
+# Use "cursor" for text editing when available, otherwise use "nano".
+if sys.path.contains "cursor"; then
+  os.setenv "VISUAL" "cursor"
+  os.setenv "EDITOR" "cursor"
+fi
 when.cmd ngrok 'shell.eval "ngrok completion"'
 when.cmd aws 'shell.eval "complete -C aws_completer aws"'
 when.cmd direnv 'shell.eval "direnv hook bash"'
@@ -132,6 +146,7 @@ when.cmd pyenv 'shell.eval "pyenv init --path"'
 when.cmd pyenv 'shell.eval "pyenv init -"'
 when.cmd pyenv 'shell.eval "pyenv virtualenv-init -"'
 when.cmd rbenv 'shell.eval "rbenv init -"'
+when.cmd zoxide 'shell.eval "zoxide init bash"'
 when.cmd dircolors 'shell.eval "dircolors -b $HOME/.dircolors"'
 # sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 
@@ -158,21 +173,44 @@ alias gd="git diff"
 alias gs="git status"
 alias gl="git log --oneline --graph --decorate --all"
 
+when.darwin alias ls='ls -GF --group-directories-first --human-readable'
+when.darwin alias ll='ls -alG --group-directories-first --human-readable'
+# cd to finders current working directory
+when.darwin alias f='cd "$(finder-front-path)" || exit 0'
+# open Finder to current working directory.
 when.darwin alias o="open ./"
 
-# Create alias to cd to current working Finder directory.
-when.darwin alias f='cd "$(finder-front-path)" || exit 0'
-alias.setup_ls
+when.linux alias ls="ls --color=auto -gXF"
+when.linux alias ll="ls --color=auto -algX"
 
+when.cmd gls alias ls="gls --color=auto -gXF --group-directories-first --human-readable"
+when.cmd gls alias ll='gls --color=auto -algX --human-readable --group-directories-first'
 when.cmd rlwrap alias node="env NODE_NO_READLINE=1 rlwrap node"
 when.cmd bat alias cat="bat --style=\"plain\" --paging never"
 when.cmd op 'source <(op completion bash)'
 
+when.my_machine sys.path.append "$HOME/.bin/personal"
+when.my_machine sys.path.append "$HOME/.bin/lab"
+
 shell.setup_prompt
+
+shell.setup_tab_safe_history # prevent history loss when working with tabs
 ssh_agent.init "$HOME/.ssh-agent.env"
 
 # Untracked Private Overrides
 shell.import "$HOME/.profile.local"
 
-when.my_machine sys.path.append "$HOME/.bin/personal"
-when.my_machine sys.path.append "$HOME/.bin/lab"
+# Display profile load time
+if [[ -n ${_PROFILE_START_TIME:-} ]]; then
+  if command -v date >/dev/null 2>&1 && date +%s.%N >/dev/null 2>&1; then
+    end_time=$(date +%s.%N)
+    elapsed=$(awk "BEGIN {printf \"%.3f\", $end_time - $_PROFILE_START_TIME}")
+  else
+    elapsed=$(awk "BEGIN {printf \"%.3f\", $SECONDS - $_PROFILE_START_TIME}")
+  fi
+  # Only show if load time is significant (> 1ms)
+  if awk "BEGIN {exit !($elapsed > 0.001)}" 2>/dev/null; then
+    printf "\033[2m[Profile loaded in %.3fs]\033[0m\n" "$elapsed"
+  fi
+  unset _PROFILE_START_TIME end_time elapsed
+fi
