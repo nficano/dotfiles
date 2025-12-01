@@ -72,7 +72,8 @@ shell.eval() {
 }
 
 shell.setup_prompt() {
-  os.setenv "PS1" "\h \[\e[1;32m\]\$(shell.iterm2_style_path)\[\e[0m\] [\A] > "
+  export -n PS1 2>/dev/null || true
+  PS1="\h \[\e[1;32m\]\$(if command -v shell.iterm2_style_path >/dev/null 2>&1; then shell.iterm2_style_path; else dirs +0; fi)\[\e[0m\] [\A] > "
 }
 
 shell.setup_tab_safe_history() {
@@ -87,10 +88,12 @@ shell.setup_tab_safe_history() {
     return 0
   fi
 
+  export -n PROMPT_COMMAND 2>/dev/null || true
+
   if [[ -n ${PROMPT_COMMAND:-} ]]; then
-    os.setenv "PROMPT_COMMAND" "__dotfiles_history_sync; ${PROMPT_COMMAND}"
+    PROMPT_COMMAND="__dotfiles_history_sync; ${PROMPT_COMMAND}"
   else
-    os.setenv "PROMPT_COMMAND" "__dotfiles_history_sync"
+    PROMPT_COMMAND="__dotfiles_history_sync"
   fi
 }
 
