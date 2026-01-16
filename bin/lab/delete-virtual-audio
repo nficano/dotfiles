@@ -1,15 +1,15 @@
-    #!/usr/bin/env bash
-    # macOS virtual audio cleanup (interactive + fallback-safe)
-    # - Lists HAL audio drivers (Loopback, BlackHole, Soundflower, VB-Cable, ACE, etc.)
-    # - Lets you select which to remove (moves to a timestamped backup folder)
-    # - Resets Aggregate/Multi-Output CoreAudio devices
-    # - Restarts CoreAudio
-    #
-    # Usage:
-    #   chmod +x clean-virtual-audio.sh
-    #   ./clean-virtual-audio.sh            # interactive (dry-run preview shown first)
-    #   ./clean-virtual-audio.sh --apply    # skip dry-run confirmation
-    #   ./clean-virtual-audio.sh --list     # just list drivers and virtual devices
+  #!/usr/bin/env bash
+  # macOS virtual audio cleanup (interactive + fallback-safe)
+  # - Lists HAL audio drivers (Loopback, BlackHole, Soundflower, VB-Cable, ACE, etc.)
+  # - Lets you select which to remove (moves to a timestamped backup folder)
+  # - Resets Aggregate/Multi-Output CoreAudio devices
+  # - Restarts CoreAudio
+  #
+  # Usage:
+  #   chmod +x clean-virtual-audio.sh
+  #   ./clean-virtual-audio.sh            # interactive (dry-run preview shown first)
+  #   ./clean-virtual-audio.sh --apply    # skip dry-run confirmation
+  #   ./clean-virtual-audio.sh --list     # just list drivers and virtual devices
     #
     set -euo pipefail
 
