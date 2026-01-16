@@ -3,7 +3,6 @@
 Quick links to the module guides under `docs/lib/bash`, each describing the exported helpers and usage snippets.
 
 - [AI](lib/bash/ai.md) - agent management utilities and OpenAI integration helpers.
-- [Alias](lib/bash/alias.md) - consistent `ls`/`ll` alias setup across platforms.
 - [Array](lib/bash/array.md) - lightweight array manipulation helpers for legacy Bash.
 - [AWS](lib/bash/aws.md) - filters for recognising benign AWS CLI socket warnings.
 - [Cache](lib/bash/cache.md) - simple file-backed caching and evaluation helpers.
