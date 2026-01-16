@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+#/ Download Font Awesome SVG icons using an npm token.
+#/
+#/ Usage: $(basename "$0") [-h] [-v] [--token TOKEN] [--out DIR]
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/    -t, --token     Font Awesome npm token (or set FA_NPM_TOKEN env var)
+#/    -o, --out       Output directory (default: ./fa-icons)
+#/    -s, --scope     npm scope (default: @fortawesome)
+#/
+#/ Examples:
+#/    $(basename "$0") --token "npm_xxxxx"
+#/    $(basename "$0") -t "npm_xxxxx" -o ~/icons/fa
+#/    FA_NPM_TOKEN="npm_xxxxx" $(basename "$0")
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+token="${FA_NPM_TOKEN:-}"
+out_dir="./fa-icons"
+scope="@fortawesome"
+tmp_dir=""
+
+cleanup_tmp() {
+  [[ -n "$tmp_dir" && -d "$tmp_dir" ]] && rm -rf "$tmp_dir"
+}
+
+parse_args() {
+  local opt
+  local normalized
+  normalized=$(script.parse_with_opts ':hvt:o:s:' --long --token=t --out=o --scope=s -- "$@")
+  local -a argv=()
+  if [[ -n $normalized ]]; then
+    read -r -a argv <<<"$normalized"
+  fi
+
+  set -- "${argv[@]}"
+
+  OPTIND=1
+  while getopts ':hvt:o:s:' opt; do
+    case "$opt" in
+    h) script.usage ;;
+    v) verbose=1 ;;
+    t) token="$OPTARG" ;;
+    o) out_dir="$OPTARG" ;;
+    s) scope="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires an argument"
+      script.usage 1
+      ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+
+  if [[ -z $token ]]; then
+    log.error "Missing token. Provide --token or set FA_NPM_TOKEN."
+    script.usage 1
+  fi
+}
+
+copy_svgs() {
+  local svgs_dir="$1"
+  local dest="$2"
+
+  log.info "Copying SVG icons from: $svgs_dir"
+
+  local count=0
+
+  # Copy each style directory (solid, regular, brands, etc.)
+  for style_dir in "$svgs_dir"/*/; do
+    [[ ! -d "$style_dir" ]] && continue
+
+    local style_name
+    style_name="$(basename "$style_dir")"
+    local style_dest="$dest/$style_name"
+    mkdir -p "$style_dest"
+
+    for svg_file in "$style_dir"*.svg; do
+      [[ ! -f "$svg_file" ]] && continue
+      cp -f "$svg_file" "$style_dest/"
+      ((++count))
+    done
+
+    ((verbose)) && log.info "Copied $(ls -1 "$style_dest" 2>/dev/null | wc -l | tr -d ' ') icons from $style_name"
+  done
+
+  log.info "Copied $count total SVG icons"
+}
+
+main() {
+  ((verbose)) && log.info "Verbose mode enabled"
+
+  out_dir="$(cd "$(dirname "$out_dir")" 2>/dev/null && pwd)/$(basename "$out_dir")"
+  mkdir -p "$out_dir"
+
+  tmp_dir="$(mktemp -d)"
+  trap cleanup_tmp EXIT
+
+  local proj_dir="$tmp_dir/proj"
+  mkdir -p "$proj_dir"
+
+  cat > "$proj_dir/package.json" <<'EOF'
+{
+  "name": "fa-icon-downloader",
+  "private": true,
+  "version": "1.0.0"
+}
+EOF
+
+  cat > "$proj_dir/.npmrc" <<EOF
+${scope}:registry=https://npm.fontawesome.com/
+//npm.fontawesome.com/:_authToken=${token}
+always-auth=true
+EOF
+
+  cd "$proj_dir"
+
+  # Only install the main package that contains SVG files
+  # The -svg-icons packages only contain JS modules, not actual SVG files
+  log.info "Installing Font Awesome Pro (if your token allows)..."
+  if npm install --silent --no-fund --no-audit "@fortawesome/fontawesome-pro" 2>/dev/null; then
+    log.info "Pro install succeeded."
+  else
+    log.warn "Pro install failed; falling back to Free..."
+    npm install --silent --no-fund --no-audit "@fortawesome/fontawesome-free"
+  fi
+
+  local node_modules="$proj_dir/node_modules"
+  if [[ ! -d "$node_modules" ]]; then
+    log.error "node_modules not found; npm install likely failed."
+    exit 1
+  fi
+
+  # Find the svgs directory in the installed package
+  local svgs_dir=""
+  if [[ -d "$node_modules/@fortawesome/fontawesome-pro/svgs" ]]; then
+    svgs_dir="$node_modules/@fortawesome/fontawesome-pro/svgs"
+  elif [[ -d "$node_modules/@fortawesome/fontawesome-free/svgs" ]]; then
+    svgs_dir="$node_modules/@fortawesome/fontawesome-free/svgs"
+  else
+    log.error "Could not find svgs directory in installed packages."
+    log.error "Contents of node_modules/@fortawesome:"
+    ls -la "$node_modules/@fortawesome" 2>/dev/null || true
+    exit 1
+  fi
+
+  ((verbose)) && log.info "Found SVGs at: $svgs_dir"
+  ((verbose)) && log.info "Available styles: $(ls "$svgs_dir" | tr '\n' ' ')"
+
+  copy_svgs "$svgs_dir" "$out_dir"
+
+  log.info "Output directory: $out_dir"
+  log.info "Done."
+}
+
+parse_args "$@"
+main
