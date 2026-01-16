@@ -42,7 +42,7 @@
     fsmonitor = false
     excludesfile = ~/.gitignore
     autocrlf = input
-	pager = less -FRX
+    pager = less -FRX
 
 [diff]
     tool = default-difftool
@@ -68,7 +68,7 @@
     format = ssh
 
 [include]
-	path = /Users/nficano/.gitconfig.local
+    path = /Users/nficano/.gitconfig.local
 
 [init]
     defaultBranch = main

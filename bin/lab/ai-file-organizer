@@ -396,7 +396,7 @@ build_ai_prompt() {
   cat <<EOF
 You are renaming media files based on their metadata/content.
 Return ONLY a lowercase, kebab-case filename BASE (no extension).
-3–7 words, descriptive, no stopwords, no dates unless present, no PII.
+3-7 words, descriptive, no stopwords, no dates unless present, no PII.
 
 Path: $path
 Download URL: $asset_url

@@ -109,7 +109,7 @@ if (( STREAM_INDEX == 0 )); then
   exit 1
 fi
 
-# Audio – single AAC track
+# Audio - single AAC track
 echo ">> Adding audio track"
 FFMPEG_AUDIO_ARGS=(
   -map 0:a:0?
