@@ -40,21 +40,35 @@ fi
 
 PORT="$1"
 
-# Find the PID of the process using the specified port
-PID=$(lsof -t -iTCP:"$PORT" -sTCP:LISTEN)
+# Find the PID(s) of the process(es) using the specified port
+PIDS=$(lsof -t -iTCP:"$PORT" -sTCP:LISTEN)
 
 # Check if a process was found
-if [ -z "$PID" ]; then
+if [ -z "$PIDS" ]; then
   echo "No process found running on port $PORT"
   exit 1
 fi
 
-# Kill the process
-kill -9 "$PID"
+# Kill all processes (handle multiple PIDs)
+KILLED_COUNT=0
+FAILED_COUNT=0
 
-# Confirm the process was killed
-if [ $? -eq 0 ]; then
-  echo "Process on port $PORT has been killed."
+for PID in $PIDS; do
+  if kill -9 "$PID" 2>/dev/null; then
+    KILLED_COUNT=$((KILLED_COUNT + 1))
+  else
+    FAILED_COUNT=$((FAILED_COUNT + 1))
+  fi
+done
+
+# Confirm the results
+if [ $FAILED_COUNT -eq 0 ]; then
+  if [ $KILLED_COUNT -eq 1 ]; then
+    echo "Process on port $PORT has been killed."
+  else
+    echo "$KILLED_COUNT processes on port $PORT have been killed."
+  fi
 else
-  echo "Failed to kill the process on port $PORT."
+  echo "Failed to kill $FAILED_COUNT process(es) on port $PORT."
+  exit 1
 fi
