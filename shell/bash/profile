@@ -1,6 +1,10 @@
-#!/usr/bin/env bash
+# Only configure Bash; bail immediately if sourced from another shell (e.g., zsh).
+if [[ -z ${BASH_VERSION:-} ]]; then
+  return
+fi
 
 # Terminate for non-interactive sessions or shells without a TTY (Cursor Helper spawns these).
+
 case $- in
 *i*)
   if [[ ! -t 0 || ! -t 1 ]]; then
@@ -73,7 +77,7 @@ os.setenv "HISTFILESIZE" -1
 os.setenv "HISTSIZE" -1
 shell.setopt "histappend" # Append command history instead of clobbering
 
-os.setenv "SHELL_SESSION_HISTORY" 0 # Save & reload history after each command
+os.setenv "SHELL_SESSION_HISTORY" 0 # Disable per-session history (sync via PROMPT_COMMAND)
 os.setenv "MANPAGER" "less"
 os.setenv "VISUAL" "cursor"
 os.setenv "EDITOR" "cursor"
@@ -159,16 +163,16 @@ if sys.path.contains "cursor"; then
   os.setenv "VISUAL" "cursor"
   os.setenv "EDITOR" "cursor"
 fi
-when.cmd ngrok 'shell.eval "ngrok completion"'
-when.cmd aws 'shell.eval "complete -C aws_completer aws"'
+
+#when.cmd aws 'shell.eval "complete -C aws_completer aws"'
 when.cmd direnv 'shell.eval "direnv hook bash"'
 when.cmd pyenv 'shell.eval "pyenv init --path"'
 when.cmd pyenv 'shell.eval "pyenv init -"'
 when.cmd pyenv 'shell.eval "pyenv virtualenv-init -"'
 when.cmd rbenv 'shell.eval "rbenv init -"'
-when.cmd zoxide 'shell.eval "zoxide init bash"'
+#when.cmd zoxide 'shell.eval "zoxide init bash"'
 when.cmd dircolors 'shell.eval "dircolors -b $HOME/.dircolors"'
-# sys.path.contains "conda" && shell.eval "conda shell.bash hook"
+sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 
 complete -cf sudo # enable sudo tab-complete
 
@@ -214,7 +218,6 @@ when.my_machine sys.path.append "$HOME/.bin/lab"
 
 shell.setup_prompt
 
-shell.setup_tab_safe_history # prevent history loss when working with tabs
 # Defer SSH agent initialization until SSH is actually used
 shell.defer --wrap ssh ssh_agent.init "$HOME/.ssh-agent.env"
 shell.defer --wrap scp ssh_agent.init "$HOME/.ssh-agent.env"
@@ -222,6 +225,8 @@ shell.defer --wrap scp ssh_agent.init "$HOME/.ssh-agent.env"
 
 # Untracked Private Overrides
 shell.import "$HOME/.profile.local"
+
+shell.setup_tab_safe_history # prevent history loss when working with tabs
 
 # Display profile load time
 if [[ -n ${_PROFILE_START_TIME:-} ]]; then
