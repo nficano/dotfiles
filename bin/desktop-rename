@@ -1,0 +1,1636 @@
+#!/usr/bin/env bash
+#/ Rename and archive Desktop files and directories using Claude.
+#/
+#/ Scans ~/Desktop for files and directories, inspects media deeply for a
+#/ clean descriptive name, groups related items into subdirectories, and
+#/ moves everything into a dated archive at
+#/ ~/Dropbox/backups/oak/desktop/YY-MM-DD/.
+#/
+#/ Items Claude judges as "desktop keepers" (TODO lists, scratch notes,
+#/ active working files) are left in place. Images are inspected with vision;
+#/ unsupported or oversized media are converted, compressed, or reduced to a
+#/ preview via this-to-that / ffmpeg before being sent to the API. Exact
+#/ duplicate files are detected locally and moved to Trash after confirmation.
+#/ When a filename appears descriptive enough, lightweight web hints are
+#/ fetched from public search endpoints to improve naming and grouping.
+#/
+#/ A machine-readable manifest and human-readable history track every move.
+#/ Use "revert" to copy archived files back to Desktop with their original
+#/ names. Reverted files are added to a skip list so subsequent runs leave
+#/ them alone.
+#/
+#/ Usage:
+#/    desktop-rename [options]              Organize Desktop files
+#/    desktop-rename revert DATE            Copy files back to Desktop
+#/    desktop-rename history                Show the change log
+#/    desktop-rename status                 Show the skip list
+#/    desktop-rename schedule [SECONDS]     Install launchd agent (default: 3600)
+#/    desktop-rename unschedule             Remove launchd agent
+#/
+#/ Options:
+#/    -h, --help           Print this help and exit
+#/    -v, --verbose        Enable verbose output
+#/    -n, --dry-run        Preview changes without applying them
+#/    -y, --yes            Auto-approve changes (skip confirmation prompt)
+#/    -m, --model MODEL    Claude model (default: claude-sonnet-4-20250514)
+#/        --min-age HOURS  Only process files older than HOURS hours
+#/
+#/ Date formats accepted by revert:
+#/    20260212, 2026-02-12, 260212, 26-02-12
+
+set -Eeuo pipefail
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+dry_run=0
+auto_approve=0
+min_age_hours=0
+lock_spec=""
+model="claude-sonnet-4-20250514"
+desktop_dir="$HOME/Desktop"
+backup_root="$HOME/Dropbox/backups/oak/desktop"
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/desktop-rename"
+history_file="$config_dir/history"
+skiplist_file="$config_dir/skiplist"
+manifest_dir="$config_dir/manifests"
+tmp_dir=""
+subcmd=""
+subcmd_args=()
+
+files=()
+file_sha1s=()
+file_kinds=()
+file_contexts=()
+file_preview_paths=()
+file_preview_media_types=()
+file_preview_notes=()
+related_hints=()
+duplicate_of=()
+
+cleanup() {
+  if [[ -n ${lock_spec:-} ]]; then
+    lock.release "$lock_spec"
+  fi
+  if [[ -n ${tmp_dir:-} && -d ${tmp_dir:-} ]]; then
+    rm -rf -- "$tmp_dir"
+  fi
+  script.cleanup
+}
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+## ---------------------------------------------------------------------------
+## CLI parsing
+## ---------------------------------------------------------------------------
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    -n | --dry-run)
+      dry_run=1
+      ;;
+    -y | --yes)
+      auto_approve=1
+      ;;
+    --min-age)
+      shift
+      if [[ $# -eq 0 ]]; then
+        log.error "Missing value for --min-age"
+        script.usage 1
+      fi
+      min_age_hours="$1"
+      ;;
+    -m | --model)
+      shift
+      if [[ $# -eq 0 ]]; then
+        log.error "Missing value for --model"
+        script.usage 1
+      fi
+      model="$1"
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
+    esac
+    shift
+  done
+
+  subcmd="${1:-}"
+  if [[ -n $subcmd ]]; then
+    shift
+    subcmd_args=("$@")
+  fi
+}
+
+## ---------------------------------------------------------------------------
+## Config helpers
+## ---------------------------------------------------------------------------
+
+ensure_config_dirs() {
+  mkdir -p "$config_dir" "$manifest_dir"
+}
+
+today_tag() {
+  date +%y-%m-%d
+}
+
+normalize_date_arg() {
+  local input="$1"
+  input="${input//-/}"
+  if [[ ${#input} -eq 8 ]]; then
+    # YYYYMMDD → YY-MM-DD
+    printf '%s-%s-%s\n' "${input:2:2}" "${input:4:2}" "${input:6:2}"
+  elif [[ ${#input} -eq 6 ]]; then
+    # YYMMDD → YY-MM-DD
+    printf '%s-%s-%s\n' "${input:0:2}" "${input:2:2}" "${input:4:2}"
+  else
+    log.error "Invalid date: $1 (expected YYYYMMDD, YYMMDD, YY-MM-DD, or YYYY-MM-DD)"
+    return 1
+  fi
+}
+
+## ---------------------------------------------------------------------------
+## Skip list
+## ---------------------------------------------------------------------------
+
+skiplist_contains() {
+  local sha1="$1"
+  [[ -f $skiplist_file ]] || return 1
+  grep -q "^${sha1}	" "$skiplist_file" 2>/dev/null
+}
+
+skiplist_add() {
+  local sha1="$1" filename="$2"
+  if ! skiplist_contains "$sha1"; then
+    printf '%s\t%s\n' "$sha1" "$filename" >> "$skiplist_file"
+  fi
+}
+
+file_sha1() {
+  if [[ -d $1 ]]; then
+    # Hash a sorted listing of immediate contents for directory identity.
+    (cd "$1" && ls -1 2>/dev/null | sort | shasum | cut -d' ' -f1)
+  else
+    shasum "$1" | cut -d' ' -f1
+  fi
+}
+
+## ---------------------------------------------------------------------------
+## Media inspection helpers
+## ---------------------------------------------------------------------------
+
+MAX_VISION_BYTES=$((20 * 1024 * 1024)) # 20 MB cap for vision uploads
+PREVIEW_VIDEO_SECONDS=24
+
+vision_media_type() {
+  local ext="${1##*.}"
+  ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
+  case "$ext" in
+  jpg | jpeg) printf 'image/jpeg\n' ;;
+  png) printf 'image/png\n' ;;
+  gif) printf 'image/gif\n' ;;
+  webp) printf 'image/webp\n' ;;
+  *) return 1 ;;
+  esac
+}
+
+file_ext() {
+  local name="$1"
+  local ext="${name##*.}"
+  if [[ $ext == "$name" ]]; then
+    printf '\n'
+    return 0
+  fi
+  printf '%s\n' "$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+}
+
+file_stem() {
+  local name
+  name=$(basename "$1")
+  if [[ $name == *.* ]]; then
+    printf '%s\n' "${name%.*}"
+  else
+    printf '%s\n' "$name"
+  fi
+}
+
+is_image_ext() {
+  case "$1" in
+  jpg | jpeg | png | gif | webp | bmp | tif | tiff | heic | avif | svg) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_video_ext() {
+  case "$1" in
+  mp4 | mov | mkv | webm | avi | m4v | mpg | mpeg | ts | m2ts) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_audio_ext() {
+  case "$1" in
+  mp3 | aac | m4a | wav | flac | ogg | opus | wma | alac | aif | aiff) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_document_preview_ext() {
+  case "$1" in
+  pdf) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_archive_ext() {
+  case "$1" in
+  zip | tar | gz | tgz | bz2 | xz | rar | 7z | dmg | iso) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_document_ext() {
+  case "$1" in
+  docx | doc | xlsx | xls | pptx | ppt | pages | numbers | key | txt | md | csv | rtf) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_code_ext() {
+  case "$1" in
+  py | js | ts | jsx | tsx | swift | java | go | rb | sh | bash | zsh | c | cpp | h | hpp | rs | json | yaml | yml | xml | html | css | sql | toml) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_font_ext() {
+  case "$1" in
+  ttf | otf | woff | woff2) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_installer_ext() {
+  case "$1" in
+  pkg | msi | deb | rpm | app) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+needs_image_conversion() {
+  local ext
+  ext=$(file_ext "$1")
+  case "$ext" in
+  heic | avif | bmp | tif | tiff | svg) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+get_file_size() {
+  wc -c < "$1" | tr -d '[:space:]'
+}
+
+ensure_tmp_dir() {
+  if [[ -z $tmp_dir ]]; then
+    tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/desktop-rename.XXXXXX")
+  fi
+}
+
+convert_for_vision() {
+  local filepath="$1"
+  local basename stem
+  basename=$(basename "$filepath")
+  stem=$(file_stem "$basename")
+
+  ensure_tmp_dir
+  local tmp_png="$tmp_dir/${stem}.png"
+
+  "${script_dir}/this-to-that" "$filepath" "$tmp_png" || {
+    log.warn "Failed to convert $basename to PNG for vision"
+    return 1
+  }
+
+  printf '%s\n' "$tmp_png"
+}
+
+is_sendable_image() {
+  local filepath="$1"
+  vision_media_type "$filepath" >/dev/null 2>&1 || return 1
+  local size
+  size=$(get_file_size "$filepath")
+  ((size > 0 && size <= MAX_VISION_BYTES))
+}
+
+compress_image_for_vision() {
+  local filepath="$1"
+
+  local basename stem
+  basename=$(basename "$filepath")
+  stem=$(file_stem "$basename")
+
+  ensure_tmp_dir
+  local tmp_jpg="$tmp_dir/${stem}-vision.jpg"
+  local tmp_small="$tmp_dir/${stem}-vision-small.jpg"
+
+  "${script_dir}/this-to-that" "$filepath" "$tmp_jpg" \
+    -- -vf "scale='min(1600,iw)':-2:force_original_aspect_ratio=decrease" -q:v 4 \
+    >/dev/null 2>&1 || return 1
+
+  if [[ ! -f $tmp_jpg ]]; then
+    return 1
+  fi
+
+  if (($(get_file_size "$tmp_jpg") > MAX_VISION_BYTES)); then
+    "${script_dir}/this-to-that" "$filepath" "$tmp_small" \
+      -- -vf "scale='min(1100,iw)':-2:force_original_aspect_ratio=decrease" -q:v 8 \
+      >/dev/null 2>&1 || return 1
+    tmp_jpg="$tmp_small"
+  fi
+
+  if [[ -f $tmp_jpg ]] && (($(get_file_size "$tmp_jpg") <= MAX_VISION_BYTES)); then
+    printf '%s\n' "$tmp_jpg"
+    return 0
+  fi
+
+  return 1
+}
+
+generate_video_preview() {
+  local filepath="$1"
+
+  local basename stem
+  basename=$(basename "$filepath")
+  stem=$(file_stem "$basename")
+
+  ensure_tmp_dir
+  local tmp_png="$tmp_dir/${stem}-video-preview.png"
+
+  "${script_dir}/this-to-that" "$filepath" "$tmp_png" \
+    -- -ss 0 -t "$PREVIEW_VIDEO_SECONDS" \
+    -vf "fps=1/6,scale=640:-2:force_original_aspect_ratio=decrease,tile=2x2" \
+    -frames:v 1 \
+    >/dev/null 2>&1 || return 1
+
+  [[ -f $tmp_png ]] || return 1
+  printf '%s\n' "$tmp_png"
+}
+
+generate_audio_preview() {
+  local filepath="$1"
+
+  local basename stem
+  basename=$(basename "$filepath")
+  stem=$(file_stem "$basename")
+
+  ensure_tmp_dir
+  local tmp_png="$tmp_dir/${stem}-audio-preview.png"
+
+  "${script_dir}/this-to-that" "$filepath" "$tmp_png" \
+    -- -lavfi "showspectrumpic=s=1280x720:legend=disabled" \
+    -frames:v 1 \
+    >/dev/null 2>&1 || return 1
+
+  [[ -f $tmp_png ]] || return 1
+  printf '%s\n' "$tmp_png"
+}
+
+generate_document_preview() {
+  local filepath="$1"
+  local ext
+  ext=$(file_ext "$filepath")
+  is_document_preview_ext "$ext" || return 1
+  convert_for_vision "$filepath"
+}
+
+resolve_vision_asset() {
+  local filepath="$1"
+  local filename kind
+  filename=$(basename "$filepath")
+  kind="${2:-file}"
+
+  local preview_file="" note=""
+
+  if is_sendable_image "$filepath"; then
+    local fsize
+    fsize=$(get_file_size "$filepath")
+    if ((fsize > 512 * 1024)); then
+      ((verbose)) && log.info "Shrinking large image for vision: $filename"
+      local shrunk
+      if shrunk=$(compress_image_for_vision "$filepath") && [[ -n $shrunk ]]; then
+        printf '%s\t%s\t%s\n' "$shrunk" "$(vision_media_type "$shrunk")" "Compressed image preview"
+        return 0
+      fi
+    fi
+    printf '%s\t%s\t%s\n' "$filepath" "$(vision_media_type "$filepath")" "Direct image preview"
+    return 0
+  fi
+
+  case "$kind" in
+  image)
+    if needs_image_conversion "$filepath"; then
+      ((verbose)) && log.info "Converting $filename to PNG for vision"
+      preview_file=$(convert_for_vision "$filepath") || return 1
+      note="Converted unsupported image to PNG for inspection"
+    elif vision_media_type "$filepath" >/dev/null 2>&1; then
+      preview_file=$(compress_image_for_vision "$filepath") || return 1
+      note="Compressed image preview for inspection"
+    fi
+    ;;
+  video)
+    ((verbose)) && log.info "Generating video contact sheet for: $filename"
+    preview_file=$(generate_video_preview "$filepath") || return 1
+    note="Contact sheet sampled from the first ${PREVIEW_VIDEO_SECONDS} seconds"
+    ;;
+  audio)
+    ((verbose)) && log.info "Generating audio spectrogram for: $filename"
+    preview_file=$(generate_audio_preview "$filepath") || return 1
+    note="Spectrogram preview derived from the audio"
+    ;;
+  document)
+    ((verbose)) && log.info "Rendering document preview for: $filename"
+    preview_file=$(generate_document_preview "$filepath") || return 1
+    note="Preview rendered from the first page of the document"
+    ;;
+  esac
+
+  if [[ -n $preview_file && -f $preview_file ]]; then
+    if (($(get_file_size "$preview_file") > MAX_VISION_BYTES)); then
+      preview_file=$(compress_image_for_vision "$preview_file") || return 1
+      note="${note}; compressed for upload"
+    fi
+
+    if [[ -n $preview_file ]] && vision_media_type "$preview_file" >/dev/null 2>&1; then
+      printf '%s\t%s\t%s\n' "$preview_file" "$(vision_media_type "$preview_file")" "$note"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+inspect_file_kind() {
+  local filepath="$1"
+  if [[ -d $filepath ]]; then
+    printf 'directory\n'
+    return 0
+  fi
+
+  local ext
+  ext=$(file_ext "$filepath")
+  if is_image_ext "$ext"; then
+    printf 'image\n'
+  elif is_video_ext "$ext"; then
+    printf 'video\n'
+  elif is_audio_ext "$ext"; then
+    printf 'audio\n'
+  elif is_document_preview_ext "$ext"; then
+    printf 'document\n'
+  elif is_archive_ext "$ext"; then
+    printf 'archive\n'
+  elif is_document_ext "$ext"; then
+    printf 'document\n'
+  elif is_code_ext "$ext"; then
+    printf 'code\n'
+  elif is_font_ext "$ext"; then
+    printf 'font\n'
+  elif is_installer_ext "$ext"; then
+    printf 'installer\n'
+  else
+    printf 'file\n'
+  fi
+}
+
+format_duration_for_prompt() {
+  local duration="${1:-}"
+  [[ -n $duration ]] || return 0
+  awk -v d="$duration" 'BEGIN {
+    if (d <= 0) exit
+    if (d < 60) {
+      printf "%.1fs\n", d
+      exit
+    }
+    minutes = int(d / 60)
+    seconds = int(d) % 60
+    if (minutes < 60) {
+      printf "%dm%02ds\n", minutes, seconds
+      exit
+    }
+    hours = int(minutes / 60)
+    minutes = minutes % 60
+    printf "%dh%02dm%02ds\n", hours, minutes, seconds
+  }'
+}
+
+ffprobe_summary() {
+  local filepath="$1"
+  command -v ffprobe >/dev/null 2>&1 || return 1
+
+  local video_dims video_codec audio_codec duration format_name
+  video_dims=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$filepath" 2>/dev/null | head -n 1 || true)
+  video_codec=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$filepath" 2>/dev/null | head -n 1 || true)
+  audio_codec=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$filepath" 2>/dev/null | head -n 1 || true)
+  duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$filepath" 2>/dev/null | head -n 1 || true)
+  format_name=$(ffprobe -v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 "$filepath" 2>/dev/null | head -n 1 || true)
+
+  local -a parts=()
+  [[ -n $format_name ]] && parts+=("format ${format_name%%,*}")
+  [[ -n $video_dims ]] && parts+=("$video_dims")
+  [[ -n $video_codec ]] && parts+=("video $video_codec")
+  [[ -n $audio_codec ]] && parts+=("audio $audio_codec")
+  if [[ -n $duration ]]; then
+    local pretty_duration
+    pretty_duration=$(format_duration_for_prompt "$duration")
+    [[ -n $pretty_duration ]] && parts+=("duration $pretty_duration")
+  fi
+
+  ((${#parts[@]} > 0)) || return 1
+  local joined=""
+  printf -v joined '%s, ' "${parts[@]}"
+  joined="${joined%, }"
+  printf '%s\n' "$joined"
+}
+
+mdls_summary() {
+  local filepath="$1"
+  command -v mdls >/dev/null 2>&1 || return 1
+
+  local kind pixel_width pixel_height page_count
+  kind=$(mdls -raw -name kMDItemKind "$filepath" 2>/dev/null || true)
+  pixel_width=$(mdls -raw -name kMDItemPixelWidth "$filepath" 2>/dev/null || true)
+  pixel_height=$(mdls -raw -name kMDItemPixelHeight "$filepath" 2>/dev/null || true)
+  page_count=$(mdls -raw -name kMDItemNumberOfPages "$filepath" 2>/dev/null || true)
+
+  local -a parts=()
+  [[ -n $kind && $kind != "(null)" ]] && parts+=("$kind")
+  if [[ -n $pixel_width && -n $pixel_height && $pixel_width != "(null)" && $pixel_height != "(null)" ]]; then
+    parts+=("${pixel_width}x${pixel_height}")
+  fi
+  [[ -n $page_count && $page_count != "(null)" ]] && parts+=("${page_count} page(s)")
+
+  ((${#parts[@]} > 0)) || return 1
+  local joined=""
+  printf -v joined '%s, ' "${parts[@]}"
+  joined="${joined%, }"
+  printf '%s\n' "$joined"
+}
+
+file_metadata_summary() {
+  local filepath="$1"
+  ffprobe_summary "$filepath" 2>/dev/null || mdls_summary "$filepath" 2>/dev/null || true
+}
+
+generic_filename_stem() {
+  local stem
+  stem=$(file_stem "$1" | tr '[:upper:]' '[:lower:]')
+  printf '%s\n' "$stem" | sed -E 's/[[:space:]_.-]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+is_generic_filename() {
+  local stem
+  stem=$(generic_filename_stem "$1")
+  case "$stem" in
+  img* | dsc* | pxl* | mvimg* | vid* | mov* | scan* | screenshot* | "screen shot"* | document* | image* | photo* | file* | export* | untitled* | whatsapp* | telegram* | signal* | received* | *_copy | *" copy")
+    return 0
+    ;;
+  esac
+  [[ $stem =~ ^[a-z]*[0-9_-]+$ ]]
+}
+
+filename_quality_score() {
+  local stem alpha_count word_count score
+  stem=$(generic_filename_stem "$1")
+  alpha_count=$(printf '%s' "$stem" | tr -cd '[:alpha:]' | wc -c | tr -d '[:space:]')
+  word_count=$(printf '%s' "$stem" | tr ' ' '\n' | awk 'length($0) >= 3' | wc -l | tr -d '[:space:]')
+  score=$((alpha_count + (word_count * 8)))
+  if is_generic_filename "$1"; then
+    score=$((score - 40))
+  fi
+  if [[ -n $stem && -z ${stem//[0-9 _-]/} ]]; then
+    score=$((score - 20))
+  fi
+  printf '%s\n' "$score"
+}
+
+search_query_for_filename() {
+  local stem
+  stem=$(generic_filename_stem "$1")
+  printf '%s\n' "$stem" | sed -E 's/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+should_search_filename_context() {
+  local query
+  query=$(search_query_for_filename "$1")
+  [[ ${#query} -ge 8 ]] || return 1
+  is_generic_filename "$1" && return 1
+  [[ $query =~ [[:alpha:]]{4,} ]]
+}
+
+search_filename_context() {
+  local filename="$1"
+  should_search_filename_context "$filename" || return 0
+
+  local query
+  query=$(search_query_for_filename "$filename")
+  [[ -n $query ]] || return 0
+
+  local wiki_json suggest_json
+  local -a hints=()
+
+  wiki_json=$(curl -fsSL --max-time 4 --get \
+    --data-urlencode "search=$query" \
+    --data "action=opensearch" \
+    --data "limit=1" \
+    --data "format=json" \
+    "https://en.wikipedia.org/w/api.php" 2>/dev/null || true)
+
+  if [[ -n $wiki_json ]]; then
+    local wiki_title wiki_url
+    wiki_title=$(printf '%s' "$wiki_json" | jq -r '.[1][0] // empty' 2>/dev/null || true)
+    wiki_url=$(printf '%s' "$wiki_json" | jq -r '.[3][0] // empty' 2>/dev/null || true)
+    if [[ -n $wiki_title ]]; then
+      if [[ -n $wiki_url ]]; then
+        hints+=("Wikipedia: ${wiki_title} (${wiki_url})")
+      else
+        hints+=("Wikipedia: ${wiki_title}")
+      fi
+    fi
+  fi
+
+  suggest_json=$(curl -fsSL --max-time 4 --get \
+    --data-urlencode "q=$query" \
+    --data "client=firefox" \
+    "https://suggestqueries.google.com/complete/search" 2>/dev/null || true)
+
+  if [[ -n $suggest_json ]]; then
+    local suggestions suggestion_count=0 suggestion
+    suggestions=$(printf '%s' "$suggest_json" | jq -r '.[1][]? // empty' 2>/dev/null || true)
+    while IFS= read -r suggestion; do
+      [[ -n $suggestion ]] || continue
+      hints+=("Web suggestion: $suggestion")
+      suggestion_count=$((suggestion_count + 1))
+      ((suggestion_count >= 2)) && break
+    done <<<"$suggestions"
+  fi
+
+  ((${#hints[@]} > 0)) || return 0
+  local joined=""
+  printf -v joined '%s; ' "${hints[@]}"
+  joined="${joined%; }"
+  printf '%s\n' "$joined"
+}
+
+compact_name_key() {
+  local stem
+  stem=$(generic_filename_stem "$1")
+  stem=$(printf '%s' "$stem" | sed -E 's/(^| )(copy|edited|final|draft)( [0-9]+)?$//; s/[^a-z0-9]+//g')
+  printf '%s\n' "$stem"
+}
+
+shared_token_count() {
+  local left="$1" right="$2"
+  local left_tokens right_tokens
+  left_tokens=$(generic_filename_stem "$left" | tr ' ' '\n' | awk 'length($0) >= 3 && $0 !~ /^[0-9]+$/')
+  right_tokens=$(generic_filename_stem "$right" | tr ' ' '\n' | awk 'length($0) >= 3 && $0 !~ /^[0-9]+$/')
+
+  local count=0 token other
+  while IFS= read -r token; do
+    [[ -n $token ]] || continue
+    while IFS= read -r other; do
+      [[ -n $other ]] || continue
+      if [[ $token == "$other" ]]; then
+        count=$((count + 1))
+        break
+      fi
+    done <<<"$right_tokens"
+  done <<<"$left_tokens"
+  printf '%s\n' "$count"
+}
+
+names_look_related() {
+  local left="$1" right="$2"
+  local left_key right_key shared
+
+  left_key=$(compact_name_key "$left")
+  right_key=$(compact_name_key "$right")
+
+  if [[ -n $left_key && -n $right_key ]]; then
+    if [[ $left_key == "$right_key" ]]; then
+      return 0
+    fi
+    if (( ${#left_key} >= 6 && ${#right_key} >= 6 )); then
+      if [[ $left_key == ${right_key}* || $right_key == ${left_key}* ]]; then
+        return 0
+      fi
+    fi
+  fi
+
+  shared=$(shared_token_count "$left" "$right")
+  ((shared >= 2))
+}
+
+file_index_by_name() {
+  local target="$1"
+  local i
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    if [[ ${files[$i]} == "$target" ]]; then
+      printf '%s\n' "$i"
+      return 0
+    fi
+  done
+  return 1
+}
+
+detect_duplicate_files() {
+  local i j
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    duplicate_of[$i]=""
+  done
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    [[ -f "$desktop_dir/${files[$i]}" ]] || continue
+    [[ -n ${duplicate_of[$i]:-} ]] && continue
+
+    local -a same_indices=("$i")
+    for ((j = i + 1; j < ${#files[@]}; j++)); do
+      [[ -f "$desktop_dir/${files[$j]}" ]] || continue
+      [[ ${file_sha1s[$i]} == "${file_sha1s[$j]}" ]] || continue
+      same_indices+=("$j")
+    done
+
+    ((${#same_indices[@]} > 1)) || continue
+
+    local keeper_idx="${same_indices[0]}"
+    local keeper_score candidate candidate_score
+    keeper_score=$(filename_quality_score "${files[$keeper_idx]}")
+
+    for candidate in "${same_indices[@]:1}"; do
+      candidate_score=$(filename_quality_score "${files[$candidate]}")
+      if ((candidate_score > keeper_score)); then
+        keeper_idx="$candidate"
+        keeper_score="$candidate_score"
+      fi
+    done
+
+    for candidate in "${same_indices[@]}"; do
+      if ((candidate != keeper_idx)); then
+        duplicate_of[$candidate]="${files[$keeper_idx]}"
+      fi
+    done
+  done
+}
+
+build_related_hints() {
+  local i j
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    related_hints[$i]=""
+  done
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    [[ -n ${duplicate_of[$i]:-} ]] && continue
+
+    local related="" related_count=0
+    for ((j = 0; j < ${#files[@]}; j++)); do
+      ((i == j)) && continue
+      [[ -n ${duplicate_of[$j]:-} ]] && continue
+      names_look_related "${files[$i]}" "${files[$j]}" || continue
+      if [[ -z $related ]]; then
+        related="${files[$j]}"
+      else
+        related+=", ${files[$j]}"
+      fi
+      related_count=$((related_count + 1))
+      ((related_count >= 4)) && break
+    done
+    related_hints[$i]="$related"
+  done
+}
+
+archive_listing() {
+  local filepath="$1"
+  local ext
+  ext=$(file_ext "$filepath")
+  case "$ext" in
+  zip) zipinfo -1 "$filepath" 2>/dev/null | head -20 ;;
+  tar) tar tf "$filepath" 2>/dev/null | head -20 ;;
+  gz | tgz) tar tzf "$filepath" 2>/dev/null | head -20 ;;
+  bz2) tar tjf "$filepath" 2>/dev/null | head -20 ;;
+  xz) tar tJf "$filepath" 2>/dev/null | head -20 ;;
+  esac
+}
+
+download_source_url() {
+  local filepath="$1"
+  local url
+  url=$(mdls -raw -name kMDItemWhereFroms "$filepath" 2>/dev/null | head -1 || true)
+  url=${url#\(}
+  url=$(printf '%s' "$url" | sed 's/^[[:space:]]*"//;s/".*$//' 2>/dev/null || true)
+  [[ $url != "(null)" && $url != "null" && -n $url ]] && printf '%s\n' "$url"
+}
+
+build_context_for_index() {
+  local idx="$1"
+  local filename="${files[$idx]}"
+  local filepath="$desktop_dir/$filename"
+  local kind="${file_kinds[$idx]}"
+
+  if [[ $kind == directory ]]; then
+    local item_count listing text
+    item_count=$(ls -1 "$filepath" 2>/dev/null | wc -l | tr -d '[:space:]')
+    listing=$(ls -1 "$filepath" 2>/dev/null | head -30)
+    text="Directory: ${filename}/ (${item_count} items)"
+    if [[ -n $listing ]]; then
+      text+=$'\n\n'"Contents:"$'\n'"${listing}"
+    fi
+    if ((item_count > 30)); then
+      text+=$'\n'"... (${item_count} items total)"
+    fi
+    printf '%s\n' "$text"
+    return 0
+  fi
+
+  local ext file_size metadata web_hints text
+  ext=$(file_ext "$filename")
+  file_size=$(get_file_size "$filepath")
+  metadata=$(file_metadata_summary "$filepath")
+  web_hints=$(search_filename_context "$filename")
+
+  local download_url
+  download_url=$(download_source_url "$filepath")
+
+  text="Filename: ${filename}"
+  text+=$'\n'"Type: ${kind}"
+  if [[ -n $ext ]]; then
+    text+=$'\n'"Extension: .${ext}"
+  fi
+  text+=$'\n'"Size: ${file_size} bytes"
+  [[ -n $metadata ]] && text+=$'\n'"Metadata: ${metadata}"
+  [[ -n ${file_preview_notes[$idx]:-} ]] && text+=$'\n'"Preview source: ${file_preview_notes[$idx]}"
+  [[ -n ${related_hints[$idx]:-} ]] && text+=$'\n'"Possibly related files on Desktop: ${related_hints[$idx]}"
+  [[ -n $web_hints ]] && text+=$'\n'"Internet hints: ${web_hints}"
+  [[ -n $download_url ]] && text+=$'\n'"Download source: ${download_url}"
+
+  if [[ $kind == archive ]]; then
+    local listing
+    listing=$(archive_listing "$filepath")
+    if [[ -n $listing ]]; then
+      text+=$'\n\n'"Archive contents:"$'\n'"${listing}"
+    fi
+  fi
+
+  printf '%s\n' "$text"
+}
+
+precompute_file_context() {
+  local i
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    local filepath="$desktop_dir/${files[$i]}"
+    file_kinds[$i]=$(inspect_file_kind "$filepath")
+    file_preview_paths[$i]=""
+    file_preview_media_types[$i]=""
+    file_preview_notes[$i]=""
+    file_contexts[$i]=""
+  done
+
+  detect_duplicate_files
+  build_related_hints
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    local filepath="$desktop_dir/${files[$i]}"
+    if [[ -z ${duplicate_of[$i]:-} && ${file_kinds[$i]} != directory ]]; then
+      local asset_info preview_path preview_media preview_note
+      asset_info=$(resolve_vision_asset "$filepath" "${file_kinds[$i]}" 2>/dev/null || true)
+      if [[ -n $asset_info ]]; then
+        IFS=$'\t' read -r preview_path preview_media preview_note <<<"$asset_info"
+        file_preview_paths[$i]="$preview_path"
+        file_preview_media_types[$i]="$preview_media"
+        file_preview_notes[$i]="$preview_note"
+      fi
+    fi
+    file_contexts[$i]=$(build_context_for_index "$i")
+  done
+}
+
+## ---------------------------------------------------------------------------
+## Claude API — Phase 1: individual file naming (with vision)
+## ---------------------------------------------------------------------------
+
+NAME_SYSTEM_PROMPT="You rename files and directories. You receive a filename or \
+directory name plus any available metadata, local relationship hints, web hints, \
+and sometimes a derived visual preview. \
+Respond with ONLY a JSON object — no markdown fences, no explanation:
+{\"name\": \"suggested-name\"}
+
+Rules:
+- For files, keep the same file extension. For directories, do not add an extension.
+- Lowercase, hyphens instead of spaces or underscores.
+- Remove redundant words, noise dates, and gibberish characters.
+- Short but descriptive. If an image is provided, describe what you see. If the \
+preview came from a video, document, or audio file, use the preview plus metadata \
+to infer a better subject-based name.
+- Use metadata, related-file hints, and internet hints when they materially \
+improve accuracy.
+- Prefer specific nouns over generic words like image, photo, screenshot, \
+video, file, export, or document unless that is all the evidence supports.
+- If a directory listing is provided, choose a name that describes the contents.
+- If the name is already clean, return it unchanged."
+
+suggest_name_for_index() {
+  local idx="$1"
+  local filename="${files[$idx]}"
+  local user_text payload
+
+  user_text="${file_contexts[$idx]}"
+
+  if [[ -n ${file_preview_paths[$idx]:-} && -n ${file_preview_media_types[$idx]:-} ]]; then
+    ((verbose)) && log.info "Sending visual content for: $filename"
+    local base64_data
+    base64_data=$(base64 < "${file_preview_paths[$idx]}" | tr -d '\n')
+    payload=$(ai.anthropic_vision_payload "$model" "$NAME_SYSTEM_PROMPT" "$user_text" "${file_preview_media_types[$idx]}" "$base64_data" 256)
+  else
+    payload=$(ai.anthropic_chat_payload "$model" "$NAME_SYSTEM_PROMPT" "$user_text" 256)
+  fi
+
+  local resp
+  ai.anthropic_messages resp "$payload" || {
+    ai.anthropic_log_error resp "Failed to get suggestion for: $filename"
+    return 1
+  }
+
+  if ! http.response_ok resp; then
+    ai.anthropic_log_error resp "API error for: $filename"
+    return 1
+  fi
+
+  local raw
+  raw=$(ai.anthropic_message_text resp) || {
+    log.error "Failed to parse response for: $filename"
+    return 1
+  }
+
+  # Strip markdown fences if Claude wrapped the JSON.
+  raw="${raw#\`\`\`json}"
+  raw="${raw#\`\`\`}"
+  raw="${raw%\`\`\`}"
+
+  local name
+  name=$(printf '%s' "$raw" | jq -er '.name // empty' 2>/dev/null) || {
+    log.error "Invalid JSON response for: $filename"
+    ((verbose)) && log.error "Raw: $raw"
+    return 1
+  }
+
+  # Trim whitespace.
+  name="${name#"${name%%[![:space:]]*}"}"
+  name="${name%"${name##*[![:space:]]}"}"
+
+  printf '%s\n' "$name"
+}
+
+## ---------------------------------------------------------------------------
+## Claude API — Phase 2: batch grouping + skip detection
+## ---------------------------------------------------------------------------
+
+ORGANIZE_SYSTEM_PROMPT="You organize a batch of Desktop files and directories that are \
+about to be archived. You receive a JSON array of objects with \"id\", \"original\", \
+\"suggested\", optional \"kind\", optional \"context\", and optional \"related\" \
+hints. Items ending with / are directories. Respond with ONLY a JSON \
+object — no markdown fences, no explanation:
+
+{
+  \"summary\": \"short human-readable description of what was organized\",
+  \"files\": [
+    {\"id\": 0, \"name\": \"clean.pdf\", \"group\": null, \"skip\": false},
+    {\"id\": 1, \"name\": \"sitting.png\", \"group\": \"dogs\", \"skip\": false},
+    {\"id\": 2, \"name\": null, \"group\": null, \"skip\": true}
+  ]
+}
+
+CRITICAL: Each output object MUST include the \"id\" from the corresponding input \
+object, copied exactly. This is how results are matched back to files.
+
+Rules for \"group\":
+- If 2+ files are clearly related, assign them the same short lowercase \
+hyphenated group name. The group becomes a subdirectory.
+- Use the context and related hints to find clusters that belong together.
+- Unrelated files get null (they stay in the date root).
+
+Rules for \"skip\":
+- Set true for files that belong on a Desktop and are not clutter: TODO lists, \
+scratch notes, active working files, dotfiles, config files, READMEs, \
+in-progress documents, or anything that looks like it is being actively used \
+rather than accumulated junk.
+- When in doubt, lean toward archiving — only skip things that genuinely \
+look like they belong on a desktop.
+- When skip is true, set name to null and group to null.
+
+Rules for \"name\":
+- Use the suggested name if it is good, or improve it.
+- Use local metadata or internet hints when they make the title more specific.
+- For files, keep the same file extension as the original. For directories, no extension.
+- Lowercase, hyphens instead of spaces.
+
+Rules for \"summary\":
+- One short sentence describing the batch, e.g. \"tax documents and dog photos\".
+- Do not list individual files."
+
+organize_batch() {
+  local file_pairs_json="$1"
+
+  local user_text
+  user_text="Files to organize:
+${file_pairs_json}"
+
+  local payload
+  payload=$(ai.anthropic_chat_payload "$model" "$ORGANIZE_SYSTEM_PROMPT" "$user_text" 4096)
+
+  local resp
+  ai.anthropic_messages resp "$payload" || {
+    ai.anthropic_log_error resp "Failed to get organization plan"
+    return 1
+  }
+
+  if ! http.response_ok resp; then
+    ai.anthropic_log_error resp "API error for organization plan"
+    return 1
+  fi
+
+  local raw
+  raw=$(ai.anthropic_message_text resp) || {
+    log.error "Failed to parse organization response"
+    return 1
+  }
+
+  # Strip markdown fences.
+  raw="${raw#\`\`\`json}"
+  raw="${raw#\`\`\`}"
+  raw="${raw%\`\`\`}"
+
+  # Validate JSON structure.
+  printf '%s' "$raw" | jq -e '.summary and .files' >/dev/null 2>&1 || {
+    log.error "Invalid organization response"
+    ((verbose)) && log.error "Raw: $raw"
+    return 1
+  }
+
+  printf '%s\n' "$raw"
+}
+
+## ---------------------------------------------------------------------------
+## History / manifest
+## ---------------------------------------------------------------------------
+
+write_manifest() {
+  local date_tag="$1"
+  shift
+  local manifest="$manifest_dir/${date_tag}.tsv"
+
+  # Append (supports multiple runs on the same day).
+  if [[ ! -f $manifest ]]; then
+    printf '# original\tnew_name\tgroup\tsha1\n' > "$manifest"
+  fi
+
+  while (($# >= 4)); do
+    printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$manifest"
+    shift 4
+  done
+}
+
+append_history() {
+  local date_tag="$1"
+  local summary="$2"
+  shift 2
+  # Remaining args: triplets of original, new_name, group.
+  {
+    printf '\n## %s — %s\n\n' "$date_tag" "$summary"
+    while (($# >= 3)); do
+      local orig="$1" name="$2" group="$3"
+      shift 3
+      if [[ $group == "." ]]; then
+        printf '  %s → %s/%s\n' "$orig" "$date_tag" "$name"
+      else
+        printf '  %s → %s/%s/%s\n' "$orig" "$date_tag" "$group" "$name"
+      fi
+    done
+  } >> "$history_file"
+}
+
+## ---------------------------------------------------------------------------
+## Subcommands
+## ---------------------------------------------------------------------------
+
+cmd_history() {
+  if [[ ! -f $history_file ]]; then
+    log.info "No history yet"
+    return 0
+  fi
+  cat "$history_file"
+}
+
+cmd_status() {
+  if [[ ! -f $skiplist_file ]] || [[ ! -s $skiplist_file ]]; then
+    log.info "Skip list is empty"
+    return 0
+  fi
+
+  printf 'Files that will be skipped on subsequent runs:\n\n'
+  while IFS=$'\t' read -r sha1 filename; do
+    [[ $sha1 == \#* ]] && continue
+    [[ -z $sha1 ]] && continue
+    printf '  %s  %s\n' "${sha1:0:12}" "$filename"
+  done < "$skiplist_file"
+}
+
+cmd_revert() {
+  if [[ ${#subcmd_args[@]} -eq 0 ]]; then
+    log.error "Usage: desktop-rename revert DATE"
+    return 1
+  fi
+
+  local date_tag
+  date_tag=$(normalize_date_arg "${subcmd_args[0]}") || return 1
+
+  local manifest="$manifest_dir/${date_tag}.tsv"
+  if [[ ! -f $manifest ]]; then
+    log.error "No manifest found for $date_tag"
+    return 1
+  fi
+
+  local archive_dir="$backup_root/$date_tag"
+  if [[ ! -d $archive_dir ]]; then
+    log.error "Archive directory not found: $archive_dir"
+    return 1
+  fi
+
+  local copied=0 skipped=0
+  while IFS=$'\t' read -r original new_name group sha1; do
+    [[ $original == \#* ]] && continue
+    [[ -z $original ]] && continue
+
+    local src
+    if [[ $group == "." ]]; then
+      src="$archive_dir/$new_name"
+    else
+      src="$archive_dir/$group/$new_name"
+    fi
+
+    local dst="$desktop_dir/$original"
+
+    if [[ ! -e $src ]]; then
+      log.warn "Source not found: $src"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if [[ -e $dst ]]; then
+      log.warn "Already exists on Desktop: $original"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if ((dry_run)); then
+      printf '  %s → Desktop/%s\n' "$(basename "$src")" "$original"
+    else
+      cp -R -- "$src" "$dst"
+      # Add to skip list so future runs ignore this item.
+      skiplist_add "$sha1" "$original"
+      ((verbose)) && log.success "Copied: $original"
+    fi
+    copied=$((copied + 1))
+  done < "$manifest"
+
+  if ((dry_run)); then
+    log.info "Dry run — $copied file(s) would be copied back"
+  else
+    log.success "Copied $copied file(s) back to Desktop"
+    if ((skipped)); then
+      log.warn "Skipped $skipped file(s)"
+    fi
+  fi
+}
+
+## ---------------------------------------------------------------------------
+## Main organize flow
+## ---------------------------------------------------------------------------
+
+main() {
+  guards.require_exec jq
+  guards.require_exec curl
+  guards.require_exec base64
+  guards.require_exec shasum
+  guards.require_vars ANTHROPIC_API_KEY
+  guards.require_dir "$desktop_dir"
+  guards.require_dir "$HOME/Dropbox"
+
+  if ! lock_spec=$(lock.acquire "desktop-rename" "$verbose"); then
+    log.info "Another instance is running; exiting"
+    return 0
+  fi
+
+  ensure_config_dirs
+
+  # Collect files and directories (non-hidden) on the Desktop, skipping the skip list.
+  local entry base sha
+
+  files=()
+  file_sha1s=()
+  file_kinds=()
+  file_contexts=()
+  file_preview_paths=()
+  file_preview_media_types=()
+  file_preview_notes=()
+  related_hints=()
+  duplicate_of=()
+
+  for entry in "$desktop_dir"/*; do
+    [[ -f $entry || -d $entry ]] || continue
+    base=$(basename "$entry")
+    [[ $base != .* ]] || continue
+
+    sha=$(file_sha1 "$entry")
+    if skiplist_contains "$sha"; then
+      ((verbose)) && log.info "Skipping (on skip list): $base"
+      continue
+    fi
+
+    if ((min_age_hours > 0)); then
+      local mtime now age_seconds
+      mtime=$(stat -f '%m' "$entry")
+      now=$(date +%s)
+      age_seconds=$((now - mtime))
+      if ((age_seconds < min_age_hours * 3600)); then
+        ((verbose)) && log.info "Too recent ($((age_seconds / 3600))h): $base"
+        continue
+      fi
+    fi
+
+    files+=("$base")
+    file_sha1s+=("$sha")
+  done
+
+  if ((${#files[@]} == 0)); then
+    log.info "Nothing found on Desktop"
+    return 0
+  fi
+
+  log.info "Found ${#files[@]} item(s) on Desktop"
+
+  precompute_file_context
+
+  local -a duplicate_orig=() duplicate_keep=()
+  local duplicate_count=0
+  local i filename
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    if [[ -n ${duplicate_of[$i]:-} ]]; then
+      duplicate_orig+=("${files[$i]}")
+      duplicate_keep+=("${duplicate_of[$i]}")
+      duplicate_count=$((duplicate_count + 1))
+    fi
+  done
+
+  # Phase 1: get a suggested name for each file individually.
+  local -a suggested_names=()
+  local api_errors=0
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    filename="${files[$i]}"
+    if [[ -n ${duplicate_of[$i]:-} ]]; then
+      ((verbose)) && log.info "Skipping duplicate candidate: $filename"
+      suggested_names+=("")
+      continue
+    fi
+    ((verbose)) && log.info "Asking Claude about: $filename"
+
+    local name
+    if ! name=$(suggest_name_for_index "$i"); then
+      log.warn "Skipping: $filename (API error)"
+      suggested_names+=("")
+      api_errors=$((api_errors + 1))
+      continue
+    fi
+
+    if [[ -z $name ]]; then
+      log.warn "Skipping: $filename (empty suggestion)"
+      suggested_names+=("")
+      api_errors=$((api_errors + 1))
+      continue
+    fi
+
+    suggested_names+=("$name")
+  done
+
+  # Build JSON array for Phase 2, filtering out files that failed Phase 1.
+  # Each entry gets a numeric "id" so we can map results back by index
+  # instead of relying on Claude to reproduce the exact original filename.
+  local pairs_json="["
+  local first=1 have_pairs=0
+  local -a pair_index_map=()  # maps pair position → files[] index
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    [[ -n ${suggested_names[$i]} ]] || continue
+    have_pairs=1
+    pair_index_map+=("$i")
+
+    local orig_label="${files[$i]}"
+    # Mark directories with trailing / so Claude can distinguish them.
+    [[ -d "$desktop_dir/$orig_label" ]] && orig_label+="/"
+
+    local orig_json sugg_json kind_json context_json related_json
+    orig_json=$(json.escape "$orig_label")
+    sugg_json=$(json.escape "${suggested_names[$i]}")
+    kind_json=$(json.escape "${file_kinds[$i]}")
+    context_json=$(json.escape "${file_contexts[$i]}")
+    related_json=$(json.escape "${related_hints[$i]}")
+
+    if ((first)); then
+      first=0
+    else
+      pairs_json+=","
+    fi
+    pairs_json+="{\"id\":$i,\"original\":\"$orig_json\",\"suggested\":\"$sugg_json\",\"kind\":\"$kind_json\",\"context\":\"$context_json\",\"related\":\"$related_json\"}"
+  done
+  pairs_json+="]"
+
+  # Parse the plan into arrays.
+  local -a move_orig=() move_name=() move_group=() move_sha=()
+  local -a skip_files=()
+  local summary="desktop files"
+
+  if ((have_pairs)); then
+    # Phase 2: ask Claude to group, flag skips, and summarize.
+    ((verbose)) && log.info "Asking Claude to organize the batch"
+
+    local plan
+    if ! plan=$(organize_batch "$pairs_json"); then
+      log.error "Failed to get organization plan"
+      return 1
+    fi
+
+    summary=$(printf '%s' "$plan" | jq -r '.summary // "files"')
+
+    local file_count
+    file_count=$(printf '%s' "$plan" | jq -r '.files | length')
+
+    local j
+    for ((j = 0; j < file_count; j++)); do
+      local file_id name group do_skip
+      file_id=$(printf '%s' "$plan" | jq -r ".files[$j].id // empty")
+      name=$(printf '%s' "$plan" | jq -r ".files[$j].name // empty")
+      group=$(printf '%s' "$plan" | jq -r ".files[$j].group // empty")
+      do_skip=$(printf '%s' "$plan" | jq -r ".files[$j].skip")
+
+      # Map back to original filename via id → files[] index.
+      local orig=""
+      if [[ -n $file_id ]] && ((file_id >= 0 && file_id < ${#files[@]})); then
+        orig="${files[$file_id]}"
+      else
+        # Fallback: try matching by the original field Claude returned.
+        orig=$(printf '%s' "$plan" | jq -r ".files[$j].original // empty")
+        orig="${orig%/}"
+      fi
+      [[ -n $orig ]] || continue
+
+      if [[ $do_skip == "true" ]]; then
+        skip_files+=("$orig")
+        continue
+      fi
+
+      [[ -n $name ]] || continue
+
+      # Look up the SHA1 by files[] index (prefer id) or by name scan.
+      local sha=""
+      if [[ -n $file_id ]] && ((file_id >= 0 && file_id < ${#files[@]})); then
+        sha="${file_sha1s[$file_id]}"
+      else
+        for ((i = 0; i < ${#files[@]}; i++)); do
+          if [[ ${files[$i]} == "$orig" ]]; then
+            sha="${file_sha1s[$i]}"
+            break
+          fi
+        done
+      fi
+
+      move_orig+=("$orig")
+      move_name+=("$name")
+      move_group+=("${group:-.}")
+      move_sha+=("$sha")
+    done
+  fi
+
+  if ((${#move_orig[@]} == 0 && duplicate_count == 0)); then
+    if ((${#skip_files[@]} > 0)); then
+      log.info "All files flagged as desktop keepers:"
+      for filename in "${skip_files[@]}"; do
+        printf '  %s\n' "$filename"
+      done
+    else
+      log.info "Nothing to do"
+    fi
+    return 0
+  fi
+
+  local date_tag
+  date_tag=$(today_tag)
+  local archive_dir="$backup_root/$date_tag"
+
+  # Preview.
+  printf '\n'
+  printf '  Archive: %s/\n\n' "$archive_dir"
+  printf '  %-40s  %s\n' "CURRENT" "DESTINATION"
+  printf '  %s\n' "$(printf '%.0s─' {1..80})"
+
+  for ((i = 0; i < ${#move_orig[@]}; i++)); do
+    local dest
+    if [[ ${move_group[$i]} == "." ]]; then
+      dest="${move_name[$i]}"
+    else
+      dest="${move_group[$i]}/${move_name[$i]}"
+    fi
+    printf '  %-40s  %s\n' "${move_orig[$i]}" "$dest"
+  done
+  printf '\n'
+
+  if ((duplicate_count > 0)); then
+    printf '  Exact duplicates to Trash:\n'
+    for ((i = 0; i < ${#duplicate_orig[@]}; i++)); do
+      printf '    %s  →  duplicate of %s\n' "${duplicate_orig[$i]}" "${duplicate_keep[$i]}"
+    done
+    printf '\n'
+  fi
+
+  if ((${#skip_files[@]} > 0)); then
+    printf '  Staying on Desktop:\n'
+    for filename in "${skip_files[@]}"; do
+      printf '    %s\n' "$filename"
+    done
+    printf '\n'
+  fi
+
+  if ((api_errors)); then
+    log.warn "Skipped $api_errors file(s) due to API errors"
+  fi
+
+  if ((dry_run)); then
+    log.info "Dry run — no changes were applied"
+    return 0
+  fi
+
+  # Confirm.
+  if ((auto_approve)); then
+    ((verbose)) && log.info "Auto-approved (--yes)"
+  else
+    printf 'Apply these changes? [y/N] '
+    local answer
+    read -r answer
+    case "$answer" in
+    [yY] | [yY][eE][sS]) ;;
+    *)
+      log.info "Aborted"
+      return 0
+      ;;
+    esac
+  fi
+
+  # Apply.
+  local moved=0
+  local duplicates_removed=0
+  local -a manifest_args=() history_args=()
+
+  for ((i = 0; i < ${#move_orig[@]}; i++)); do
+    local src="$desktop_dir/${move_orig[$i]}"
+    local dest_dir="$archive_dir"
+
+    if [[ ${move_group[$i]} != "." ]]; then
+      dest_dir="$archive_dir/${move_group[$i]}"
+    fi
+
+    local dst="$dest_dir/${move_name[$i]}"
+
+    if [[ ! -d $dest_dir ]]; then
+      ((verbose)) && log.info "Creating: $dest_dir"
+      mkdir -p "$dest_dir"
+    fi
+
+    if [[ -e $dst ]]; then
+      log.warn "Target exists, skipping: ${move_orig[$i]}"
+      continue
+    fi
+
+    if lsof -- "$src" >/dev/null 2>&1; then
+      log.warn "File is open, skipping: ${move_orig[$i]}"
+      continue
+    fi
+
+    mv -- "$src" "$dst"
+    ((verbose)) && log.success "${move_orig[$i]} → ${move_name[$i]}"
+    moved=$((moved + 1))
+
+    manifest_args+=("${move_orig[$i]}" "${move_name[$i]}" "${move_group[$i]}" "${move_sha[$i]}")
+    history_args+=("${move_orig[$i]}" "${move_name[$i]}" "${move_group[$i]}")
+  done
+
+  # Write manifest and history.
+  if ((moved > 0)); then
+    write_manifest "$date_tag" "${manifest_args[@]}"
+    append_history "$date_tag" "$summary" "${history_args[@]}"
+  fi
+
+  if ((duplicate_count > 0)); then
+    for ((i = 0; i < ${#duplicate_orig[@]}; i++)); do
+      local dup_path="$desktop_dir/${duplicate_orig[$i]}"
+      [[ -e $dup_path ]] || continue
+      if "${script_dir}/trash" -f "$dup_path" >/dev/null 2>&1; then
+        duplicates_removed=$((duplicates_removed + 1))
+        ((verbose)) && log.success "Trashed duplicate: ${duplicate_orig[$i]}"
+      else
+        log.warn "Failed to trash duplicate: ${duplicate_orig[$i]}"
+      fi
+    done
+  fi
+
+  local result_msg=""
+  if ((moved > 0 && duplicates_removed > 0)); then
+    result_msg="Archived $moved file(s), trashed $duplicates_removed duplicate(s) — $summary"
+  elif ((moved > 0)); then
+    result_msg="Archived $moved file(s) — $summary"
+  elif ((duplicates_removed > 0)); then
+    result_msg="Trashed $duplicates_removed duplicate file(s)"
+  fi
+
+  if [[ -n $result_msg ]]; then
+    log.success "$result_msg"
+    if command -v osascript >/dev/null 2>&1; then
+      osascript -e "display notification \"$result_msg\" with title \"Desktop Rename\"" 2>/dev/null || true
+    fi
+  else
+    log.info "No changes applied"
+  fi
+}
+
+## ---------------------------------------------------------------------------
+## Schedule / Unschedule
+## ---------------------------------------------------------------------------
+
+LAUNCHD_LABEL="com.nficano.desktop-rename"
+
+cmd_schedule() {
+  local interval="${subcmd_args[0]:-3600}"
+
+  launchd.require_tooling || return 1
+
+  local plist_path logs_dir
+  plist_path=$(launchd.agent_plist_path "$LAUNCHD_LABEL")
+  logs_dir=$(launchd.logs_dir "$LAUNCHD_LABEL")
+
+  launchd.write_agent_plist \
+    "$plist_path" "$LAUNCHD_LABEL" "$interval" \
+    "$logs_dir/stdout.log" "$logs_dir/stderr.log" \
+    --env "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" \
+    --env "PATH=$PATH" \
+    -- "$script_dir/desktop-rename" --yes --min-age 12
+
+  launchd.bootstrap_agent "$LAUNCHD_LABEL" "$plist_path" "" "$verbose"
+  log.success "Scheduled: every $((interval / 60)) minutes"
+  log.info "Logs: $logs_dir/"
+}
+
+cmd_unschedule() {
+  launchd.require_tooling || return 1
+
+  local plist_path
+  plist_path=$(launchd.agent_plist_path "$LAUNCHD_LABEL")
+  launchd.unload_agent "$LAUNCHD_LABEL" "$plist_path" "" "$verbose"
+  rm -f "$plist_path"
+  log.success "Unscheduled desktop-rename"
+}
+
+## ---------------------------------------------------------------------------
+## Dispatch
+## ---------------------------------------------------------------------------
+
+parse_args "$@"
+
+case "$subcmd" in
+"")           main ;;
+revert)       cmd_revert ;;
+history)      cmd_history ;;
+status)       cmd_status ;;
+schedule)     cmd_schedule ;;
+unschedule)   cmd_unschedule ;;
+*)            log.error "Unknown command: $subcmd"; script.usage 1 ;;
+esac

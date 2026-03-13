@@ -514,7 +514,14 @@ http.request() {
     done
   fi
   if [[ -n $send_body ]]; then
-    curl_cmd+=(--data-binary "$send_body")
+    if ((${#send_body} > 200000)); then
+      local data_file
+      data_file=$(http._tmpfile http_data) || return 1
+      printf '%s' "$send_body" > "$data_file"
+      curl_cmd+=(--data-binary "@${data_file}")
+    else
+      curl_cmd+=(--data-binary "$send_body")
+    fi
   fi
   if ((${#curl_extra[@]})); then
     curl_cmd+=("${curl_extra[@]}")
@@ -544,7 +551,7 @@ http.request() {
     error_message=$(http._trim "$error_message")
   fi
 
-  rm -f "$header_file" "$body_file" "$error_file"
+  rm -f "$header_file" "$body_file" "$error_file" "${data_file:-}"
 
   local status_line="${header_block%%$'\n'*}"
   status_line=${status_line%$'\r'}

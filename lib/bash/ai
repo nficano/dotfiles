@@ -678,6 +678,198 @@ ai.openai_log_error() {
   fi
 }
 
+## ---------------------------------------------------------------------------
+## Anthropic (Claude) helpers
+## ---------------------------------------------------------------------------
+
+ai._anthropic_init() {
+  if [[ -n ${AI_ANTHROPIC_INITIALIZED:-} ]]; then
+    return 0
+  fi
+  AI_ANTHROPIC_INITIALIZED=1
+
+  ai_anthropic_key="${ANTHROPIC_API_KEY:-}"
+  ai_anthropic_base="${ANTHROPIC_API_BASE:-https://api.anthropic.com}"
+  ai_anthropic_version="${ANTHROPIC_API_VERSION:-2023-06-01}"
+}
+
+ai.anthropic_api_key() {
+  ai._anthropic_init
+  printf '%s\n' "${ai_anthropic_key:-}"
+}
+
+ai.anthropic_require_api_key() {
+  ai._anthropic_init
+  if [[ -z ${ai_anthropic_key:-} ]]; then
+    log.error "ANTHROPIC_API_KEY is not set"
+    return 1
+  fi
+  return 0
+}
+
+ai.anthropic_request() {
+  local response_var="$1"
+  local method="${2:-POST}"
+  local path="$3"
+  local payload="${4-}"
+  local content_type="${5-application/json}"
+
+  if [[ -z $response_var || -z $path ]]; then
+    log.error "ai.anthropic_request requires a response variable and API path"
+    return 1
+  fi
+
+  ai._anthropic_init
+  if ! ai.anthropic_require_api_key; then
+    return 1
+  fi
+
+  method=$(printf '%s' "$method" | tr '[:lower:]' '[:upper:]')
+  local base
+  base="${ai_anthropic_base%/}"
+  local url="${base}${path}"
+
+  local -a http_args=(
+    --header "x-api-key: ${ai_anthropic_key}"
+    --header "anthropic-version: ${ai_anthropic_version}"
+  )
+
+  if [[ -n $content_type ]]; then
+    http_args+=(--header "Content-Type: ${content_type}")
+  fi
+
+  if [[ -n $payload ]]; then
+    http_args+=(--data "$payload")
+  fi
+
+  http.request "$response_var" "$method" "$url" "${http_args[@]}"
+}
+
+ai.anthropic_messages() {
+  local response_var="$1"
+  local payload="$2"
+  ai.anthropic_request "$response_var" "POST" "/v1/messages" "$payload"
+}
+
+ai.anthropic_chat_payload() {
+  local model="$1"
+  local system_prompt="$2"
+  local user_prompt="$3"
+  local max_tokens="${4:-1024}"
+
+  if [[ -z $model ]]; then
+    log.error "ai.anthropic_chat_payload requires a model name"
+    return 1
+  fi
+
+  local model_json system_json user_json
+  model_json=$(json.escape "$model")
+  system_json=$(json.escape "$system_prompt")
+  user_json=$(json.escape "$user_prompt")
+
+  cat <<AICJSON
+{
+  "model": "$model_json",
+  "max_tokens": $max_tokens,
+  "system": "$system_json",
+  "messages": [
+    {"role": "user", "content": "$user_json"}
+  ]
+}
+AICJSON
+}
+
+ai.anthropic_vision_payload() {
+  local model="$1"
+  local system_prompt="$2"
+  local user_text="$3"
+  local media_type="$4"
+  local base64_data="$5"
+  local max_tokens="${6:-1024}"
+
+  if [[ -z $model ]]; then
+    log.error "ai.anthropic_vision_payload requires a model name"
+    return 1
+  fi
+
+  local model_json system_json text_json media_json
+  model_json=$(json.escape "$model")
+  system_json=$(json.escape "$system_prompt")
+  text_json=$(json.escape "$user_text")
+  media_json=$(json.escape "$media_type")
+
+  cat <<AIVJSON
+{
+  "model": "$model_json",
+  "max_tokens": $max_tokens,
+  "system": "$system_json",
+  "messages": [
+    {"role": "user", "content": [
+      {"type": "image", "source": {"type": "base64", "media_type": "$media_json", "data": "$base64_data"}},
+      {"type": "text", "text": "$text_json"}
+    ]}
+  ]
+}
+AIVJSON
+}
+
+ai.anthropic_message_text() {
+  local ref="$1"
+  [[ -n $ref ]] || return 1
+  command -v jq >/dev/null 2>&1 || {
+    log.error "jq is required to parse Anthropic responses"
+    return 1
+  }
+
+  local body
+  body=$(http.response_get "$ref" body 2>/dev/null) || return 1
+  [[ -n $body ]] || return 1
+
+  local result
+  result=$(jq -er '.content[0].text // empty' <<<"$body" 2>/dev/null) || return 1
+  [[ -n $result ]] || return 1
+  printf '%s\n' "$result"
+}
+
+ai.anthropic_log_error() {
+  local response_var="$1"
+  local fallback="${2:-Anthropic API request failed}"
+
+  if [[ -z $response_var ]]; then
+    log.error "$fallback"
+    return 1
+  fi
+
+  local err
+  err=$(http.response_get "$response_var" error 2>/dev/null || true)
+  if [[ -n $err ]]; then
+    log.error "$err"
+  else
+    local status reason message="$fallback"
+    status=$(http.response_get "$response_var" status 2>/dev/null || true)
+    reason=$(http.response_get "$response_var" reason 2>/dev/null || true)
+    if [[ -n $status ]]; then
+      message+=" (status $status"
+      if [[ -n $reason ]]; then
+        message+=": $reason"
+      fi
+      message+=")"
+    fi
+    log.error "$message"
+  fi
+
+  local body api_message
+  body=$(http.response_get "$response_var" body 2>/dev/null || true)
+  if [[ -n $body && $(command -v jq 2>/dev/null || true) ]]; then
+    api_message=$(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null || true)
+    if [[ -n $api_message ]]; then
+      log.error "$api_message"
+    fi
+  fi
+}
+
+## ---------------------------------------------------------------------------
+
 ai.openai_message_text() {
   local ref="$1"
   [[ -n $ref ]] || return 1
