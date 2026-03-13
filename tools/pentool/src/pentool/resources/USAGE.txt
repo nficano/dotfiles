@@ -1,0 +1,150 @@
+A penetration testing automation harness built around containerized tooling.
+
+DESCRIPTION
+  pentool orchestrates multiple security scanning tools within Docker
+  containers to perform comprehensive security assessments. It provides a unified
+  interface for reconnaissance, service fingerprinting, web surface mapping, and
+  vulnerability scanning.
+
+  The toolkit uses Docker to ensure consistent tool versions and isolate scan
+  environments. All scan results are cached by default to enable fast repeated
+  runs and incremental analysis.
+
+COMMANDS
+  update
+    Refresh vulnerability databases, service signatures, and tool datasets.
+    Updates signatures for nmap, Nikto, sqlmap, amass, and httpx tools.
+
+  recon [OPTIONS] [target]
+    Perform fast network reconnaissance to discover hosts and open ports.
+    Uses masscan for rapid port scanning and nmap for service detection.
+
+    Arguments:
+      [target]               CIDR range or host address (positional shorthand)
+
+    Options:
+      --cidr <range>         CIDR range to scan (e.g., 10.0.0.0/24)
+      --host <address>        Single host to scan
+      --targets <file>        Targets file with one CIDR or host per line
+      --top-ports <count>     Number of common ports to scan [default: 100]
+      --rate <rate>           Masscan scan rate (packets/sec) [default: 15000]
+      --refresh               Force fresh scan, bypass cache
+
+  fingerprint [OPTIONS] [hosts...]
+    Perform detailed service fingerprinting on discovered hosts and ports.
+    Uses nmap for service version detection, sslyze for TLS analysis, and
+    optionally httpx for HTTP service fingerprinting.
+
+    Arguments:
+      [hosts...]              Host[:port] targets (positional)
+
+    Options:
+      --input <file>          Recon JSON output file from 'recon' command
+      --targets <file>        Targets file with host:port entries
+      --http                  Enable HTTP probing via httpx
+      --threads <count>       HTTP probe thread count [default: 50]
+      --refresh               Force fresh scan, bypass cache
+
+  webmap [OPTIONS] --url <url>
+    Map web attack surface by discovering directories, historical URLs, and
+    subdomains. Uses gobuster for directory brute-forcing, waybackurls for
+    historical URL discovery, amass for subdomain enumeration, and httpx
+    for verification.
+
+    Options:
+      --url <url>             Base URL to map (required)
+      --depth <level>         Discovery depth multiplier [default: 2]
+      --wordlist <file>       Custom wordlist for directory discovery
+      --rate <threads>        HTTP probe thread count [default: 50]
+      --refresh               Force fresh scan, bypass cache
+
+  scan [OPTIONS] --url <url>
+    Perform comprehensive vulnerability scanning against a target URL.
+    Orchestrates nikto, sslyze, OWASP ZAP, and sqlmap scans, normalizing
+    findings into a unified format with SARIF output support.
+
+    Options:
+      --url <url>             Target URL to scan (required)
+      --profile <name>        Scan profile: quick or extended [default: quick]
+      --refresh               Force fresh scan, bypass cache
+
+GLOBAL OPTIONS
+  -h, --help                  Print help information
+  -V, --version              Print version information
+  --verbose                   Enable verbose logging output
+  --no-cache                  Disable result caching entirely
+  --image <name>              Docker image to use [default: pentool:latest]
+  --cache-ttl <seconds>      Cache expiration time in seconds [default: 14400]
+                              Use 0 to disable expiration
+
+ENVIRONMENT VARIABLES
+  PENTEST_TOOLKIT_IMAGE              Docker image name to use
+  PENTEST_TOOLKIT_CACHE_TTL          Default cache TTL in seconds
+  PENTEST_TOOLKIT_DISCOVER_RATE      Default masscan scan rate
+  PENTEST_TOOLKIT_HTTP_THREADS       Default HTTP probe thread count
+  PENTEST_TOOLKIT_WEB_RATE           Default webmap HTTP probe rate
+
+EXAMPLES
+  # Update all tool datasets before starting scans
+  pentool update
+
+  # Quick reconnaissance on a single host
+  pentool recon 192.168.1.10
+
+  # Fast CIDR scan with custom rate
+  pentool recon --cidr 10.0.0.0/24 --rate 30000
+
+  # Scan top 1000 ports on a large network
+  pentool recon --cidr 172.16.0.0/16 --top-ports 1000
+
+  # Reconnaissance from a targets file
+  pentool recon --targets targets.txt
+
+  # Fingerprint services from recon output
+  pentool fingerprint --input results/recon.json
+
+  # Fingerprint specific hosts with HTTP probing enabled
+  pentool fingerprint --http 192.168.1.10 192.168.1.11:443
+
+  # Fingerprint from targets file with custom thread count
+  pentool fingerprint --targets hosts.txt --http --threads 100
+
+  # Basic web surface mapping
+  pentool webmap --url https://example.com
+
+  # Deep web mapping with custom wordlist
+  pentool webmap --url https://example.com --depth 3 --wordlist wordlist.txt
+
+  # Web mapping with custom probe rate
+  pentool webmap --url https://example.com --rate 100
+
+  # Quick vulnerability scan
+  pentool scan --url https://example.com
+
+  # Extended vulnerability scan with fresh results
+  pentool scan --url https://example.com --profile extended --refresh
+
+  # Complete assessment workflow
+  pentool update
+  pentool recon --cidr 10.0.0.0/24 > recon.json
+  pentool fingerprint --input recon.json --http > fingerprint.json
+  pentool scan --url https://target.example.com --profile extended
+
+  # Using positional arguments for quick scans
+  pentool recon 10.0.0.0/24
+  pentool fingerprint host1.example.com host2.example.com:443
+
+  # Disable caching for one-off scans
+  pentool scan --url https://example.com --no-cache
+
+  # Use custom Docker image
+  pentool --image custom-toolkit:v1.0 scan --url https://example.com
+
+NOTES
+  - Docker must be running and accessible
+  - First run will build the Docker image automatically
+  - Results are cached by default in ~/.pentool/cache/
+  - Use --refresh to force fresh scans and bypass cache
+  - Scan outputs are saved in timestamped run directories
+  - JSON summaries are generated for all scan types
+  - SARIF format output is available for scan results
