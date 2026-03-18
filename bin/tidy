@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
-#/ Rename and archive Desktop files and directories using Claude.
+#/ AI-powered file renaming and organization using Claude.
 #/
-#/ Scans ~/Desktop for files and directories, inspects media deeply for a
+#/ Scans a directory for files and directories, inspects media deeply for a
 #/ clean descriptive name, groups related items into subdirectories, and
-#/ moves everything into a dated archive at
-#/ ~/Dropbox/backups/oak/desktop/YY-MM-DD/.
+#/ renames files in place (default) or archives them to a dated directory.
 #/
-#/ Items Claude judges as "desktop keepers" (TODO lists, scratch notes,
-#/ active working files) are left in place. Images are inspected with vision;
-#/ unsupported or oversized media are converted, compressed, or reduced to a
-#/ preview via this-to-that / ffmpeg before being sent to the API. Exact
-#/ duplicate files are detected locally and moved to Trash after confirmation.
-#/ When a filename appears descriptive enough, lightweight web hints are
-#/ fetched from public search endpoints to improve naming and grouping.
+#/ Items Claude judges as active working files are left in place. Images are
+#/ inspected with vision; unsupported or oversized media are converted,
+#/ compressed, or reduced to a preview via this-to-that / ffmpeg before being
+#/ sent to the API. Exact duplicate files are detected locally and moved to
+#/ Trash after confirmation. When a filename appears descriptive enough,
+#/ lightweight web hints are fetched from public search endpoints to improve
+#/ naming and grouping.
 #/
-#/ A machine-readable manifest and human-readable history track every move.
-#/ Use "revert" to copy archived files back to Desktop with their original
-#/ names. Reverted files are added to a skip list so subsequent runs leave
-#/ them alone.
+#/ History and rollback data are stored in a .tidy file in the target
+#/ directory. Use "tidy revert" to undo renames.
 #/
 #/ Usage:
-#/    desktop-rename [options]              Organize Desktop files
-#/    desktop-rename revert DATE            Copy files back to Desktop
-#/    desktop-rename history                Show the change log
-#/    desktop-rename status                 Show the skip list
-#/    desktop-rename schedule [SECONDS]     Install launchd agent (default: 3600)
-#/    desktop-rename unschedule             Remove launchd agent
+#/    tidy [options] [DIRECTORY]            Organize files (default: cwd)
+#/    tidy revert [DATE] [DIRECTORY]        Revert renames
+#/    tidy history [DIRECTORY]              Show the change log
+#/    tidy status [DIRECTORY]               Show the skip list
+#/    tidy schedule [SECONDS]               Install launchd agent for ~/Desktop
+#/    tidy unschedule                       Remove launchd agent
 #/
 #/ Options:
 #/    -h, --help           Print this help and exit
@@ -34,9 +31,8 @@
 #/    -y, --yes            Auto-approve changes (skip confirmation prompt)
 #/    -m, --model MODEL    Claude model (default: claude-sonnet-4-20250514)
 #/        --min-age HOURS  Only process files older than HOURS hours
-#/
-#/ Date formats accepted by revert:
-#/    20260212, 2026-02-12, 260212, 26-02-12
+#/        --archive DIR    Archive files to DIR/YY-MM-DD/ instead of renaming
+#/                         in place (e.g. --archive ~/Dropbox/backups/desktop)
 
 set -Eeuo pipefail
 
@@ -50,12 +46,9 @@ auto_approve=0
 min_age_hours=0
 lock_spec=""
 model="claude-sonnet-4-20250514"
-desktop_dir="$HOME/Desktop"
-backup_root="$HOME/Dropbox/backups/oak/desktop"
-config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/desktop-rename"
-history_file="$config_dir/history"
-skiplist_file="$config_dir/skiplist"
-manifest_dir="$config_dir/manifests"
+target_dir=""
+archive_root=""
+tidy_file=""
 tmp_dir=""
 subcmd=""
 subcmd_args=()
@@ -108,6 +101,14 @@ parse_args() {
       fi
       min_age_hours="$1"
       ;;
+    --archive)
+      shift
+      if [[ $# -eq 0 ]]; then
+        log.error "Missing value for --archive"
+        script.usage 1
+      fi
+      archive_root="$1"
+      ;;
     -m | --model)
       shift
       if [[ $# -eq 0 ]]; then
@@ -131,20 +132,70 @@ parse_args() {
     shift
   done
 
-  subcmd="${1:-}"
-  if [[ -n $subcmd ]]; then
+  # First positional: subcommand or directory.
+  # Known subcommands are handled; anything else is treated as a directory.
+  case "${1:-}" in
+  "" | revert | history | status | schedule | unschedule)
+    subcmd="${1:-}"
+    if [[ -n $subcmd ]]; then
+      shift
+      subcmd_args=("$@")
+    fi
+    ;;
+  *)
+    # Not a subcommand — treat remaining args as target directory.
+    target_dir="$1"
     shift
-    subcmd_args=("$@")
+    if [[ $# -gt 0 ]]; then
+      log.error "Unexpected arguments after directory: $*"
+      script.usage 1
+    fi
+    ;;
+  esac
+
+  # Default target directory to cwd.
+  if [[ -z $target_dir ]]; then
+    # For subcommands that take a directory arg, pull it from subcmd_args.
+    case "$subcmd" in
+    "" )
+      target_dir="$(pwd)"
+      ;;
+    revert)
+      # revert DATE [DIRECTORY]
+      if ((${#subcmd_args[@]} >= 2)); then
+        target_dir="${subcmd_args[1]}"
+      else
+        target_dir="$(pwd)"
+      fi
+      ;;
+    history | status)
+      # history [DIRECTORY] / status [DIRECTORY]
+      if ((${#subcmd_args[@]} >= 1)); then
+        target_dir="${subcmd_args[0]}"
+      else
+        target_dir="$(pwd)"
+      fi
+      ;;
+    esac
+  fi
+
+  # Resolve to absolute path.
+  if [[ -n $target_dir ]]; then
+    target_dir=$(cd "$target_dir" 2>/dev/null && pwd -P) || {
+      log.error "Directory not found: $target_dir"
+      return 1
+    }
+  fi
+
+  # Set up the .tidy file path in the target directory.
+  if [[ -n $target_dir ]]; then
+    tidy_file="$target_dir/.tidy"
   fi
 }
 
 ## ---------------------------------------------------------------------------
 ## Config helpers
 ## ---------------------------------------------------------------------------
-
-ensure_config_dirs() {
-  mkdir -p "$config_dir" "$manifest_dir"
-}
 
 today_tag() {
   date +%y-%m-%d
@@ -171,15 +222,27 @@ normalize_date_arg() {
 
 skiplist_contains() {
   local sha1="$1"
-  [[ -f $skiplist_file ]] || return 1
-  grep -q "^${sha1}	" "$skiplist_file" 2>/dev/null
+  [[ -f $tidy_file ]] || return 1
+  grep -q "\"type\":\"skip\".*\"sha1\":\"${sha1}\"" "$tidy_file" 2>/dev/null
 }
 
 skiplist_add() {
   local sha1="$1" filename="$2"
   if ! skiplist_contains "$sha1"; then
-    printf '%s\t%s\n' "$sha1" "$filename" >> "$skiplist_file"
+    printf '{"type":"skip","sha1":"%s","name":"%s"}\n' "$sha1" "$filename" >> "$tidy_file"
   fi
+}
+
+tidy_append_rename() {
+  local date_tag="$1" mode="$2" original="$3" new_name="$4" group="$5" sha1="$6"
+  local archive_dir="${7:-.}"
+  local orig_json new_json group_json archive_json
+  orig_json=$(jq -Rn --arg s "$original" '$s')
+  new_json=$(jq -Rn --arg s "$new_name" '$s')
+  group_json=$(jq -Rn --arg s "$group" '$s')
+  archive_json=$(jq -Rn --arg s "$archive_dir" '$s')
+  printf '{"type":"rename","date":"%s","mode":"%s","original":%s,"renamed":%s,"group":%s,"sha1":"%s","archive":%s}\n' \
+    "$date_tag" "$mode" "$orig_json" "$new_json" "$group_json" "$sha1" "$archive_json" >> "$tidy_file"
 }
 
 file_sha1() {
@@ -308,7 +371,7 @@ get_file_size() {
 
 ensure_tmp_dir() {
   if [[ -z $tmp_dir ]]; then
-    tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/desktop-rename.XXXXXX")
+    tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/tidy.XXXXXX")
   fi
 }
 
@@ -763,12 +826,12 @@ detect_duplicate_files() {
   done
 
   for ((i = 0; i < ${#files[@]}; i++)); do
-    [[ -f "$desktop_dir/${files[$i]}" ]] || continue
+    [[ -f "$target_dir/${files[$i]}" ]] || continue
     [[ -n ${duplicate_of[$i]:-} ]] && continue
 
     local -a same_indices=("$i")
     for ((j = i + 1; j < ${#files[@]}; j++)); do
-      [[ -f "$desktop_dir/${files[$j]}" ]] || continue
+      [[ -f "$target_dir/${files[$j]}" ]] || continue
       [[ ${file_sha1s[$i]} == "${file_sha1s[$j]}" ]] || continue
       same_indices+=("$j")
     done
@@ -846,7 +909,7 @@ download_source_url() {
 build_context_for_index() {
   local idx="$1"
   local filename="${files[$idx]}"
-  local filepath="$desktop_dir/$filename"
+  local filepath="$target_dir/$filename"
   local kind="${file_kinds[$idx]}"
 
   if [[ $kind == directory ]]; then
@@ -881,7 +944,7 @@ build_context_for_index() {
   text+=$'\n'"Size: ${file_size} bytes"
   [[ -n $metadata ]] && text+=$'\n'"Metadata: ${metadata}"
   [[ -n ${file_preview_notes[$idx]:-} ]] && text+=$'\n'"Preview source: ${file_preview_notes[$idx]}"
-  [[ -n ${related_hints[$idx]:-} ]] && text+=$'\n'"Possibly related files on Desktop: ${related_hints[$idx]}"
+  [[ -n ${related_hints[$idx]:-} ]] && text+=$'\n'"Possibly related files in directory: ${related_hints[$idx]}"
   [[ -n $web_hints ]] && text+=$'\n'"Internet hints: ${web_hints}"
   [[ -n $download_url ]] && text+=$'\n'"Download source: ${download_url}"
 
@@ -899,7 +962,7 @@ build_context_for_index() {
 precompute_file_context() {
   local i
   for ((i = 0; i < ${#files[@]}; i++)); do
-    local filepath="$desktop_dir/${files[$i]}"
+    local filepath="$target_dir/${files[$i]}"
     file_kinds[$i]=$(inspect_file_kind "$filepath")
     file_preview_paths[$i]=""
     file_preview_media_types[$i]=""
@@ -911,7 +974,7 @@ precompute_file_context() {
   build_related_hints
 
   for ((i = 0; i < ${#files[@]}; i++)); do
-    local filepath="$desktop_dir/${files[$i]}"
+    local filepath="$target_dir/${files[$i]}"
     if [[ -z ${duplicate_of[$i]:-} && ${file_kinds[$i]} != directory ]]; then
       local asset_info preview_path preview_media preview_note
       asset_info=$(resolve_vision_asset "$filepath" "${file_kinds[$i]}" 2>/dev/null || true)
@@ -1006,8 +1069,8 @@ suggest_name_for_index() {
 ## Claude API — Phase 2: batch grouping + skip detection
 ## ---------------------------------------------------------------------------
 
-ORGANIZE_SYSTEM_PROMPT="You organize a batch of Desktop files and directories that are \
-about to be archived. You receive a JSON array of objects with \"id\", \"original\", \
+ORGANIZE_SYSTEM_PROMPT="You organize a batch of files and directories that are \
+about to be renamed and organized. You receive a JSON array of objects with \"id\", \"original\", \
 \"suggested\", optional \"kind\", optional \"context\", and optional \"related\" \
 hints. Items ending with / are directories. Respond with ONLY a JSON \
 object — no markdown fences, no explanation:
@@ -1031,12 +1094,12 @@ hyphenated group name. The group becomes a subdirectory.
 - Unrelated files get null (they stay in the date root).
 
 Rules for \"skip\":
-- Set true for files that belong on a Desktop and are not clutter: TODO lists, \
-scratch notes, active working files, dotfiles, config files, READMEs, \
-in-progress documents, or anything that looks like it is being actively used \
-rather than accumulated junk.
-- When in doubt, lean toward archiving — only skip things that genuinely \
-look like they belong on a desktop.
+- Set true for files that should not be renamed: TODO lists, scratch notes, \
+active working files, dotfiles, config files, READMEs, in-progress documents, \
+or anything that looks like it is being actively used rather than accumulated \
+clutter.
+- When in doubt, lean toward renaming — only skip things that genuinely \
+look like they should be left alone.
 - When skip is true, set name to null and group to null.
 
 Rules for \"name\":
@@ -1095,39 +1158,14 @@ ${file_pairs_json}"
 ## History / manifest
 ## ---------------------------------------------------------------------------
 
-write_manifest() {
-  local date_tag="$1"
-  shift
-  local manifest="$manifest_dir/${date_tag}.tsv"
-
-  # Append (supports multiple runs on the same day).
-  if [[ ! -f $manifest ]]; then
-    printf '# original\tnew_name\tgroup\tsha1\n' > "$manifest"
-  fi
-
+write_tidy_records() {
+  local date_tag="$1" mode="$2" archive_dir="$3"
+  shift 3
+  # Remaining args: quads of original, new_name, group, sha1.
   while (($# >= 4)); do
-    printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$manifest"
+    tidy_append_rename "$date_tag" "$mode" "$1" "$2" "$3" "$4" "$archive_dir"
     shift 4
   done
-}
-
-append_history() {
-  local date_tag="$1"
-  local summary="$2"
-  shift 2
-  # Remaining args: triplets of original, new_name, group.
-  {
-    printf '\n## %s — %s\n\n' "$date_tag" "$summary"
-    while (($# >= 3)); do
-      local orig="$1" name="$2" group="$3"
-      shift 3
-      if [[ $group == "." ]]; then
-        printf '  %s → %s/%s\n' "$orig" "$date_tag" "$name"
-      else
-        printf '  %s → %s/%s/%s\n' "$orig" "$date_tag" "$group" "$name"
-      fi
-    done
-  } >> "$history_file"
 }
 
 ## ---------------------------------------------------------------------------
@@ -1135,61 +1173,107 @@ append_history() {
 ## ---------------------------------------------------------------------------
 
 cmd_history() {
-  if [[ ! -f $history_file ]]; then
-    log.info "No history yet"
+  if [[ ! -f $tidy_file ]]; then
+    log.info "No history yet — $tidy_file"
     return 0
   fi
-  cat "$history_file"
+
+  local has_renames=0
+  printf 'History for %s:\n\n' "$target_dir"
+  while IFS= read -r line; do
+    local type
+    type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+    [[ $type == rename ]] || continue
+    has_renames=1
+    local date orig renamed group mode
+    date=$(printf '%s' "$line" | jq -r '.date')
+    orig=$(printf '%s' "$line" | jq -r '.original')
+    renamed=$(printf '%s' "$line" | jq -r '.renamed')
+    group=$(printf '%s' "$line" | jq -r '.group')
+    mode=$(printf '%s' "$line" | jq -r '.mode')
+    if [[ $group == "." ]]; then
+      printf '  [%s] %s → %s (%s)\n' "$date" "$orig" "$renamed" "$mode"
+    else
+      printf '  [%s] %s → %s/%s (%s)\n' "$date" "$orig" "$group" "$renamed" "$mode"
+    fi
+  done < "$tidy_file"
+
+  if ((! has_renames)); then
+    log.info "No renames recorded yet"
+  fi
 }
 
 cmd_status() {
-  if [[ ! -f $skiplist_file ]] || [[ ! -s $skiplist_file ]]; then
+  if [[ ! -f $tidy_file ]]; then
     log.info "Skip list is empty"
     return 0
   fi
 
+  local has_skips=0
   printf 'Files that will be skipped on subsequent runs:\n\n'
-  while IFS=$'\t' read -r sha1 filename; do
-    [[ $sha1 == \#* ]] && continue
-    [[ -z $sha1 ]] && continue
-    printf '  %s  %s\n' "${sha1:0:12}" "$filename"
-  done < "$skiplist_file"
+  while IFS= read -r line; do
+    local type
+    type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+    [[ $type == skip ]] || continue
+    has_skips=1
+    local sha1 name
+    sha1=$(printf '%s' "$line" | jq -r '.sha1')
+    name=$(printf '%s' "$line" | jq -r '.name')
+    printf '  %s  %s\n' "${sha1:0:12}" "$name"
+  done < "$tidy_file"
+
+  if ((! has_skips)); then
+    log.info "Skip list is empty"
+  fi
 }
 
 cmd_revert() {
   if [[ ${#subcmd_args[@]} -eq 0 ]]; then
-    log.error "Usage: desktop-rename revert DATE"
+    log.error "Usage: tidy revert DATE [DIRECTORY]"
     return 1
   fi
 
   local date_tag
   date_tag=$(normalize_date_arg "${subcmd_args[0]}") || return 1
 
-  local manifest="$manifest_dir/${date_tag}.tsv"
-  if [[ ! -f $manifest ]]; then
-    log.error "No manifest found for $date_tag"
+  if [[ ! -f $tidy_file ]]; then
+    log.error "No .tidy file found in $target_dir"
     return 1
   fi
 
-  local archive_dir="$backup_root/$date_tag"
-  if [[ ! -d $archive_dir ]]; then
-    log.error "Archive directory not found: $archive_dir"
-    return 1
-  fi
+  local reverted=0 skipped=0
+  while IFS= read -r line; do
+    local type date mode original renamed group sha1 archive_dir
+    type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+    [[ $type == rename ]] || continue
 
-  local copied=0 skipped=0
-  while IFS=$'\t' read -r original new_name group sha1; do
-    [[ $original == \#* ]] && continue
-    [[ -z $original ]] && continue
+    date=$(printf '%s' "$line" | jq -r '.date')
+    [[ $date == "$date_tag" ]] || continue
 
-    local src
-    if [[ $group == "." ]]; then
-      src="$archive_dir/$new_name"
+    mode=$(printf '%s' "$line" | jq -r '.mode')
+    original=$(printf '%s' "$line" | jq -r '.original')
+    renamed=$(printf '%s' "$line" | jq -r '.renamed')
+    group=$(printf '%s' "$line" | jq -r '.group')
+    sha1=$(printf '%s' "$line" | jq -r '.sha1')
+    archive_dir=$(printf '%s' "$line" | jq -r '.archive // "."')
+
+    local src dst
+    if [[ $mode == archive ]]; then
+      if [[ $group == "." ]]; then
+        src="$archive_dir/$renamed"
+      else
+        src="$archive_dir/$group/$renamed"
+      fi
+      dst="$target_dir/$original"
     else
-      src="$archive_dir/$group/$new_name"
+      # inplace mode — renamed file is in the target dir (possibly in a group subdir)
+      if [[ $group == "." ]]; then
+        src="$target_dir/$renamed"
+      else
+        src="$target_dir/$group/$renamed"
+      fi
+      dst="$target_dir/$original"
     fi
-
-    local dst="$desktop_dir/$original"
 
     if [[ ! -e $src ]]; then
       log.warn "Source not found: $src"
@@ -1198,26 +1282,34 @@ cmd_revert() {
     fi
 
     if [[ -e $dst ]]; then
-      log.warn "Already exists on Desktop: $original"
+      log.warn "Already exists: $original"
       skipped=$((skipped + 1))
       continue
     fi
 
     if ((dry_run)); then
-      printf '  %s → Desktop/%s\n' "$(basename "$src")" "$original"
+      printf '  %s → %s\n' "$(basename "$src")" "$original"
     else
-      cp -R -- "$src" "$dst"
-      # Add to skip list so future runs ignore this item.
+      if [[ $mode == archive ]]; then
+        cp -R -- "$src" "$dst"
+      else
+        mv -- "$src" "$dst"
+      fi
       skiplist_add "$sha1" "$original"
-      ((verbose)) && log.success "Copied: $original"
+      ((verbose)) && log.success "Reverted: $original"
     fi
-    copied=$((copied + 1))
-  done < "$manifest"
+    reverted=$((reverted + 1))
+  done < "$tidy_file"
+
+  if ((reverted == 0 && skipped == 0)); then
+    log.info "No renames found for date $date_tag"
+    return 0
+  fi
 
   if ((dry_run)); then
-    log.info "Dry run — $copied file(s) would be copied back"
+    log.info "Dry run — $reverted file(s) would be reverted"
   else
-    log.success "Copied $copied file(s) back to Desktop"
+    log.success "Reverted $reverted file(s)"
     if ((skipped)); then
       log.warn "Skipped $skipped file(s)"
     fi
@@ -1228,23 +1320,59 @@ cmd_revert() {
 ## Main organize flow
 ## ---------------------------------------------------------------------------
 
+resolve_api_key() {
+  [[ -n ${ANTHROPIC_API_KEY:-} ]] && return 0
+  # Source .profile.local if it exists (common location for API keys).
+  if [[ -f "$HOME/.profile.local" ]]; then
+    # shellcheck disable=SC1091
+    source "$HOME/.profile.local" 2>/dev/null || true
+    [[ -n ${ANTHROPIC_API_KEY:-} ]] && return 0
+  fi
+  local keyfile
+  for keyfile in "$HOME/.anthropic/api_key" "$HOME/.config/anthropic/api_key"; do
+    if [[ -f $keyfile ]]; then
+      ANTHROPIC_API_KEY=$(<"$keyfile")
+      ANTHROPIC_API_KEY=$(printf '%s' "$ANTHROPIC_API_KEY" | tr -d '[:space:]')
+      export ANTHROPIC_API_KEY
+      return 0
+    fi
+  done
+  if command -v security >/dev/null 2>&1; then
+    local val
+    val=$(security find-generic-password -s "ANTHROPIC_API_KEY" -w 2>/dev/null || true)
+    if [[ -n $val ]]; then
+      ANTHROPIC_API_KEY="$val"
+      export ANTHROPIC_API_KEY
+      return 0
+    fi
+  fi
+  return 1
+}
+
 main() {
   guards.require_exec jq
   guards.require_exec curl
   guards.require_exec base64
   guards.require_exec shasum
-  guards.require_vars ANTHROPIC_API_KEY
-  guards.require_dir "$desktop_dir"
-  guards.require_dir "$HOME/Dropbox"
 
-  if ! lock_spec=$(lock.acquire "desktop-rename" "$verbose"); then
+  if ! resolve_api_key; then
+    log.error "ANTHROPIC_API_KEY not found in env, key files, or Keychain"
+    log.info "Set the env var or place your key in ~/.anthropic/api_key"
+    return 1
+  fi
+
+  guards.require_dir "$target_dir"
+
+  if [[ -n $archive_root ]]; then
+    guards.require_dir "$(dirname "$archive_root")"
+  fi
+
+  if ! lock_spec=$(lock.acquire "tidy-$(printf '%s' "$target_dir" | shasum | cut -c1-8)" "$verbose"); then
     log.info "Another instance is running; exiting"
     return 0
   fi
 
-  ensure_config_dirs
-
-  # Collect files and directories (non-hidden) on the Desktop, skipping the skip list.
+  # Collect files and directories (non-hidden), skipping the skip list.
   local entry base sha
 
   files=()
@@ -1257,7 +1385,7 @@ main() {
   related_hints=()
   duplicate_of=()
 
-  for entry in "$desktop_dir"/*; do
+  for entry in "$target_dir"/*; do
     [[ -f $entry || -d $entry ]] || continue
     base=$(basename "$entry")
     [[ $base != .* ]] || continue
@@ -1284,11 +1412,11 @@ main() {
   done
 
   if ((${#files[@]} == 0)); then
-    log.info "Nothing found on Desktop"
+    log.info "Nothing found in $target_dir"
     return 0
   fi
 
-  log.info "Found ${#files[@]} item(s) on Desktop"
+  log.info "Found ${#files[@]} item(s) in $target_dir"
 
   precompute_file_context
 
@@ -1348,7 +1476,7 @@ main() {
 
     local orig_label="${files[$i]}"
     # Mark directories with trailing / so Claude can distinguish them.
-    [[ -d "$desktop_dir/$orig_label" ]] && orig_label+="/"
+    [[ -d "$target_dir/$orig_label" ]] && orig_label+="/"
 
     local orig_json sugg_json kind_json context_json related_json
     orig_json=$(json.escape "$orig_label")
@@ -1444,13 +1572,24 @@ main() {
     return 0
   fi
 
-  local date_tag
+  local date_tag mode base_dir
   date_tag=$(today_tag)
-  local archive_dir="$backup_root/$date_tag"
+
+  if [[ -n $archive_root ]]; then
+    mode="archive"
+    base_dir="$archive_root/$date_tag"
+  else
+    mode="inplace"
+    base_dir="$target_dir"
+  fi
 
   # Preview.
   printf '\n'
-  printf '  Archive: %s/\n\n' "$archive_dir"
+  if [[ $mode == archive ]]; then
+    printf '  Archive: %s/\n\n' "$base_dir"
+  else
+    printf '  Renaming in place: %s/\n\n' "$target_dir"
+  fi
   printf '  %-40s  %s\n' "CURRENT" "DESTINATION"
   printf '  %s\n' "$(printf '%.0s─' {1..80})"
 
@@ -1474,7 +1613,7 @@ main() {
   fi
 
   if ((${#skip_files[@]} > 0)); then
-    printf '  Staying on Desktop:\n'
+    printf '  Staying in place:\n'
     for filename in "${skip_files[@]}"; do
       printf '    %s\n' "$filename"
     done
@@ -1509,14 +1648,14 @@ main() {
   # Apply.
   local moved=0
   local duplicates_removed=0
-  local -a manifest_args=() history_args=()
+  local -a tidy_args=()
 
   for ((i = 0; i < ${#move_orig[@]}; i++)); do
-    local src="$desktop_dir/${move_orig[$i]}"
-    local dest_dir="$archive_dir"
+    local src="$target_dir/${move_orig[$i]}"
+    local dest_dir="$base_dir"
 
     if [[ ${move_group[$i]} != "." ]]; then
-      dest_dir="$archive_dir/${move_group[$i]}"
+      dest_dir="$base_dir/${move_group[$i]}"
     fi
 
     local dst="$dest_dir/${move_name[$i]}"
@@ -1540,19 +1679,19 @@ main() {
     ((verbose)) && log.success "${move_orig[$i]} → ${move_name[$i]}"
     moved=$((moved + 1))
 
-    manifest_args+=("${move_orig[$i]}" "${move_name[$i]}" "${move_group[$i]}" "${move_sha[$i]}")
-    history_args+=("${move_orig[$i]}" "${move_name[$i]}" "${move_group[$i]}")
+    tidy_args+=("${move_orig[$i]}" "${move_name[$i]}" "${move_group[$i]}" "${move_sha[$i]}")
   done
 
-  # Write manifest and history.
+  # Write records to .tidy.
   if ((moved > 0)); then
-    write_manifest "$date_tag" "${manifest_args[@]}"
-    append_history "$date_tag" "$summary" "${history_args[@]}"
+    local archive_val="."
+    [[ $mode == archive ]] && archive_val="$base_dir"
+    write_tidy_records "$date_tag" "$mode" "$archive_val" "${tidy_args[@]}"
   fi
 
   if ((duplicate_count > 0)); then
     for ((i = 0; i < ${#duplicate_orig[@]}; i++)); do
-      local dup_path="$desktop_dir/${duplicate_orig[$i]}"
+      local dup_path="$target_dir/${duplicate_orig[$i]}"
       [[ -e $dup_path ]] || continue
       if "${script_dir}/trash" -f "$dup_path" >/dev/null 2>&1; then
         duplicates_removed=$((duplicates_removed + 1))
@@ -1563,11 +1702,14 @@ main() {
     done
   fi
 
+  local verb="Renamed"
+  [[ $mode == archive ]] && verb="Archived"
+
   local result_msg=""
   if ((moved > 0 && duplicates_removed > 0)); then
-    result_msg="Archived $moved file(s), trashed $duplicates_removed duplicate(s) — $summary"
+    result_msg="$verb $moved file(s), trashed $duplicates_removed duplicate(s) — $summary"
   elif ((moved > 0)); then
-    result_msg="Archived $moved file(s) — $summary"
+    result_msg="$verb $moved file(s) — $summary"
   elif ((duplicates_removed > 0)); then
     result_msg="Trashed $duplicates_removed duplicate file(s)"
   fi
@@ -1575,7 +1717,7 @@ main() {
   if [[ -n $result_msg ]]; then
     log.success "$result_msg"
     if command -v osascript >/dev/null 2>&1; then
-      osascript -e "display notification \"$result_msg\" with title \"Desktop Rename\"" 2>/dev/null || true
+      osascript -e "display notification \"$result_msg\" with title \"Tidy\"" 2>/dev/null || true
     fi
   else
     log.info "No changes applied"
@@ -1586,7 +1728,7 @@ main() {
 ## Schedule / Unschedule
 ## ---------------------------------------------------------------------------
 
-LAUNCHD_LABEL="com.nficano.desktop-rename"
+LAUNCHD_LABEL="com.nficano.tidy"
 
 cmd_schedule() {
   local interval="${subcmd_args[0]:-3600}"
@@ -1600,9 +1742,10 @@ cmd_schedule() {
   launchd.write_agent_plist \
     "$plist_path" "$LAUNCHD_LABEL" "$interval" \
     "$logs_dir/stdout.log" "$logs_dir/stderr.log" \
-    --env "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" \
+    --env "HOME=$HOME" \
     --env "PATH=$PATH" \
-    -- "$script_dir/desktop-rename" --yes --min-age 12
+    -- "$script_dir/tidy" --yes --min-age 12 \
+    --archive "$HOME/Dropbox/backups/oak/desktop" "$HOME/Desktop"
 
   launchd.bootstrap_agent "$LAUNCHD_LABEL" "$plist_path" "" "$verbose"
   log.success "Scheduled: every $((interval / 60)) minutes"
@@ -1616,7 +1759,7 @@ cmd_unschedule() {
   plist_path=$(launchd.agent_plist_path "$LAUNCHD_LABEL")
   launchd.unload_agent "$LAUNCHD_LABEL" "$plist_path" "" "$verbose"
   rm -f "$plist_path"
-  log.success "Unscheduled desktop-rename"
+  log.success "Unscheduled tidy"
 }
 
 ## ---------------------------------------------------------------------------

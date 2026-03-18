@@ -83,6 +83,9 @@ os.setenv "VISUAL" "cursor"
 os.setenv "EDITOR" "cursor"
 os.setenv "HSTR_TIOCSTI" "y"
 
+# 1Password SSH Agent
+when.darwin os.setenv "SSH_AUTH_SOCK" "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+
 os.setenv "LESS" "-RiF --mouse --wheel-lines=3" # Mouse scoll support
 
 # Set various Bash options.
