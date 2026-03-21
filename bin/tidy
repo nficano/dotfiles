@@ -29,6 +29,7 @@
 #/    -v, --verbose        Enable verbose output
 #/    -n, --dry-run        Preview changes without applying them
 #/    -y, --yes            Auto-approve changes (skip confirmation prompt)
+#/    -r, --recursive      Recurse into subdirectories (each gets its own .tidy)
 #/    -m, --model MODEL    Claude model (default: claude-sonnet-4-20250514)
 #/        --min-age HOURS  Only process files older than HOURS hours
 #/        --archive DIR    Archive files to DIR/YY-MM-DD/ instead of renaming
@@ -43,6 +44,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 verbose=0
 dry_run=0
 auto_approve=0
+recursive=0
 min_age_hours=0
 lock_spec=""
 model="claude-sonnet-4-20250514"
@@ -92,6 +94,9 @@ parse_args() {
       ;;
     -y | --yes)
       auto_approve=1
+      ;;
+    -r | --recursive)
+      recursive=1
       ;;
     --min-age)
       shift
@@ -400,6 +405,37 @@ is_sendable_image() {
   ((size > 0 && size <= MAX_VISION_BYTES))
 }
 
+optimize_image() {
+  local filepath="$1"
+  local ext
+  ext=$(file_ext "$filepath")
+
+  # Try cwebp for lossless-ish shrink (produces a webp the vision API accepts).
+  if command -v cwebp >/dev/null 2>&1; then
+    ensure_tmp_dir
+    local tmp_webp="$tmp_dir/$(file_stem "$filepath")-opt.webp"
+    if cwebp -q 70 -resize 1600 0 "$filepath" -o "$tmp_webp" >/dev/null 2>&1 \
+       && [[ -f $tmp_webp ]] && (($(get_file_size "$tmp_webp") <= MAX_VISION_BYTES)); then
+      printf '%s\n' "$tmp_webp"
+      return 0
+    fi
+  fi
+
+  # Try imageoptim-cli for in-place optimization (copy first).
+  if command -v imageoptim >/dev/null 2>&1; then
+    ensure_tmp_dir
+    local tmp_opt="$tmp_dir/$(basename "$filepath")"
+    cp -- "$filepath" "$tmp_opt"
+    if imageoptim "$tmp_opt" >/dev/null 2>&1 \
+       && [[ -f $tmp_opt ]] && (($(get_file_size "$tmp_opt") <= MAX_VISION_BYTES)); then
+      printf '%s\n' "$tmp_opt"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 compress_image_for_vision() {
   local filepath="$1"
 
@@ -407,6 +443,14 @@ compress_image_for_vision() {
   basename=$(basename "$filepath")
   stem=$(file_stem "$basename")
 
+  # First try lightweight optimizers (cwebp / imageoptim).
+  local optimized
+  if optimized=$(optimize_image "$filepath") && [[ -n $optimized ]]; then
+    printf '%s\n' "$optimized"
+    return 0
+  fi
+
+  # Fall back to ffmpeg-based resize via this-to-that.
   ensure_tmp_dir
   local tmp_jpg="$tmp_dir/${stem}-vision.jpg"
   local tmp_small="$tmp_dir/${stem}-vision-small.jpg"
@@ -959,6 +1003,63 @@ build_context_for_index() {
   printf '%s\n' "$text"
 }
 
+batch_compress_previews() {
+  # Batch-compress all vision-eligible images in one cwebp sweep.
+  # Populates file_preview_paths/media_types/notes for images that succeed.
+  # Returns the indices that were NOT handled (need individual resolve).
+  ensure_tmp_dir
+  local i filepath kind ext
+  local -a cwebp_indices=() cwebp_srcs=() cwebp_dsts=()
+  local -a remaining=()
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    [[ -z ${duplicate_of[$i]:-} ]] || continue
+    filepath="$target_dir/${files[$i]}"
+    kind="${file_kinds[$i]}"
+    [[ $kind != directory ]] || continue
+
+    ext=$(file_ext "${files[$i]}")
+    if is_image_ext "$ext" && command -v cwebp >/dev/null 2>&1; then
+      local dst="$tmp_dir/$(file_stem "${files[$i]}")-preview.webp"
+      cwebp_indices+=("$i")
+      cwebp_srcs+=("$filepath")
+      cwebp_dsts+=("$dst")
+    else
+      remaining+=("$i")
+    fi
+  done
+
+  # Run cwebp in parallel for all images (up to 8 at a time).
+  if ((${#cwebp_indices[@]} > 0)); then
+    ((verbose)) && log.info "Batch-compressing ${#cwebp_indices[@]} image(s) for preview"
+    local j pids=() batch_limit=8
+    for ((j = 0; j < ${#cwebp_indices[@]}; j++)); do
+      cwebp -q 50 -resize 1200 0 "${cwebp_srcs[$j]}" -o "${cwebp_dsts[$j]}" \
+        >/dev/null 2>&1 &
+      pids+=($!)
+      if (( ${#pids[@]} >= batch_limit )); then
+        wait "${pids[@]}" 2>/dev/null || true
+        pids=()
+      fi
+    done
+    ((${#pids[@]} > 0)) && { wait "${pids[@]}" 2>/dev/null || true; }
+
+    for ((j = 0; j < ${#cwebp_indices[@]}; j++)); do
+      local idx="${cwebp_indices[$j]}"
+      if [[ -f ${cwebp_dsts[$j]} ]] && (($(get_file_size "${cwebp_dsts[$j]}") <= MAX_VISION_BYTES)); then
+        file_preview_paths[$idx]="${cwebp_dsts[$j]}"
+        file_preview_media_types[$idx]="image/webp"
+        file_preview_notes[$idx]="Batch-compressed image preview"
+      else
+        # cwebp failed or too large — fall back to individual resolve.
+        remaining+=("$idx")
+      fi
+    done
+  fi
+
+  printf '%s\n' "${remaining[@]}"
+}
+
 precompute_file_context() {
   local i
   for ((i = 0; i < ${#files[@]}; i++)); do
@@ -973,7 +1074,14 @@ precompute_file_context() {
   detect_duplicate_files
   build_related_hints
 
-  for ((i = 0; i < ${#files[@]}; i++)); do
+  # Batch-compress images first, then handle remaining files individually.
+  local -a remaining_indices=()
+  while IFS= read -r idx; do
+    [[ -n $idx ]] || continue
+    remaining_indices+=("$idx")
+  done < <(batch_compress_previews)
+
+  for i in "${remaining_indices[@]}"; do
     local filepath="$target_dir/${files[$i]}"
     if [[ -z ${duplicate_of[$i]:-} && ${file_kinds[$i]} != directory ]]; then
       local asset_info preview_path preview_media preview_note
@@ -985,6 +1093,9 @@ precompute_file_context() {
         file_preview_notes[$i]="$preview_note"
       fi
     fi
+  done
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
     file_contexts[$i]=$(build_context_for_index "$i")
   done
 }
@@ -992,6 +1103,8 @@ precompute_file_context() {
 ## ---------------------------------------------------------------------------
 ## Claude API — Phase 1: individual file naming (with vision)
 ## ---------------------------------------------------------------------------
+
+BATCH_SIZE=20
 
 NAME_SYSTEM_PROMPT="You rename files and directories. You receive a filename or \
 directory name plus any available metadata, local relationship hints, web hints, \
@@ -1012,6 +1125,25 @@ improve accuracy.
 video, file, export, or document unless that is all the evidence supports.
 - If a directory listing is provided, choose a name that describes the contents.
 - If the name is already clean, return it unchanged."
+
+BATCH_NAME_SYSTEM_PROMPT="You rename files and directories. You receive a JSON \
+array of objects, each with an \"id\" and text context about a file. \
+Respond with ONLY a JSON array — no markdown fences, no explanation. Each element \
+must include the \"id\" from the input and a \"name\" field:
+[{\"id\": 0, \"name\": \"suggested-name\"}, ...]
+
+Rules:
+- For files, keep the same file extension. For directories, do not add an extension.
+- Lowercase, hyphens instead of spaces or underscores.
+- Remove redundant words, noise dates, and gibberish characters.
+- Short but descriptive.
+- Use metadata, related-file hints, and internet hints when they materially \
+improve accuracy.
+- Prefer specific nouns over generic words like image, photo, screenshot, \
+video, file, export, or document unless that is all the evidence supports.
+- If a directory listing is provided, choose a name that describes the contents.
+- If the name is already clean, return it unchanged.
+- Every input object MUST appear in the output with its original id."
 
 suggest_name_for_index() {
   local idx="$1"
@@ -1065,6 +1197,79 @@ suggest_name_for_index() {
   printf '%s\n' "$name"
 }
 
+suggest_names_batch() {
+  # Accepts a list of file indices (text-only, no vision) and returns
+  # suggested names via a single API call. Results are written into
+  # the suggested_names array (declared by the caller).
+  local -a batch_indices=("$@")
+  ((${#batch_indices[@]} > 0)) || return 0
+
+  # Build a JSON array of {id, context} objects.
+  local batch_json="[" first=1
+  local idx context_json
+  for idx in "${batch_indices[@]}"; do
+    context_json=$(json.escape "${file_contexts[$idx]}")
+    if ((first)); then
+      first=0
+    else
+      batch_json+=","
+    fi
+    batch_json+="{\"id\":$idx,\"context\":\"$context_json\"}"
+  done
+  batch_json+="]"
+
+  local max_tokens=$(( ${#batch_indices[@]} * 200 ))
+  ((max_tokens < 1024)) && max_tokens=1024
+  ((max_tokens > 4096)) && max_tokens=4096
+
+  local user_text="Files to rename:
+${batch_json}"
+
+  local payload
+  payload=$(ai.anthropic_chat_payload "$model" "$BATCH_NAME_SYSTEM_PROMPT" "$user_text" "$max_tokens")
+
+  local resp
+  ai.anthropic_messages resp "$payload" || {
+    ai.anthropic_log_error resp "Failed to get batch name suggestions"
+    return 1
+  }
+
+  if ! http.response_ok resp; then
+    ai.anthropic_log_error resp "API error for batch name suggestions"
+    return 1
+  fi
+
+  local raw
+  raw=$(ai.anthropic_message_text resp) || {
+    log.error "Failed to parse batch naming response"
+    return 1
+  }
+
+  # Strip markdown fences.
+  raw="${raw#\`\`\`json}"
+  raw="${raw#\`\`\`}"
+  raw="${raw%\`\`\`}"
+
+  # Parse each result by id.
+  local count
+  count=$(printf '%s' "$raw" | jq -r 'length' 2>/dev/null) || {
+    log.error "Invalid batch naming response"
+    ((verbose)) && log.error "Raw: $raw"
+    return 1
+  }
+
+  local j file_id name
+  for ((j = 0; j < count; j++)); do
+    file_id=$(printf '%s' "$raw" | jq -r ".[$j].id // empty" 2>/dev/null)
+    name=$(printf '%s' "$raw" | jq -er ".[$j].name // empty" 2>/dev/null) || continue
+    [[ -n $file_id && -n $name ]] || continue
+    # Trim whitespace.
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+    suggested_names[$file_id]="$name"
+  done
+}
+
 ## ---------------------------------------------------------------------------
 ## Claude API — Phase 2: batch grouping + skip detection
 ## ---------------------------------------------------------------------------
@@ -1092,6 +1297,8 @@ Rules for \"group\":
 hyphenated group name. The group becomes a subdirectory.
 - Use the context and related hints to find clusters that belong together.
 - Unrelated files get null (they stay in the date root).
+- NEVER use a group name that matches the parent directory name. The files \
+are already in that directory — creating a same-named subdirectory is redundant.
 
 Rules for \"skip\":
 - Set true for files that should not be renamed: TODO lists, scratch notes, \
@@ -1107,6 +1314,9 @@ Rules for \"name\":
 - Use local metadata or internet hints when they make the title more specific.
 - For files, keep the same file extension as the original. For directories, no extension.
 - Lowercase, hyphens instead of spaces.
+- When a file is placed in a group, do NOT prefix the filename with the \
+group name. The group directory already provides that context. For example, \
+if the group is \"dogs\", name the file \"sitting.png\" not \"dogs-sitting.png\".
 
 Rules for \"summary\":
 - One short sentence describing the batch, e.g. \"tax documents and dog photos\".
@@ -1115,8 +1325,12 @@ Rules for \"summary\":
 organize_batch() {
   local file_pairs_json="$1"
 
+  local parent_name
+  parent_name=$(basename "$target_dir")
+
   local user_text
-  user_text="Files to organize:
+  user_text="Parent directory: ${parent_name}
+Files to organize:
 ${file_pairs_json}"
 
   local payload
@@ -1349,28 +1563,9 @@ resolve_api_key() {
   return 1
 }
 
-main() {
-  guards.require_exec jq
-  guards.require_exec curl
-  guards.require_exec base64
-  guards.require_exec shasum
-
-  if ! resolve_api_key; then
-    log.error "ANTHROPIC_API_KEY not found in env, key files, or Keychain"
-    log.info "Set the env var or place your key in ~/.anthropic/api_key"
-    return 1
-  fi
-
-  guards.require_dir "$target_dir"
-
-  if [[ -n $archive_root ]]; then
-    guards.require_dir "$(dirname "$archive_root")"
-  fi
-
-  if ! lock_spec=$(lock.acquire "tidy-$(printf '%s' "$target_dir" | shasum | cut -c1-8)" "$verbose"); then
-    log.info "Another instance is running; exiting"
-    return 0
-  fi
+process_directory() {
+  target_dir="$1"
+  tidy_file="$target_dir/.tidy"
 
   # Collect files and directories (non-hidden), skipping the skip list.
   local entry base sha
@@ -1431,36 +1626,95 @@ main() {
     fi
   done
 
-  # Phase 1: get a suggested name for each file individually.
+  # Phase 1: get suggested names. Vision files are handled individually;
+  # text-only files are batched into groups of BATCH_SIZE for efficiency.
   local -a suggested_names=()
   local api_errors=0
+  local -a text_batch_indices=()
+
+  for ((i = 0; i < ${#files[@]}; i++)); do
+    suggested_names[$i]=""
+  done
 
   for ((i = 0; i < ${#files[@]}; i++)); do
     filename="${files[$i]}"
     if [[ -n ${duplicate_of[$i]:-} ]]; then
       ((verbose)) && log.info "Skipping duplicate candidate: $filename"
-      suggested_names+=("")
-      continue
-    fi
-    ((verbose)) && log.info "Asking Claude about: $filename"
-
-    local name
-    if ! name=$(suggest_name_for_index "$i"); then
-      log.warn "Skipping: $filename (API error)"
-      suggested_names+=("")
-      api_errors=$((api_errors + 1))
       continue
     fi
 
-    if [[ -z $name ]]; then
-      log.warn "Skipping: $filename (empty suggestion)"
-      suggested_names+=("")
-      api_errors=$((api_errors + 1))
-      continue
+    if [[ -n ${file_preview_paths[$i]:-} && -n ${file_preview_media_types[$i]:-} ]]; then
+      # Vision file — must be handled individually.
+      ((verbose)) && log.info "Asking Claude about (vision): $filename"
+      local name
+      if ! name=$(suggest_name_for_index "$i"); then
+        log.warn "Skipping: $filename (API error)"
+        api_errors=$((api_errors + 1))
+        continue
+      fi
+      if [[ -z $name ]]; then
+        log.warn "Skipping: $filename (empty suggestion)"
+        api_errors=$((api_errors + 1))
+        continue
+      fi
+      suggested_names[$i]="$name"
+    else
+      # Text-only file — queue for batch processing.
+      text_batch_indices+=("$i")
     fi
-
-    suggested_names+=("$name")
   done
+
+  # Process text-only files in batches.
+  if ((${#text_batch_indices[@]} > 0)); then
+    local batch_start=0
+    while ((batch_start < ${#text_batch_indices[@]})); do
+      local -a current_batch=()
+      local batch_end=$((batch_start + BATCH_SIZE))
+      ((batch_end > ${#text_batch_indices[@]})) && batch_end=${#text_batch_indices[@]}
+
+      for ((i = batch_start; i < batch_end; i++)); do
+        current_batch+=("${text_batch_indices[$i]}")
+      done
+
+      ((verbose)) && log.info "Naming batch of ${#current_batch[@]} text-only file(s)"
+      if ! suggest_names_batch "${current_batch[@]}"; then
+        log.warn "Batch naming failed, falling back to individual calls"
+        for idx in "${current_batch[@]}"; do
+          filename="${files[$idx]}"
+          ((verbose)) && log.info "Asking Claude about: $filename"
+          local name
+          if ! name=$(suggest_name_for_index "$idx"); then
+            log.warn "Skipping: $filename (API error)"
+            api_errors=$((api_errors + 1))
+            continue
+          fi
+          if [[ -z $name ]]; then
+            log.warn "Skipping: $filename (empty suggestion)"
+            api_errors=$((api_errors + 1))
+            continue
+          fi
+          suggested_names[$idx]="$name"
+        done
+      fi
+
+      batch_start=$batch_end
+    done
+
+    # Check for files that didn't get a name from batch (API omitted them).
+    for idx in "${text_batch_indices[@]}"; do
+      if [[ -z ${suggested_names[$idx]:-} ]]; then
+        filename="${files[$idx]}"
+        ((verbose)) && log.info "Retrying individually: $filename"
+        local name
+        if name=$(suggest_name_for_index "$idx") && [[ -n $name ]]; then
+          suggested_names[$idx]="$name"
+        else
+          log.warn "Skipping: $filename (no suggestion)"
+          api_errors=$((api_errors + 1))
+        fi
+      fi
+    done
+  fi
 
   # Build JSON array for Phase 2, filtering out files that failed Phase 1.
   # Each entry gets a numeric "id" so we can map results back by index
@@ -1551,6 +1805,31 @@ main() {
             break
           fi
         done
+      fi
+
+      # Enforce: group must not match parent directory name.
+      local parent_name
+      parent_name=$(basename "$target_dir")
+      if [[ -n $group && $group == "$parent_name" ]]; then
+        ((verbose)) && log.info "Suppressing group '$group' (same as parent dir)"
+        group=""
+      fi
+
+      # Enforce: strip group prefix from filename when grouped.
+      if [[ -n $group && $group != "." ]]; then
+        local stem ext_part stripped
+        ext_part=$(file_ext "$name")
+        stem=$(file_stem "$name")
+        # Remove group as a prefix (with optional separator).
+        stripped=$(printf '%s' "$stem" | sed -E "s/^${group}[- _]?//")
+        if [[ -n $stripped && $stripped != "$stem" ]]; then
+          if [[ -n $ext_part ]]; then
+            name="${stripped}.${ext_part}"
+          else
+            name="$stripped"
+          fi
+          ((verbose)) && log.info "Truncated group prefix: $name"
+        fi
       fi
 
       move_orig+=("$orig")
@@ -1722,6 +2001,43 @@ main() {
   else
     log.info "No changes applied"
   fi
+}
+
+main() {
+  guards.require_exec jq
+  guards.require_exec curl
+  guards.require_exec base64
+  guards.require_exec shasum
+
+  if ! resolve_api_key; then
+    log.error "ANTHROPIC_API_KEY not found in env, key files, or Keychain"
+    log.info "Set the env var or place your key in ~/.anthropic/api_key"
+    return 1
+  fi
+
+  guards.require_dir "$target_dir"
+
+  if [[ -n $archive_root ]]; then
+    guards.require_dir "$(dirname "$archive_root")"
+  fi
+
+  if ! lock_spec=$(lock.acquire "tidy-$(printf '%s' "$target_dir" | shasum | cut -c1-8)" "$verbose"); then
+    log.info "Another instance is running; exiting"
+    return 0
+  fi
+
+  if ((recursive)); then
+    # Process subdirectories depth-first so that renames in children
+    # complete before the parent inspects directory names.
+    local sub
+    while IFS= read -r -d '' sub; do
+      [[ $sub != "$target_dir" ]] || continue
+      log.info "Processing: $sub"
+      process_directory "$sub"
+    done < <(find "$target_dir" -mindepth 1 -type d -not -name '.*' -print0 | sort -rz)
+  fi
+
+  process_directory "$target_dir"
 }
 
 ## ---------------------------------------------------------------------------
