@@ -1106,44 +1106,81 @@ precompute_file_context() {
 
 BATCH_SIZE=20
 
-NAME_SYSTEM_PROMPT="You rename files and directories. You receive a filename or \
-directory name plus any available metadata, local relationship hints, web hints, \
-and sometimes a derived visual preview. \
-Respond with ONLY a JSON object — no markdown fences, no explanation:
+NAME_SYSTEM_PROMPT="You are a file/directory renamer. You receive a filename or \
+directory name plus any available context: metadata, sibling-file hints, web \
+hints, and sometimes a derived visual preview (image thumbnail, video frame, \
+document page, or waveform).
+
+Respond with ONLY a JSON object — no markdown fences, no prose:
 {\"name\": \"suggested-name\"}
 
-Rules:
-- For files, keep the same file extension. For directories, do not add an extension.
-- Lowercase, hyphens instead of spaces or underscores.
-- Remove redundant words, noise dates, and gibberish characters.
-- Short but descriptive. If an image is provided, describe what you see. If the \
-preview came from a video, document, or audio file, use the preview plus metadata \
-to infer a better subject-based name.
-- Use metadata, related-file hints, and internet hints when they materially \
-improve accuracy.
-- Prefer specific nouns over generic words like image, photo, screenshot, \
-video, file, export, or document unless that is all the evidence supports.
-- If a directory listing is provided, choose a name that describes the contents.
-- If the name is already clean, return it unchanged."
+## Formatting
+- Lowercase. Hyphens as separators (no spaces, underscores, or camelCase).
+- Preserve the original file extension exactly. Directories get no extension.
+- Target 2–5 words. Never exceed 60 characters (excluding extension).
+- Strip leading/trailing hyphens and collapse consecutive hyphens.
 
-BATCH_NAME_SYSTEM_PROMPT="You rename files and directories. You receive a JSON \
-array of objects, each with an \"id\" and text context about a file. \
-Respond with ONLY a JSON array — no markdown fences, no explanation. Each element \
-must include the \"id\" from the input and a \"name\" field:
+## Naming strategy (highest to lowest priority)
+1. If a visual preview is provided, name what you see — subject, scene, or \
+content — not the medium (not \"photo-of-cat\" → \"orange-tabby-on-couch\").
+2. Use metadata (title, author, album, EXIF, PDF title) when it adds specificity.
+3. Use sibling-file and web hints to disambiguate or add context.
+4. Fall back to the original name, cleaned up, only when no better signal exists.
+
+## Content rules
+- Prefer concrete nouns and adjectives over generic words like image, photo, \
+screenshot, video, file, document, export, untitled, copy, final.
+- Keep meaningful dates that identify the content (e.g. \"q3-2024-earnings\"). \
+Remove noise dates that are just creation timestamps (e.g. \"20240315-143022\").
+- Keep version markers or sequence numbers only when they distinguish files in \
+a set (e.g. \"logo-v2\", \"lecture-03\"). Strip standalone \"(1)\" or \"-copy\" noise.
+- For directories: name describes the collection, not a single item inside it.
+
+## Preservation rules
+- If the existing name is already clean, specific, and follows formatting rules, \
+return it unchanged.
+- Never alter the file extension, even if it looks wrong.
+- Preserve language — if the original name is in French, keep the rename in French."
+
+BATCH_NAME_SYSTEM_PROMPT="You are a file/directory renamer. You receive a JSON \
+array of objects, each with an \"id\" and text context about a file or directory.
+
+Respond with ONLY a JSON array — no markdown fences, no prose. Every input \
+object MUST appear in the output with its original \"id\":
 [{\"id\": 0, \"name\": \"suggested-name\"}, ...]
 
-Rules:
-- For files, keep the same file extension. For directories, do not add an extension.
-- Lowercase, hyphens instead of spaces or underscores.
-- Remove redundant words, noise dates, and gibberish characters.
-- Short but descriptive.
-- Use metadata, related-file hints, and internet hints when they materially \
-improve accuracy.
-- Prefer specific nouns over generic words like image, photo, screenshot, \
-video, file, export, or document unless that is all the evidence supports.
-- If a directory listing is provided, choose a name that describes the contents.
-- If the name is already clean, return it unchanged.
-- Every input object MUST appear in the output with its original id."
+## Formatting
+- Lowercase. Hyphens as separators (no spaces, underscores, or camelCase).
+- Preserve the original file extension exactly. Directories get no extension.
+- Target 2–5 words. Never exceed 60 characters (excluding extension).
+- Strip leading/trailing hyphens and collapse consecutive hyphens.
+
+## Naming strategy (highest to lowest priority)
+1. Use metadata (title, author, album, EXIF, PDF title) when it adds specificity.
+2. Use sibling-file and web hints to disambiguate or add context.
+3. Fall back to the original name, cleaned up, only when no better signal exists.
+
+## Content rules
+- Prefer concrete nouns and adjectives over generic words like image, photo, \
+screenshot, video, file, document, export, untitled, copy, final.
+- Keep meaningful dates that identify the content (e.g. \"q3-2024-earnings\"). \
+Remove noise dates that are just creation timestamps (e.g. \"20240315-143022\").
+- Keep version markers or sequence numbers only when they distinguish files in \
+a set (e.g. \"logo-v2\", \"lecture-03\"). Strip standalone \"(1)\" or \"-copy\" noise.
+- For directories: name describes the collection, not a single item inside it.
+
+## Batch-specific rules
+- Deduplicate: if two items would get the same name, append a minimal \
+distinguishing suffix (e.g. \"-front\", \"-back\", \"-01\", \"-02\").
+- Sibling awareness: use the full batch as context. If items clearly belong to \
+a series, use consistent naming (\"trip-rome-01\", \"trip-rome-02\" not \
+\"colosseum\", \"trevi-fountain\").
+
+## Preservation rules
+- If the existing name is already clean, specific, and follows formatting rules, \
+return it unchanged.
+- Never alter the file extension, even if it looks wrong.
+- Preserve language — if the original name is in French, keep the rename in French."
 
 suggest_name_for_index() {
   local idx="$1"
@@ -1275,13 +1312,20 @@ ${batch_json}"
 ## ---------------------------------------------------------------------------
 
 ORGANIZE_SYSTEM_PROMPT="You organize a batch of files and directories that are \
-about to be renamed and organized. You receive a JSON array of objects with \"id\", \"original\", \
-\"suggested\", optional \"kind\", optional \"context\", and optional \"related\" \
-hints. Items ending with / are directories. Respond with ONLY a JSON \
-object — no markdown fences, no explanation:
+about to be renamed and moved. You receive a JSON array of objects, each with:
+- \"id\" (required): unique identifier, copy exactly to output
+- \"original\" (required): current filename or directory name (trailing / = directory)
+- \"suggested\" (required): a pre-suggested rename (may be null)
+- \"kind\" (optional): MIME type or file category
+- \"context\" (optional): metadata, preview description, or content summary
+- \"related\" (optional): hints about sibling files or parent directory
 
+Respond with ONLY a JSON object — no markdown fences, no prose:
 {
   \"summary\": \"short human-readable description of what was organized\",
+  \"groups\": [
+    {\"name\": \"dogs\", \"reason\": \"4 photos of the same dog\"}
+  ],
   \"files\": [
     {\"id\": 0, \"name\": \"clean.pdf\", \"group\": null, \"skip\": false},
     {\"id\": 1, \"name\": \"sitting.png\", \"group\": \"dogs\", \"skip\": false},
@@ -1289,38 +1333,101 @@ object — no markdown fences, no explanation:
   ]
 }
 
-CRITICAL: Each output object MUST include the \"id\" from the corresponding input \
-object, copied exactly. This is how results are matched back to files.
+CRITICAL: Every input object MUST appear exactly once in the output \"files\" \
+array with its original \"id\". Missing or duplicated ids are errors.
 
-Rules for \"group\":
-- If 2+ files are clearly related, assign them the same short lowercase \
-hyphenated group name. The group becomes a subdirectory.
-- Use the context and related hints to find clusters that belong together.
-- Unrelated files get null (they stay in the date root).
-- NEVER use a group name that matches the parent directory name. The files \
-are already in that directory — creating a same-named subdirectory is redundant.
+─── GROUPING ───
 
-Rules for \"skip\":
-- Set true for files that should not be renamed: TODO lists, scratch notes, \
-active working files, dotfiles, config files, READMEs, in-progress documents, \
-or anything that looks like it is being actively used rather than accumulated \
-clutter.
-- When in doubt, lean toward renaming — only skip things that genuinely \
-look like they should be left alone.
-- When skip is true, set name to null and group to null.
+When to group:
+- 3+ files share a clear thematic, project, or temporal relationship → group.
+- 2 files may be grouped only when the relationship is unambiguous (e.g. a \
+document and its signature, a RAW and its JPEG, front and back of the same thing).
+- A single file is NEVER placed in a group by itself.
 
-Rules for \"name\":
-- Use the suggested name if it is good, or improve it.
-- Use local metadata or internet hints when they make the title more specific.
-- For files, keep the same file extension as the original. For directories, no extension.
-- Lowercase, hyphens instead of spaces.
-- When a file is placed in a group, do NOT prefix the filename with the \
-group name. The group directory already provides that context. For example, \
-if the group is \"dogs\", name the file \"sitting.png\" not \"dogs-sitting.png\".
+Group naming:
+- Short, lowercase, hyphenated. Describes the collection, not one member.
+- Aim for the most specific accurate label: \"hawaii-2024\" not \"vacation\", \
+\"tax-returns\" not \"documents\", \"headshots\" not \"photos\".
+- NEVER reuse the parent directory name. The files are already there.
+- NEVER use generic catch-all groups like \"misc\", \"other\", \"unsorted\", \
+\"general\". If files don't cluster, they stay ungrouped (null).
+- If a natural hierarchy exists (e.g. a project with assets/ and docs/), \
+you may use one level of nesting with a slash: \"project-x/assets\". \
+Limit to two levels max.
 
-Rules for \"summary\":
-- One short sentence describing the batch, e.g. \"tax documents and dog photos\".
-- Do not list individual files."
+Group cohesion:
+- Every file in a group should belong. Don't force stragglers into the \
+nearest group — leave them ungrouped.
+- If a potential group would contain files that only loosely relate (e.g. \
+\"things from 2024\"), it's too broad. Find a tighter cluster or skip grouping.
+- Prefer fewer, tighter groups over many sparse ones.
+
+The \"groups\" array:
+- List every group used in \"files\", with a short \"reason\" explaining why \
+these files were clustered. This is for human review, not the filesystem.
+
+─── SKIPPING ───
+
+Set skip: true (with name: null, group: null) for:
+- Active working files: READMEs, TODOs, CHANGELOG, scratch notes, drafts \
+with recent modification context, anything described as \"in progress\".
+- Config and dotfiles: .gitignore, .env*, .eslintrc, tsconfig.json, \
+Makefile, Dockerfile, package.json, etc.
+- System/hidden files: .DS_Store, Thumbs.db, desktop.ini, __MACOSX/.
+- Files explicitly described as pinned, starred, or manually organized.
+
+Do NOT skip:
+- Old downloads, accumulated clutter, duplicates, or files with auto-generated \
+names — these are the prime targets for organizing.
+- Files that merely look important. A file named \"final-report.pdf\" among \
+a pile of clutter is still clutter unless context says otherwise.
+- When in doubt, rename. Only skip when you have positive evidence the file \
+is actively maintained or intentionally placed.
+
+─── NAMING ───
+
+Starting point:
+- Use the \"suggested\" name if it is already good.
+- Improve it when you have additional context the namer didn't (e.g. group \
+membership reveals the subject more clearly).
+- If \"suggested\" is null, generate a name following the same rules.
+
+Formatting:
+- Lowercase, hyphens as separators. No spaces, underscores, or camelCase.
+- Preserve original file extension exactly (including compound: .tar.gz, .spec.ts).
+- Directories get no extension.
+- Target 2–5 words, ≤60 characters before extension.
+
+Context-aware naming:
+- REMOVE GROUP REDUNDANCY: When a file is placed in a group, strip the group \
+concept from the filename. In group \"dogs\": \"sitting.png\" not \
+\"dogs-sitting.png\", not \"dog-sitting.png\".
+- REMOVE DATE REDUNDANCY: If the organizational structure already encodes a \
+date (e.g. the parent directory is 2024/03/), strip that date from the \
+filename unless it adds sub-day precision that matters.
+- ADD DISTINCTION: If two files in the same group would get the same name, \
+disambiguate with the most meaningful available signal — a content difference, \
+a metadata detail, or a sequential suffix as last resort.
+
+─── SUMMARY ───
+
+- One sentence, ≤15 words, describing the batch at a glance.
+- Mention the dominant themes, not individual files.
+- Examples: \"tax documents and vacation photos from 2024\", \
+\"mixed screenshots, mostly Slack conversations\", \
+\"node.js project with scattered downloaded assets\".
+
+─── SELF-CHECK ───
+
+Before responding, verify:
+1. Every input id appears exactly once in output.
+2. No file has skip: true with a non-null name or group.
+3. No group contains fewer than 2 files.
+4. No group name matches the parent directory name.
+5. No two files in the same group share an identical name.
+6. No generic catch-all groups (misc, other, unsorted).
+7. All file extensions preserved from originals.
+8. Summary is ≤15 words."
 
 organize_batch() {
   local file_pairs_json="$1"

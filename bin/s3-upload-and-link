@@ -4,8 +4,9 @@
 #/ Usage: $(basename "$0") [-h] [-v] <file>
 #/
 #/ Available options:
-#/    -h, --help      Print this help and exit
-#/    -v, --verbose   Enable verbose output
+#/    -h, --help          Print this help and exit
+#/    -v, --verbose       Enable verbose output
+#/    -t, --ttl SECONDS   Expiry TTL in seconds (default: 259200 = 3 days)
 #/
 #/ Environment variables:
 #/    S3_UPLOAD_LINK_BUCKET        Required S3 bucket name (accepts optional s3:// prefix)
@@ -29,6 +30,7 @@ source "$(dirname "$0")/../lib/bash/initrc"
 
 verbose=0
 file_path=""
+ttl=""
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -38,6 +40,10 @@ parse_args() {
       ;;
     -v | --verbose)
       verbose=1
+      ;;
+    -t | --ttl)
+      shift
+      ttl="$1"
       ;;
     --)
       shift
@@ -278,11 +284,10 @@ main() {
 
   object_key=$(build_object_key "$object_id" "$prefix" "$filename" "$sanitized")
 
-  if [[ -n ${S3_UPLOAD_LINK_EXPIRES_IN:-} ]]; then
-    script.validate_positive_int "${S3_UPLOAD_LINK_EXPIRES_IN}" "S3_UPLOAD_LINK_EXPIRES_IN"
-    if ! expires_iso=$(compute_expiry_timestamp "${S3_UPLOAD_LINK_EXPIRES_IN}"); then
-      exit 1
-    fi
+  local effective_ttl="${ttl:-${S3_UPLOAD_LINK_EXPIRES_IN:-259200}}"
+  script.validate_positive_int "$effective_ttl" "TTL"
+  if ! expires_iso=$(compute_expiry_timestamp "$effective_ttl"); then
+    exit 1
   fi
 
   s3_uri="s3://${bucket}/${object_key}"
