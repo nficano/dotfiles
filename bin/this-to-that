@@ -356,7 +356,7 @@ convert_fonts() {
   ensure_out_dir
   guards.require_exec fontforge
   ((verbose)) && log.info "Converting via fontforge"
-  fontforge -lang=ff -c 'Open($1); Generate($2);' "$IN" "$OUT"
+  fontforge -lang=ff -c 'Open($1); Generate($2);' "$IN" "$OUT" 2>/dev/null
 }
 
 main() {
@@ -416,7 +416,7 @@ main() {
     run_ffmpeg -i "$IN" "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
   fi
 
-  log.success "Created $OUT"
+  ((verbose)) && log.success "Created $OUT"
 }
 
 main "$@"
