@@ -102,6 +102,8 @@ copy_svgs() {
 main() {
   ((verbose)) && log.info "Verbose mode enabled"
 
+  deps.require npm
+
   out_dir="$(cd "$(dirname "$out_dir")" 2>/dev/null && pwd)/$(basename "$out_dir")"
   mkdir -p "$out_dir"
 

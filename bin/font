@@ -1,0 +1,503 @@
+#!/usr/bin/env bash
+#/ Manage user fonts: back up, restore, and export Adobe Creative Cloud fonts.
+#/
+#/ Usage: font <subcommand> [args]
+#/
+#/ Subcommands:
+#/   backup [options]                       Back up user fonts to a compressed tar archive
+#/   restore <source> [options]             Restore fonts from a .tar.gz archive (local path or URL)
+#/   adobe-export <font> [output-dir] [--ttf|--woff2]
+#/                                          Export Adobe Creative Cloud fonts
+#/
+#/ Backup options:
+#/   -o, --export-file PATH   Write the archive to PATH (default: ./fonts-YYYYmmdd-HHMMSS.tar.gz)
+#/   -v, --verbose            Enable additional logging
+#/
+#/ Restore accepts SOURCE as a positional argument (or via -r/--restore),
+#/ where SOURCE is a local path or URL to a .tar.gz/.tar archive.
+#/
+#/ Run 'font adobe-export -h' for Adobe export help.
+#/
+#/ Options:
+#/   -h, --help               Show this help and exit
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+source "$(dirname "$0")/../lib/bash/initrc"
+
+verbose=0
+export_file=""
+restore_source=""
+FONT_RELATIVE_DIRS=(
+  "Library/Fonts"
+  "Library/Fonts Disabled"
+  "Fonts"
+)
+
+# ---------------------------------------------------------------------------
+# font-backup logic (backup + restore)
+# ---------------------------------------------------------------------------
+
+fb_parse_args() {
+  local normalized
+  normalized=$(script.parse_with_opts ':hvo:r:' --long --export-file=o --restore=r -- "$@")
+  local -a argv=()
+  if [[ -n $normalized ]]; then
+    read -r -a argv <<<"$normalized"
+  fi
+
+  set -- "${argv[@]}"
+
+  local opt
+  OPTIND=1
+  while getopts ':hvo:r:' opt; do
+    case "$opt" in
+    h) script.usage ;;
+    v) verbose=1 ;;
+    o) export_file="$OPTARG" ;;
+    r) restore_source="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires a value"
+      script.usage 1
+      ;;
+    \?)
+      log.error "Unknown option: -$OPTARG"
+      script.usage 1
+      ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  if (($#)); then
+    log.error "Unexpected positional arguments: $*"
+    script.usage 1
+  fi
+
+  if [[ -n $restore_source && -n $export_file ]]; then
+    log.error "Cannot use --export-file when restoring fonts"
+    script.usage 1
+  fi
+}
+
+default_archive_name_for() {
+  local timestamp="$1"
+  printf 'fonts-%s.tar.gz\n' "$timestamp"
+}
+
+default_archive_name() {
+  default_archive_name_for "$(date +%Y%m%d-%H%M%S)"
+}
+
+resolve_export_path() {
+  local target="$1"
+  local base_dir="${2:-$PWD}"
+  local default_name="${3:-}"
+
+  if [[ -z $target ]]; then
+    [[ -n $default_name ]] || default_name="$(default_archive_name)"
+    printf '%s\n' "$(path.join "$base_dir" "$default_name")"
+    return
+  fi
+
+  target=$(path.expand "$target")
+  if path.isabs "$target" >/dev/null 2>&1; then
+    printf '%s\n' "$target"
+  else
+    printf '%s\n' "$(path.join "$base_dir" "$target")"
+  fi
+}
+
+collect_font_dirs() {
+  local home_dir="$1"
+  local -a found=()
+
+  log.info "Inspecting ${#FONT_RELATIVE_DIRS[@]} known font locations"
+  local relative_path absolute_path
+  for relative_path in "${FONT_RELATIVE_DIRS[@]}"; do
+    log.info "Checking $relative_path"
+    absolute_path=$(path.join "$home_dir" "$relative_path")
+    [[ -d $absolute_path ]] || continue
+    found+=("$relative_path")
+  done
+
+  local count=${#found[@]}
+  local noun="directories"
+  ((count == 1)) && noun="directory"
+  log.info "Found $count font $noun"
+
+  if ((count == 0)); then
+    return 1
+  fi
+
+  printf '%s\n' "${found[@]}"
+}
+
+is_url() {
+  local candidate="$1"
+  [[ $candidate == http://* || $candidate == https://* ]]
+}
+
+download_archive() {
+  local url="$1" dest="$2"
+  if ! command -v curl >/dev/null 2>&1; then
+    log.error "Downloading from URLs requires curl (not found in PATH)"
+    return 1
+  fi
+  if ! curl --fail --location --silent --show-error --output "$dest" "$url"; then
+    log.error "Failed to download font archive from: $url"
+    return 1
+  fi
+  return 0
+}
+
+mktemp_template_for_source() {
+  local source="$1"
+  case "$source" in
+  *.tar.gz)
+    printf 'font-restore.XXXXXX.tar.gz\n'
+    ;;
+  *.tgz)
+    printf 'font-restore.XXXXXX.tgz\n'
+    ;;
+  *.tar)
+    printf 'font-restore.XXXXXX.tar\n'
+    ;;
+  *)
+    printf 'font-restore.XXXXXX.tar.gz\n'
+    ;;
+  esac
+}
+
+restore_fonts() {
+  local source="$1"
+  local archive_path="$source"
+  local cleanup_file=0
+
+  if is_url "$source"; then
+    deps.require curl
+    local template
+    template=$(mktemp_template_for_source "$source")
+    archive_path=$(mktemp "${TMPDIR:-/tmp}/${template}") || return 1
+    log.info "Downloading font archive from: $source"
+    if ! download_archive "$source" "$archive_path"; then
+      rm -f "$archive_path"
+      return 1
+    fi
+    cleanup_file=1
+  else
+    archive_path=$(path.expand "$source")
+    if ! fs.isfile "$archive_path"; then
+      log.error "Archive not found: $archive_path"
+      return 1
+    fi
+    log.info "Using local archive: $archive_path"
+  fi
+
+  log.info "Restoring fonts into $HOME"
+  local extracted=0
+  case "$archive_path" in
+  *.tar.gz | *.tgz)
+    if tar -xzf "$archive_path" -C "$HOME"; then
+      extracted=1
+    fi
+    ;;
+  *.tar)
+    if tar -xf "$archive_path" -C "$HOME"; then
+      extracted=1
+    fi
+    ;;
+  *)
+    log.error "Unsupported archive format: $archive_path (expected .tar.gz or .tar)"
+    ((cleanup_file)) && rm -f "$archive_path"
+    return 1
+    ;;
+  esac
+
+  if ((extracted == 0)); then
+    log.error "Failed to extract archive: $archive_path"
+    ((cleanup_file)) && rm -f "$archive_path"
+    return 1
+  fi
+
+  if ((cleanup_file)); then
+    rm -f "$archive_path"
+  fi
+
+  log.info "Font restore complete"
+}
+
+create_archive() {
+  local archive="$1"
+  shift
+  local -a sources=("$@")
+  local parent
+  parent=$(dirname -- "$archive")
+  mkdir -p "$parent"
+
+  if [[ -e $archive ]]; then
+    log.error "Refusing to overwrite existing file: $archive"
+    exit 1
+  fi
+
+  local -a tar_cmd=(tar -czf "$archive" --exclude='.DS_Store' --exclude='._*' -C "$HOME")
+  tar_cmd+=("${sources[@]}")
+
+  log.info "Writing fonts to $(basename "$archive")"
+  "${tar_cmd[@]}"
+}
+
+print_sources() {
+  ((verbose)) || return 0
+  log.info "Including the following font directories:"
+  local source
+  for source in "$@"; do
+    log.info "  $source"
+  done
+}
+
+run_backup() {
+  local archive
+  archive=$(resolve_export_path "$export_file")
+
+  log.info "Scanning for fonts (checking standard user locations)"
+  local -a font_sources=()
+  local font_sources_output
+  if font_sources_output=$(collect_font_dirs "$HOME"); then
+    while IFS= read -r line; do
+      [[ -z $line ]] && continue
+      font_sources+=("$line")
+    done <<<"$font_sources_output"
+  else
+    log.error "No user font directories found under $HOME"
+    exit 1
+  fi
+
+  print_sources "${font_sources[@]}"
+  log.info "Creating font backup at: $archive"
+  create_archive "$archive" "${font_sources[@]}"
+
+  local size='unknown'
+  if fs.isfile "$archive"; then
+    size=$(fs.file_size_bytes "$archive" || printf 'unknown')
+  fi
+
+  log.info "Font archive created ($size bytes)"
+}
+
+# ---------------------------------------------------------------------------
+# adobe-font-export logic
+# ---------------------------------------------------------------------------
+
+adobe_usage() {
+  cat <<'EOF'
+Locates and exports Adobe Creative Cloud font
+
+Usage: font adobe-export <font> [output-directory] [--ttf|--woff2] [-h]
+
+Options:
+  -h       Show this help message
+  --ttf    Convert fonts to TTF format
+  --woff2  Convert fonts to WOFF2 format
+
+Arguments:
+  font               Part of the font name to search for
+  output-directory   Directory to copy fonts to (defaults to current directory)
+EOF
+  exit 0
+}
+
+adobe_convert_to_ttf() {
+  local input_file="$1"
+  local output_file="$2"
+  if command -v fontforge >/dev/null 2>&1; then
+    fontforge -lang=ff -c "Open('$input_file'); Generate('$output_file');" >/dev/null 2>&1
+    return $?
+  else
+    echo "Error: fontforge is required for TTF conversion. Please install it first."
+    exit 1
+  fi
+}
+
+adobe_convert_to_woff2() {
+  local input_file="$1"
+  local output_file="$2"
+  if command -v woff2_compress >/dev/null 2>&1; then
+    woff2_compress "$input_file" >"$output_file" 2>/dev/null
+    return $?
+  else
+    echo "Error: woff2 is required for WOFF2 conversion. Please install it first."
+    exit 1
+  fi
+}
+
+adobe_find_and_export_font() {
+  cd "$HOME/Library/Application Support/Adobe/CoreSync/plugins/livetype/"
+  # grab all otf dot files (adjust to your needs)
+  find . -type f -iname "*.otf" | while read file; do
+    # the "Postscript name:" does not contain spaces. good for file names.
+    fontName=$(otfinfo --info "$file" | grep -F "PostScript name:" | grep -oE "[^ ]+$")
+    # Check if fontName matches the search term (case-insensitive)
+    if [[ ${fontName,,} == *"${search,,}"* ]]; then
+      if [ "$convert_to_ttf" = true ]; then
+        output_file="$output_dir/$fontName.ttf"
+        if adobe_convert_to_ttf "$file" "$output_file"; then
+          echo "Converted to TTF: $file -> $output_file"
+        else
+          echo "Failed to convert to TTF: $file"
+        fi
+      elif [ "$convert_to_woff2" = true ]; then
+        output_file="$output_dir/$fontName.woff2"
+        if adobe_convert_to_woff2 "$file" "$output_file"; then
+          echo "Converted to WOFF2: $file -> $output_file"
+        else
+          echo "Failed to convert to WOFF2: $file"
+        fi
+      else
+        cp "$file" "$output_dir/$fontName.otf"
+        echo "Copied: $file -> $output_dir/$fontName.otf"
+      fi
+    fi
+  done
+}
+
+cmd_adobe_export() {
+  os.require_macos "Adobe Creative Cloud fonts"
+  deps.require otfinfo lcdf-typetools
+
+  local search="" output_dir=""
+  local convert_to_ttf=false
+  local convert_to_woff2=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      adobe_usage
+      ;;
+    --ttf)
+      convert_to_ttf=true
+      shift
+      ;;
+    --woff2)
+      convert_to_woff2=true
+      shift
+      ;;
+    *)
+      if [ -z "$search" ]; then
+        search="$1"
+      elif [ -z "$output_dir" ]; then
+        output_dir="$1"
+      fi
+      shift
+      ;;
+    esac
+  done
+
+  # Check for positional argument
+  if [ -z "$search" ]; then
+    echo "Error: Font name (or part) required."
+    adobe_usage
+  fi
+
+  # Check for mutually exclusive options
+  if [ "$convert_to_ttf" = true ] && [ "$convert_to_woff2" = true ]; then
+    echo "Error: Cannot use --ttf and --woff2 options together."
+    adobe_usage
+  fi
+
+  if [ "$convert_to_ttf" = true ]; then
+    deps.require fontforge
+  fi
+  if [ "$convert_to_woff2" = true ]; then
+    deps.require woff2_compress woff2
+  fi
+
+  output_dir="${output_dir:-$PWD}" # Use provided directory if set, otherwise use current directory
+  adobe_find_and_export_font
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand handlers
+# ---------------------------------------------------------------------------
+
+cmd_backup() {
+  fb_parse_args "$@"
+  if [[ -n $restore_source ]]; then
+    log.error "Use 'font restore' to restore fonts"
+    script.usage 1
+  fi
+  run_backup
+}
+
+cmd_restore() {
+  local source=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    -r | --restore)
+      shift
+      if [[ $# -eq 0 ]]; then
+        log.error "Option --restore requires a value"
+        script.usage 1
+      fi
+      source="$1"
+      ;;
+    --restore=*)
+      source="${1#*=}"
+      ;;
+    --)
+      shift
+      if [[ $# -gt 0 ]]; then
+        source="$1"
+      fi
+      break
+      ;;
+    -*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      source="$1"
+      ;;
+    esac
+    shift
+  done
+
+  if [[ -z $source ]]; then
+    log.error "restore requires a SOURCE (local path or URL to a .tar.gz archive)"
+    script.usage 1
+  fi
+
+  restore_source="$source"
+  restore_fonts "$restore_source"
+}
+
+main() {
+  local subcommand="${1:-}"
+  case "$subcommand" in
+  "" | -h | --help)
+    script.usage
+    ;;
+  backup)
+    shift
+    cmd_backup "$@"
+    ;;
+  restore)
+    shift
+    cmd_restore "$@"
+    ;;
+  adobe-export)
+    shift
+    cmd_adobe_export "$@"
+    ;;
+  *)
+    log.error "Unknown subcommand: $subcommand"
+    script.usage 1
+    ;;
+  esac
+}
+
+main "$@"

@@ -1,5 +1,5 @@
-#!/bin/sh
-#/ Move files/directories to macOS Trash instead of permanent deletion
+#!/usr/bin/env bash
+#/ Move files/directories to the system Trash instead of permanent deletion
 #/
 #/ USAGE:
 #/    t [OPTION]... [FILE]...
@@ -20,6 +20,9 @@
 
 set -o errexit
 set -o nounset
+
+# Provides when.darwin / deps.need / log.* used below.
+source "$(dirname "$0")/../lib/bash/initrc"
 
 usage() {
   grep '^#/' <"$0" | cut -c4-
@@ -98,14 +101,39 @@ move_to_trash() {
     echo "Moving '$target' to trash"
   fi
 
-  # Use osascript to move item to Trash
-  osascript -e "tell application \"Finder\" to delete POSIX file \"$(cd "$(dirname "$target")" && pwd)/$(basename "$target")\"" >/dev/null 2>&1
+  # Move the item to the trash using the platform-appropriate backend.
+  if when.darwin; then
+    # Use osascript to move item to Trash
+    osascript -e "tell application \"Finder\" to delete POSIX file \"$(cd "$(dirname "$target")" && pwd)/$(basename "$target")\"" >/dev/null 2>&1
 
-  if [ $? -ne 0 ]; then
-    echo "t: failed to move '$target' to trash" >&2
-    return 1
+    if [ $? -ne 0 ]; then
+      echo "t: failed to move '$target' to trash" >&2
+      return 1
+    fi
+  else
+    # Linux: hand off to the trash backend resolved in TRASH_CMD. Never rm.
+    if ! $TRASH_CMD "$target"; then
+      log.error "t: failed to move '$target' to trash"
+      return 1
+    fi
   fi
 }
+
+# Resolve the trash backend once. macOS uses osascript per-file below; Linux
+# needs an external tool, so pick one now (and offer to install it if missing)
+# rather than re-checking for every argument.
+if ! when.darwin; then
+  if command -v gio >/dev/null 2>&1; then
+    TRASH_CMD="gio trash"
+  elif command -v trash-put >/dev/null 2>&1; then
+    TRASH_CMD="trash-put"
+  elif deps.need trash-put trash-cli; then
+    TRASH_CMD="trash-put"
+  else
+    log.error "trash: no trash backend found (need 'gio' or 'trash-put'); refusing to delete."
+    exit 1
+  fi
+fi
 
 # Handle interactive once mode for multiple files
 if [ $INTERACTIVE_ONCE -eq 1 ] && [ $# -gt 3 ]; then

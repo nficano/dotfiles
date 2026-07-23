@@ -217,7 +217,7 @@ main() {
   local resolved bucket prefix filename sanitized id_len object_id object_key expires_iso s3_uri share_url acl
   local -a aws_cmd
 
-  require_command aws
+  deps.require aws awscli
 
   resolved=$(path.resolve "$file_path")
   if ! fs.isfile "$resolved"; then

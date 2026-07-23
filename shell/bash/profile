@@ -72,17 +72,17 @@ os.setenv "NODE_REPL_MODE" "sloppy"                 # use non-strict mode code
 os.setenv "NVM_DIR" "$HOME/.nvm"
 
 # Shell Session Command History (shared via Dropbox)
-_HIST_DROPBOX="$HOME/Dropbox/system/bash_history"
-if [[ -d "$(dirname "$_HIST_DROPBOX")" ]]; then
-  os.setenv "HISTFILE" "$_HIST_DROPBOX"
-else
-  os.setenv "HISTFILE" "$HOME/.bash_history"
-fi
-unset _HIST_DROPBOX
+# Append-only, shared history. HISTFILE stays at the conventional
+# ~/.bash_history, which `make setup-tree` symlinks to
+# ~/Dropbox/system/bash_history so every session on every machine appends to
+# one file. Each prompt runs `history -a` (append this session's new lines)
+# and `history -n` (pull in other sessions' lines) via
+# shell.setup_tab_safe_history below.
+os.setenv "HISTFILE" "$HOME/.bash_history"
 os.setenv "HISTCONTROL" "ignoreboth"
 os.setenv "HISTFILESIZE" -1
 os.setenv "HISTSIZE" -1
-shell.setopt "histappend" # Append command history instead of clobbering
+shell.setopt "histappend" # Append on exit, never clobber the file
 
 os.setenv "SHELL_SESSION_HISTORY" 0 # Disable per-session history (sync via PROMPT_COMMAND)
 os.setenv "MANPAGER" "less"
@@ -151,7 +151,7 @@ when.darwin shell.defer --wrap mkvirtualenv shell.import "$BREW_PREFIX/bin/virtu
 # Completion framework loads eagerly (fast); the ~236 scripts in
 # bash_completion.d (gcloud, caddy, yt-dlp, git, op, ...) come from the
 # compiled lazy-loading map and each load on first <Tab>. Regenerate with
-# bash-completions-compile (automatic when the directory changes).
+# shell-completions-compile (automatic when the directory changes).
 when.darwin shell.completions_init "$BREW_PREFIX/opt/bash-completion/etc/bash_completion" "$BREW_PREFIX/etc/bash_completion.d"
 when.darwin shell.import "$HOME/.iterm2_shell_integration.bash"
 # Debian/Ubuntu bash completions
@@ -184,6 +184,13 @@ sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 
 complete -cf sudo # enable sudo tab-complete
 
+# Tab-completion for the dotfiles bin/ dispatchers and helpers.
+shell.import "$DOTFILES_ROOT/completions"
+
+# `?` / `??` — discover and launch custom bin commands (with delegated Tab
+# completion and a colorful descriptive list).
+shell.import "$DOTFILES_ROOT/query"
+
 alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
@@ -209,7 +216,7 @@ alias s="cd $HOME/scratch"
 when.darwin alias ls='ls -GF --group-directories-first --human-readable'
 when.darwin alias ll='ls -alG --group-directories-first --human-readable'
 # cd to finders current working directory
-when.darwin alias f='cd "$(finder-front-path)" || exit 0'
+when.darwin alias f='cd "$(finder path)" || exit 0'
 # open Finder to current working directory.
 when.darwin alias o="open ./"
 
@@ -220,15 +227,64 @@ when.cmd gls alias ls="gls --color=auto -gXF --group-directories-first --human-r
 when.cmd gls alias ll='gls --color=auto -algX --human-readable --group-directories-first'
 when.cmd rlwrap alias node="env NODE_NO_READLINE=1 rlwrap node"
 when.cmd bat alias cat="bat --style=\"plain\" --paging never"
-# op completions come from the compiled lazy map (bash-completions-compile)
+# op completions come from the compiled lazy map (shell-completions-compile)
 
-# Wrapper for cppath --back (scripts cannot cd the parent shell)
-cppath() {
+# ── Compatibility shims for renamed/consolidated bin scripts ─────────────────
+# Transitional: old names still work while muscle memory retrains. Safe to
+# delete this whole block once you've switched to the new names.
+alias file-metadata='file-info'
+alias file-permissions='file-perms'
+alias file-mark-executable='file-chmodx'
+alias http-show-headers='http-headers'
+alias this-to-that='media-convert'
+alias exif-copy-tags='img-exif-copy'
+alias fa-icon-downloader='icon-fa-fetch'
+alias bash-completions-compile='shell-completions-compile'
+alias shell-add-alias='shell-alias-add'
+alias history-grep='shell-history-grep'
+alias spell-correct='text-spell'
+alias ansi-code='term-ansi'
+alias bin-list-scripts='bin-list'
+alias docker-wipe-all='docker-wipe'
+alias s3-upload-and-link='s3-upload'
+alias network-info='net info'
+alias network-listeners='net listeners'
+alias network-measure-ttfb='net ttfb'
+alias network-check-host='net check-host'
+alias network-check-port='net check-port'
+alias network-pid-on-port='net port-pid'
+alias find-filename='ff name'
+alias find-extension='ff ext'
+alias find-directory='ff dir'
+alias find-copy-matches='ff copy'
+alias find-move-matches='ff move'
+alias path-resolve='path resolve'
+alias path-expand-tilde='path expand'
+alias path-print='path env'
+alias cppath='path copy'
+alias finder-front-path='finder path'
+alias finder-hide-desktop='finder desktop-hide'
+alias finder-show-desktop='finder desktop-show'
+alias process-list='proc list'
+alias process-kill-pid='proc kill'
+alias process-kill-port='proc kill --port'
+alias macos-dns-flush='mac dns-flush'
+alias macos-hostname-set='mac hostname'
+alias clean-up-open-with-menu='mac openwith-reset'
+alias font-backup='font backup'
+alias adobe-font-export='font adobe-export'
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Wrapper so `path copy <p> -b/--back` can cd the parent shell to $OLDPWD
+# afterward (a child script cannot change the parent shell's directory).
+path() {
   local do_back=0 arg
-  for arg in "$@"; do
-    [[ $arg == "-b" || $arg == "--back" ]] && do_back=1
-  done
-  command cppath "$@" || return
+  if [[ ${1:-} == copy ]]; then
+    for arg in "$@"; do
+      [[ $arg == "-b" || $arg == "--back" ]] && do_back=1
+    done
+  fi
+  command path "$@" || return
   if ((do_back)) && [[ -n ${OLDPWD:-} ]]; then
     builtin cd - >/dev/null
   fi

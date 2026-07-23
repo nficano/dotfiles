@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+#/ Process utilities dispatcher.
+#/
+#/ Usage: proc <subcommand> [args]
+#/
+#/ Subcommands:
+#/    list [options]        Show a filtered, formatted, and sorted process list
+#/    kill <pid>            Send SIGTERM to a process id (via sudo kill -TERM)
+#/    kill --port <port>    Kill the process listening on the given TCP port
+#/
+#/ Options:
+#/    -h, --help            Print this help and exit
+#/
+#/ Run 'proc <subcommand> -h' for subcommand-specific help.
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+# ---------------------------------------------------------------------------
+# proc list  <- process-list
+#   Show a filtered, formatted, and sorted process list.
+#
+#   Available options:
+#     -h, --help      Print this help and exit
+#     -v, --verbose   Enable verbose output
+#     -f, --flag      Toggle example flag behavior
+#     -p, --param     Required parameter value
+# ---------------------------------------------------------------------------
+cmd_list() {
+  local verbose=0
+  local flag=0
+  local param=""
+  local -a args=()
+  local opt
+  local -a transformed=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --help) transformed+=('-h') ;;
+    --verbose) transformed+=('-v') ;;
+    --flag) transformed+=('-f') ;;
+    --param)
+      [[ $# -gt 1 ]] || {
+        log.error "--param requires a value"
+        script.usage 1
+      }
+      transformed+=('-p' "$2")
+      shift
+      ;;
+    --param=*)
+      transformed+=('-p' "${1#*=}")
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
+    esac
+    shift
+  done
+
+  transformed+=("$@")
+  set -- "${transformed[@]}"
+
+  OPTIND=1
+  while getopts ':hvfp:' opt; do
+    case "$opt" in
+    h) script.usage ;;
+    v) verbose=1 ;;
+    f) flag=1 ;;
+    p) param="$OPTARG" ;;
+    :)
+      log.error "Option -$OPTARG requires an argument"
+      script.usage 1
+      ;;
+    \?)
+      log.error "Invalid option: -$OPTARG"
+      script.usage 1
+      ;;
+    esac
+  done
+
+  shift $((OPTIND - 1))
+  args=("$@")
+
+  if [[ -z $param ]]; then
+    log.error "Missing required option --param"
+    script.usage 1
+  fi
+
+  if [[ ${#args[@]} -eq 0 ]]; then
+    log.error "Missing required positional arguments"
+    script.usage 1
+  fi
+
+  ((verbose)) && log.info "Verbose mode enabled"
+
+  log.info "Flag set: $flag"
+  log.info "Param value: $param"
+  log.info "Arguments: ${args[*]}"
+  # TODO: implement script logic
+}
+
+# ---------------------------------------------------------------------------
+# proc kill <pid>          <- process-kill-pid  (sudo kill -TERM)
+# proc kill --port <port>  <- process-kill-port (lsof + kill -9)
+# ---------------------------------------------------------------------------
+kill_by_pid() {
+  # Preserves process-kill-pid behavior: send SIGTERM via sudo kill -TERM.
+  sudo kill -TERM "$1"
+}
+
+kill_by_port() {
+  # Preserves process-kill-port behavior: find and kill listeners on a TCP port.
+  local port="$1"
+  local pids killed_count=0 failed_count=0 pid
+
+  deps.require lsof
+
+  # Find the PID(s) of the process(es) using the specified port
+  pids=$(lsof -t -iTCP:"$port" -sTCP:LISTEN)
+
+  # Check if a process was found
+  if [ -z "$pids" ]; then
+    echo "No process found running on port $port"
+    exit 1
+  fi
+
+  # Kill all processes (handle multiple PIDs)
+  for pid in $pids; do
+    if kill -9 "$pid" 2>/dev/null; then
+      killed_count=$((killed_count + 1))
+    else
+      failed_count=$((failed_count + 1))
+    fi
+  done
+
+  # Confirm the results
+  if [ $failed_count -eq 0 ]; then
+    if [ $killed_count -eq 1 ]; then
+      echo "Process on port $port has been killed."
+    else
+      echo "$killed_count processes on port $port have been killed."
+    fi
+  else
+    echo "Failed to kill $failed_count process(es) on port $port."
+    exit 1
+  fi
+}
+
+cmd_kill() {
+  if [[ $# -eq 0 ]]; then
+    log.error "kill requires a <pid> or --port <port>"
+    script.usage 1
+  fi
+
+  case "$1" in
+  -h | --help)
+    script.usage
+    ;;
+  --port)
+    [[ $# -eq 2 ]] || {
+      log.error "kill --port requires a single <port> value"
+      script.usage 1
+    }
+    kill_by_port "$2"
+    ;;
+  --port=*)
+    kill_by_port "${1#*=}"
+    ;;
+  --*)
+    log.error "Unknown option: $1"
+    script.usage 1
+    ;;
+  *)
+    [[ $# -eq 1 ]] || {
+      log.error "kill requires a single <pid> value"
+      script.usage 1
+    }
+    kill_by_pid "$1"
+    ;;
+  esac
+}
+
+main() {
+  if [[ $# -eq 0 ]]; then
+    script.usage
+  fi
+
+  local subcommand="$1"
+  shift
+
+  case "$subcommand" in
+  -h | --help)
+    script.usage
+    ;;
+  list)
+    cmd_list "$@"
+    ;;
+  kill)
+    cmd_kill "$@"
+    ;;
+  *)
+    log.error "Unknown subcommand: $subcommand"
+    script.usage 1
+    ;;
+  esac
+}
+
+main "$@"

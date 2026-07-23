@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+#/ Finder utilities dispatcher.
+#/
+#/ Usage: finder <subcommand> [-h] [-v]
+#/
+#/ Subcommands:
+#/    path            Print the path of the frontmost Finder window
+#/    desktop-hide    Hide desktop icons in Finder
+#/    desktop-show    Show desktop icons in Finder again
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+os.require_macos "Finder / AppleScript"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+parse_common() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n $remaining ]]; then
+    log.error "This subcommand does not accept positional arguments"
+    script.usage 1
+  fi
+}
+
+# path <- finder-front-path
+cmd_path() {
+  parse_common "$@"
+
+  if ((verbose)); then
+    log.info "Querying Finder for front window path" >&2
+  fi
+
+  osascript -e 'tell application "Finder" to POSIX path of (insertion location as alias)'
+}
+
+# desktop-hide <- finder-hide-desktop
+cmd_desktop_hide() {
+  parse_common "$@"
+
+  ((verbose)) && log.info "Disabling Finder desktop icons"
+
+  defaults write com.apple.finder CreateDesktop -bool false
+  killall Finder
+
+  log.info "Finder desktop icons hidden"
+}
+
+# desktop-show <- finder-show-desktop
+cmd_desktop_show() {
+  parse_common "$@"
+
+  ((verbose)) && log.info "Enabling Finder desktop icons"
+
+  defaults write com.apple.finder CreateDesktop -bool true
+  killall Finder
+
+  log.info "Finder desktop icons enabled"
+}
+
+main() {
+  if (($# == 0)); then
+    script.usage
+  fi
+
+  local subcommand="$1"
+  shift
+
+  case "$subcommand" in
+  -h | --help)
+    script.usage
+    ;;
+  path)
+    cmd_path "$@"
+    ;;
+  desktop-hide)
+    cmd_desktop_hide "$@"
+    ;;
+  desktop-show)
+    cmd_desktop_show "$@"
+    ;;
+  *)
+    log.error "Unknown subcommand: $subcommand"
+    script.usage 1
+    ;;
+  esac
+}
+
+main "$@"

@@ -1,7 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #/ Fetch and print only the HTTP response headers for a URL.
 #/
 #/ Usage: http-show-headers <url>
+source "$(dirname "$0")/../lib/bash/initrc"
+
+deps.require curl
+
 curl -sv "$@" 2>&1 >/dev/null |
   grep -v "^\*" |
   grep -v "^}" |

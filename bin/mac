@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#/ macOS maintenance dispatcher.
+#/
+#/ Usage: mac <subcommand> [args]
+#/
+#/ Subcommands:
+#/    dns-flush              Flush the macOS DNS cache to force fresh name resolution.
+#/    hostname <name>        Update the macOS host/computer/NetBIOS names.
+#/    openwith-reset         Rebuild LaunchServices and restart Finder to clean the "Open With" menu.
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Details:
+#/    dns-flush        Runs dscacheutil and signals mDNSResponder to rebuild caches.
+#/    hostname         Applies the new value to scutil names and SMB NetBIOS name, then flushes caches.
+#/    openwith-reset   Rebuilds the LaunchServices database and relaunches Finder.
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+os.require_macos "macOS system tooling"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+
+cmd_dns_flush() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n $remaining ]]; then
+    log.error "This subcommand does not accept positional arguments"
+    script.usage 1
+  fi
+
+  ((verbose)) && log.info "Flushing DNS caches"
+
+  sudo dscacheutil -flushcache
+  sudo killall -HUP mDNSResponder
+
+  log.info "macOS DNS cache flushed"
+}
+
+cmd_hostname() {
+  local -a args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    args+=("$1")
+    shift
+  done
+
+  if ((${#args[@]} != 1)); then
+    log.error "A single hostname value is required"
+    script.usage 1
+  fi
+
+  local new_hostname
+  new_hostname="${args[0]}"
+
+  ((verbose)) && log.info "Updating macOS host names to '$new_hostname'"
+
+  local key
+  for key in LocalHostName ComputerName HostName; do
+    sudo scutil --set "$key" "$new_hostname"
+  done
+
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server \
+    NetBIOSName -string "$new_hostname"
+  dscacheutil -flushcache
+
+  log.info "macOS hostname updated to: $new_hostname"
+}
+
+cmd_openwith_reset() {
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n $remaining ]]; then
+    log.error "This subcommand does not accept positional arguments"
+    script.usage 1
+  fi
+
+  # Clean up LaunchServices
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user
+  killall Finder
+}
+
+main() {
+  if (($# == 0)); then
+    script.usage
+  fi
+
+  local subcommand="$1"
+  shift
+
+  case "$subcommand" in
+  -h | --help)
+    script.usage
+    ;;
+  dns-flush)
+    cmd_dns_flush "$@"
+    ;;
+  hostname)
+    cmd_hostname "$@"
+    ;;
+  openwith-reset)
+    cmd_openwith_reset "$@"
+    ;;
+  *)
+    log.error "Unknown subcommand: $subcommand"
+    script.usage 1
+    ;;
+  esac
+}
+
+main "$@"

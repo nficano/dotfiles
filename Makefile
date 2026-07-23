@@ -47,3 +47,16 @@ setup-tree:
 	ln -fsn $(DOTFILES)/home/tmux.conf ${HOME}/.tmux.conf
 	ln -fsn $(DOTFILES)/home/lesskey ${HOME}/.lesskey
 	ln -s $(DOTFILES)/bin ${HOME}/.bin
+	@# Shared, append-only bash history living in Dropbox (symlinked).
+	@# No-op on machines without Dropbox (history stays a local file there).
+	@if [ -d "${HOME}/Dropbox" ]; then \
+		mkdir -p "${HOME}/Dropbox/system"; \
+		if [ -f "${HOME}/.bash_history" ] && [ ! -L "${HOME}/.bash_history" ] && [ ! -e "${HOME}/Dropbox/system/bash_history" ]; then \
+			cp "${HOME}/.bash_history" "${HOME}/Dropbox/system/bash_history"; \
+		fi; \
+		touch "${HOME}/Dropbox/system/bash_history"; \
+		ln -fsn "${HOME}/Dropbox/system/bash_history" "${HOME}/.bash_history"; \
+		echo "history: linked ~/.bash_history -> ~/Dropbox/system/bash_history"; \
+	else \
+		echo "history: no ~/Dropbox found; leaving ~/.bash_history as a local file"; \
+	fi

@@ -636,6 +636,8 @@ derive_batch_out() {
 main() {
   parse_args "$@"
 
+  deps.require ffmpeg
+
   local last_idx=$(( ${#POSITIONALS[@]} - 1 ))
   local last="${POSITIONALS[$last_idx]}"
   local target_ext=""

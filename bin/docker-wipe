@@ -4,6 +4,8 @@
 #/ Usage: docker-wipe-all
 # WARNING: This script will stop and remove ALL Docker resources
 
+source "$(dirname "$0")/../lib/bash/initrc"
+
 print_warning() {
   echo "⚠️  WARNING: This will destroy ALL Docker resources:"
   echo "   - All running and stopped containers"
@@ -47,6 +49,7 @@ cleanup() {
 }
 
 main() {
+  deps.require docker
   print_warning
   confirm
   cleanup

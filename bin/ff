@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#/ Find helpers dispatcher — shortcuts around find(1).
+#/
+#/ Usage: ff <subcommand> [args]
+#/
+#/ Subcommands:
+#/    name <pattern>        Search for files by exact filename
+#/    ext <extension>       Search for files by extension
+#/    dir <name>            Find directories by name in directory tree
+#/    copy <expr> <dest>    Recursively find and copy files matching expr
+#/    move <expr> <dest>    Recursively find and move files matching expr
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+# ff name <pattern>  (find-filename)
+#   Search for files by exact filename.
+cmd_name() {
+  (($# == 0)) && script.usage 1
+  find . -type f -name "$@"
+}
+
+# ff ext <extension>  (find-extension)
+#   Search for files by extension.
+cmd_ext() {
+  (($# == 0)) && script.usage 1
+  find . -type f -name "*.$@"
+}
+
+# ff dir <name>  (find-directory)
+#   Find directories by name in directory tree.
+cmd_dir() {
+  if (($# != 1)); then
+    log.error "A single directory name is required"
+    script.usage 1
+  fi
+  find . -type d -name "$1"
+}
+
+# ff copy <expr> <dest>  (find-copy-matches)
+#   Recursively find and copy all files matching a given expression.
+cmd_copy() {
+  if (($# != 2)); then
+    log.error "An expression and a destination are required"
+    script.usage 1
+  fi
+  find . -type f -name "$1" -exec cp {} "$2" \;
+}
+
+# ff move <expr> <dest>  (find-move-matches)
+#   Recursively find and move all files matching a given expression.
+cmd_move() {
+  if (($# != 2)); then
+    log.error "An expression and a destination are required"
+    script.usage 1
+  fi
+  find . -type f -name "$1" -exec mv {} "$2" \;
+}
+
+main() {
+  if ! require.cmd find; then
+    log.error "find is required"
+    exit 1
+  fi
+
+  if (($# == 0)); then
+    script.usage
+  fi
+
+  local subcommand="$1"
+  shift
+
+  case "$subcommand" in
+  -h | --help)
+    script.usage
+    ;;
+  name)
+    cmd_name "$@"
+    ;;
+  ext)
+    cmd_ext "$@"
+    ;;
+  dir)
+    cmd_dir "$@"
+    ;;
+  copy)
+    cmd_copy "$@"
+    ;;
+  move)
+    cmd_move "$@"
+    ;;
+  *)
+    log.error "Unknown subcommand: $subcommand"
+    script.usage 1
+    ;;
+  esac
+}
+
+main "$@"

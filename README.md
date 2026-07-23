@@ -18,76 +18,51 @@ This repository collects personal macOS/Linux dotfiles, provisioning scripts, an
 
 ## bin/ Utilities
 
-### Shell and Workflow Helpers
+Scripts follow a **`domain-action`** naming convention (domain noun first, so `net<Tab>`, `path<Tab>`, `file<Tab>` group related tools). Related helpers are consolidated into **dispatcher tools** that take a subcommand. Every command has tab-completion, registered by `shell/bash/completions`. Old names still work via compatibility aliases in `shell/bash/profile` (a clearly-marked block you can delete once retrained).
 
-- **`bash-completions-compile`** - Compiles the ~236 scripts in `$BREW_PREFIX/etc/bash_completion.d` into a lazy-loading cache (`~/.cache/dotfiles/completions.bash`) so interactive shells register lightweight stubs and each completion loads on first `<Tab>`; the profile re-runs it automatically when the directory changes
-- **`bin-list-scripts`** - Lists every file in `~/.bin` and prints the second line of each script as its description, making it easy to discover available helpers
-- **`file-mark-executable`** - Wraps `chmod +x` so you can make a new script executable with `file-mark-executable path/to/script`
-- **`file-metadata`** - Delegates to `mdls` on macOS or `mediainfo` elsewhere to inspect file metadata
-- **`file-permissions`** - Shows a file or directory's permissions in symbolic and octal form (`file-permissions /usr/bin`)
-- **`finder-front-path`** - Uses AppleScript to print the path of the frontmost Finder window, allowing quick `cd "$(finder-front-path)"`
-- **`history-grep`** - Greps the Bash history file with regex matching while de-duplicating results, handy for retrieving past commands
-- **`path-print`** - Pretty-prints the `PATH` environment variable one entry per line to confirm search order
-- **`shell-add-alias`** - Appends an alias definition to `~/.bash_profile` and reminds you to reload it; run `shell-add-alias -n gs -c "git status"` to register shortcuts without editing the file manually
-- **`trash`** - Moves files or directories to the macOS Trash instead of deleting them, with optional confirmation flags (`t -i big-file`)
+**Discovery** — type `?` for a colorful column list of every command, or `??` for an aligned name + description table. `?`/`??` also act as launchers with delegated completion: `? <Tab>` completes command names, and each subsequent `<Tab>` reveals the chosen command's own completion (`? net <Tab>` → net's subcommands). Defined in `shell/bash/query`.
 
-### File and Directory Tools
+**Portability** — scripts detect the OS and degrade gracefully via `lib/bash/deps`. Tools that can't run on the current OS print why and exit cleanly (`os.require_macos`); missing dependencies are explained and, on an interactive terminal, offered for one-key install via the detected package manager (`brew`/`apt`/`dnf`/`pacman`/`zypper`/`apk`) through `deps.require`/`deps.need`. `trash` uses the macOS Trash on macOS and `gio trash`/`trash-cli` on Linux.
 
-- **`s3-upload-and-link`** - Upload files to S3 and copy the shareable URL to the clipboard (similar to CloudApp)
-- **`cppath`** - Resolves a file or directory path and copies it to the clipboard
-- **`path-resolve`** - Resolves a relative path to an absolute path (`path-resolve ../some/file`)
-- **`path-expand-tilde`** - Expands a path containing `~` to its real location (`path-expand-tilde ~/Downloads`)
-- **`find-copy-matches`** - Recursively finds files matching a glob and copies them to a destination (`find-copy-matches "*.svg" ~/vectors`)
-- **`find-move-matches`** - Same as above but moves matched files (`find-move-matches "*.log" archive/`)
-- **`find-extension`** - Lists files with a given extension under the current tree[^1]
-- **`find-filename`** - Recurses for exact filename matches (`find-filename "*.plist"`)[^1]
-- **`find-directory`** - Recursively finds directories by name (`find-directory build`)
+### Dispatchers (multi-command tools)
 
-[^1]: I gave up trying to remember `find` syntax.
+- **`net`** - Network diagnostics: `net info` (interfaces, gateways, DNS, public IP), `net listeners` (listening ports by process), `net ttfb <url>` (DNS/TCP/TLS/TTFB timing), `net check-host <file>` (URLs returning HTTP 200), `net check-port <host> <port>`, `net port-pid <port>`
+- **`ff`** - Filesystem search (named `ff`, not `find`, to avoid shadowing): `ff name <pattern>`, `ff ext <extension>`, `ff dir <name>`, `ff copy <expr> <dest>`, `ff move <expr> <dest>`
+- **`path`** - Path helpers: `path resolve <p>`, `path expand <p>`, `path env` (print `$PATH`), `path copy <p> [-r|-H|-b]` (copy to clipboard; the profile wraps `path` so `-b/--back` can cd the parent shell)
+- **`finder`** - Finder: `finder path` (frontmost window path — `f` alias does `cd "$(finder path)"`), `finder desktop-hide`, `finder desktop-show`
+- **`proc`** - Processes: `proc kill <pid>` (SIGTERM), `proc kill --port <port>` (kill listener on a TCP port). `proc list` is a scaffold placeholder (not yet implemented).
+- **`mac`** - macOS maintenance: `mac dns-flush`, `mac hostname <name>` (scutil + SMB NetBIOS), `mac openwith-reset` (rebuild LaunchServices "Open With")
+- **`font`** - Fonts: `font backup [-o file]`, `font restore <source>` (local path or URL), `font adobe-export <font> [dir] [--ttf|--woff2]`
 
-### Media and Asset Pipelines
+### Standalone helpers
 
-- **`this-to-that`** - Best-quality file format conversions powered by ffmpeg (and friends)
-- **`adobe-font-export`** - Extracts Adobe Creative Cloud fonts from CoreSync, optionally converting them to TTF or WOFF2 via FontForge/woff2 before copying them out
-- **`font-backup`** - Backs up and restores user fonts using compressed tar archives
-- **`fa-icon-downloader`** - Downloads Font Awesome SVG icons using an npm token
-- **`exif-copy-tags`** - Copies all EXIF metadata from one file to another via `exiftool`, useful when transcoding media
-
-### System, macOS, and Services
-
-- **`clean-up-open-with-menu`** - Rebuilds LaunchServices registrations and restarts Finder to clear duplicate "Open With" entries
-- **`docker-wipe-all`** - Stops and removes all Docker containers, images, volumes, networks, and build cache after an explicit confirmation
-- **`finder-hide-desktop` / `finder-show-desktop`** - Toggle Finder desktop icon visibility
-- **`macos-dns-flush`** - Flushes DNS caches via `dscacheutil` and `mDNSResponder`
-- **`macos-hostname-set`** - Updates the system hostname, LocalHostName, and related SMB settings in one step
-
-### Network and Diagnostics
-
-- **`http-show-headers`** - Fetches only the HTTP response headers for a URL using `curl -sv`
-- **`network-check-host`** - Reads a list of URLs from a file and prints those returning HTTP 200, useful for availability checks
-- **`network-check-port`** - Uses netcat to probe whether a host:port accepts TCP connections
-- **`network-info`** - Rich network report: local interfaces, default gateways, DNS servers, and public IP lookups for IPv4/IPv6
-- **`network-listeners`** - Summarises listening TCP/UDP sockets grouped by owning process
-- **`network-measure-ttfb`** - Measures DNS lookup, connect time, TLS handshake, first byte, and total request time for a given URL using `curl`
-- **`network-pid-on-port`** - Displays processes bound to a specific port via `lsof -i`
-- **`process-kill-pid`** - Simple wrapper around `sudo kill -TERM <pid>` for explicit process termination
-- **`process-kill-port`** - Finds the process listening on a TCP port and kills it
-- **`process-list`** - Formats `ps aux` output with colour, optional macOS process filtering, and de-duplication
-
-### Development and Miscellaneous
-
-- **`ansi-code`** - Inspect and compose ANSI SGR escape sequences
+- **`bin-list`** - Lists every file in `~/.bin` with its second-line description
+- **`shell-completions-compile`** - Compiles `$BREW_PREFIX/etc/bash_completion.d` into a lazy-loading cache so each completion loads on first `<Tab>`; the profile re-runs it when the directory changes
+- **`shell-alias-add`** - Appends an alias to `~/.bash_profile` (`shell-alias-add -n gs -c "git status"`)
+- **`shell-history-grep`** - Regex-greps the Bash history file, de-duplicating results
+- **`file-info`** - File metadata via `mdls` (macOS) or `mediainfo`
+- **`file-perms`** - Symbolic and octal permissions for a file or directory
+- **`file-chmodx`** - `chmod +x` wrapper to mark scripts executable
+- **`http-headers`** - Fetches only HTTP response headers for a URL (`curl -sv`)
+- **`media-convert`** - Best-quality file-format conversions powered by ffmpeg (and friends)
+- **`img-exif-copy`** - Copies EXIF metadata from one file to another via `exiftool`
+- **`icon-fa-fetch`** - Downloads Font Awesome SVG icons using an npm token
+- **`term-ansi`** - Inspect and compose ANSI SGR escape sequences
+- **`text-spell`** - Spell-check/correct utility that uses ChatGPT
+- **`s3-upload`** - Upload a file to S3 and copy the shareable URL to the clipboard
+- **`docker-wipe`** - Removes all Docker containers, images, volumes, networks, and build cache after confirmation
 - **`time-epoch`** - Prints the current Unix epoch timestamp
 - **`nanoid`** - Generate short, URL-safe unique IDs
+- **`trash`** - Moves files/directories to the macOS Trash instead of deleting
 
-## Spell Correct
+## text-spell
 
-`spell-correct' is spell check and correction utility that uses ChatGPT for spelling correction.
+`text-spell` is a spell-check and correction utility that uses ChatGPT.
 
 **Usage**
 
 ```bash
-spell-correct leasure
+text-spell leasure
 # Copied correction "leisure" to the clipboard
 ```
 
@@ -102,53 +77,14 @@ spell-correct leasure
 
 ---
 
-### Autoflags
-
-`autoflags` converts natural language intents into safe shell commands. _(Work in progress.)_
-
-**Usage**
-
-```bash
-autoflags git "rename current branch to feature/xyz"
-# git branch -m feature/xyz
-# Proceed with execution? [y/N]
-
-autoflags find "all files with the extension png"
-# find . -type f -name "*.png"
-# Proceed with execution? [y/N]
-
-autoflags ffmpeg "convent input.mov to output.webm"
-# ffmpeg -i input.mov -c:v libvpx-vp9 -b:v 2M -c:a libopus output.webm
-# Proceed with execution? [y/N]
-```
-
-#### Environment Variables
-
-| Name                           | Required | Description                                                 | Default       |
-| ------------------------------ | -------- | ----------------------------------------------------------- | ------------- |
-| `OPENAI_API_KEY`               | ✓        | Your OpenAI API key used for authentication.                | —             |
-| `AUTOFLAGS_YES`                | ✗        | Run without confirmation prompt.                            | `false`       |
-| `AUTOFLAGS_PRINT`              | ✗        | Show suggested command without executing.                   | `false`       |
-| `AUTOFLAGS_COPY`               | ✗        | Copy command to clipboard (implies `AUTOFLAGS_PRINT=true`). | `false`       |
-| `AUTOFLAGS_ALLOW_ALT`          | ✗        | Allow AI to suggest alternate tools or commands.            | —             |
-| `AUTOFLAGS_CONFIRM_DEFAULT`    | ✗        | Default answer when prompted (Y or N).                      | `N`           |
-| `AUTOFLAGS_REQUIRE_WHICH`      | ✗        | Verify that suggested alternative command exists.           | `false`       |
-| `AUTOFLAGS_NO_CLIPBOARD`       | ✗        | Disable automatic clipboard copy.                           | `false`       |
-| `AUTOFLAGS_CONTEXT`            | ✗        | Add extra context to AI prompt.                             | —             |
-| `AUTOFLAGS_OPENAI_MODEL`       | ✗        | Model used for generation.                                  | `gpt-4o-mini` |
-| `AUTOFLAGS_OPENAI_AGENT`       | ✗        | Agent name defined in `.agents` file.                       | `autoflags`   |
-| `AUTOFLAGS_OPENAI_TEMPERATURE` | ✗        | Controls randomness of model output.                        | `0`           |
-
----
-
-### s3-upload-and-link
+### s3-upload
 
 Uploads a file to S3 and copies the shareable URL to your clipboard.
 
 **Usage**
 
 ```bash
-s3-upload-and-link ubuntu-24.04.3-desktop-amd64.iso
+s3-upload ubuntu-24.04.3-desktop-amd64.iso
 # https://s3.us-east-1.amazonaws.com/mybucket/9oe3HVzO.iso
 ```
 
@@ -171,7 +107,8 @@ s3-upload-and-link ubuntu-24.04.3-desktop-amd64.iso
 - Keep filenames in kebab-case and store executables under `bin/` so `shell/bash/profile` adds them to the `PATH`
 - Document usage with `#/` comment lines at the top so `script.usage` can emit help text automatically
 - Use the logging (`log.info`, `log.warn`, `log.error`), prompting, locking, and filesystem helpers from `lib/bash/initrc` instead of reimplementing them
-- Run `bin/bin-list-scripts` to confirm a new script's description (second line) renders nicely, and `bin/file-mark-executable` if you need to mark it executable
+- Run `bin-list` (or `??`) to confirm a new script's description (second line) renders nicely, and `file-chmodx` if you need to mark it executable
+- Gate OS-specific tools with `os.require_macos`/`os.require_linux` and declare external dependencies with `deps.require`/`deps.need` (from `lib/bash/deps`) so scripts degrade gracefully and offer to install what's missing
 
 ### Machine-specific Shell Hooks
 
@@ -182,3 +119,7 @@ when.my_machine sys.path.append "$HOME/.bin/personal"
 ```
 
 If you bootstrap a new host outside the provisioner, populate `~/.machine_id` manually with `ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}'` so the guard succeeds on that machine.
+
+### Shell History
+
+History is **append-only and shared**. `HISTFILE` stays at the conventional `~/.bash_history`, which `make setup-tree` symlinks to `~/Dropbox/system/bash_history` (seeding it from any existing history) so every session on every machine appends to one file. Each prompt runs `history -a` (flush this session's new lines) and `history -n` (pull in other sessions' lines) via `shell.setup_tab_safe_history`, and `shopt -s histappend` guarantees the file is never clobbered. On a host without Dropbox, `~/.bash_history` stays a normal local file.

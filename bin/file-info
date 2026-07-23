@@ -1,9 +1,12 @@
-#!/bin/sh
-#/ Send SIGTERM to a process id with a helpful wrapper around sudo kill.
+#!/bin/bash
+#/ Show file metadata.
+#/
+#/ 1. Only tested on Debian and MacOS.
 #/
 #/ Usage:
-#/    process-kill-pid <pid>
-#/
+#/    file-metadata <file>
+#/ Examples:
+#/    file-metadata /etc/hosts
 
 set -o errexit # Exit on most errors (see the manual)
 set -o nounset # Disallow expansion of unset variables
@@ -11,9 +14,23 @@ set -o nounset # Disallow expansion of unset variables
 #set -o pipefail        # Use last non-zero exit code in a pipeline (BASH only)
 #set -o xtrace          # Trace the execution of the script (UNCOMMENT TO DEBUG)
 
+source "$(dirname "$0")/../lib/bash/initrc"
+
 usage() {
   grep '^#/' <"$0" | cut -c4-
   exit 0
+}
+
+err() {
+  echo -e "\e[1;31m$1\e[0m"
+}
+
+os() {
+  uname -o
+}
+
+is_installed() {
+  command -v "$1" >/dev/null
 }
 
 if [ "$#" -ne 1 ]; then
@@ -24,4 +41,9 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   usage
 fi
 
-sudo kill -TERM "$1"
+if is_installed "mdls"; then
+  exec mdls "$1"
+else
+  deps.require mediainfo
+  exec mediainfo "$1"
+fi

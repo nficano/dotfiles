@@ -74,7 +74,7 @@ shell.eval() {
 # shell.completions_init FRAMEWORK_SCRIPT COMPAT_DIR
 # Load the bash-completion framework with its eager compat-directory scan
 # disabled, then source the compiled lazy-loading map produced by
-# bash-completions-compile (per-command files load on first <Tab>).
+# shell-completions-compile (per-command files load on first <Tab>).
 # Falls back to a full eager load when no compiled map exists or on bash 3.x,
 # and recompiles in the background whenever COMPAT_DIR changes.
 shell.completions_init() {
@@ -91,13 +91,13 @@ shell.completions_init() {
     BASH_COMPLETION_COMPAT_DIR="$empty" BASH_COMPLETION_DIR="$empty" \
       source "$framework"
     source "$compiled"
-    if [[ $compat_dir -nt $compiled ]] && sys.path.contains bash-completions-compile; then
-      (bash-completions-compile >/dev/null 2>&1 &)
+    if [[ $compat_dir -nt $compiled ]] && sys.path.contains shell-completions-compile; then
+      (shell-completions-compile >/dev/null 2>&1 &)
     fi
   else
     source "$framework"
-    if ((BASH_VERSINFO[0] >= 4)) && sys.path.contains bash-completions-compile; then
-      (bash-completions-compile >/dev/null 2>&1 &)
+    if ((BASH_VERSINFO[0] >= 4)) && sys.path.contains shell-completions-compile; then
+      (shell-completions-compile >/dev/null 2>&1 &)
     fi
   fi
 }

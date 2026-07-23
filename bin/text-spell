@@ -39,8 +39,8 @@ main() {
   local model="${SPELL_CORRECT_OPENAI_MODEL:-gpt-4o-mini}"
   local agent="${SPELL_CORRECT_OPENAI_AGENT:-spell-check}"
 
-  guards.require_exec curl
-  guards.require_exec jq
+  deps.require curl
+  deps.require jq
   if os.platform.is_darwin; then
     guards.require_exec pbcopy
   else

@@ -5,12 +5,15 @@
 #/    exif-copy-tags <source_file> <destination_file>
 #/
 
+source "$(dirname "$0")/../lib/bash/initrc"
+
 usage() {
   grep '^#/ ' <"$0" | cut -c4- | sed "s/{{ basename }}/${0##*/}/"
   exit 1
 }
 
 [ $# -eq 0 ] || [ "$1" = "--help" ] || [ $# -ne 2 ] && usage
+deps.require exiftool
 printf "\n"
 while true; do
   read -rp "This will copy ALL exifdata from '$1' and apply them to '$2'. Do you want to continue? " yn

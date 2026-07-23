@@ -1,0 +1,95 @@
+# `?` and `??` — discover and launch the custom bin/ commands.
+#
+#   ?             colorful column list of every custom command
+#   ? <cmd> …     run <cmd>; <Tab> completes command names, then delegates to
+#                 that command's OWN completion (so `? net <Tab>` offers net's
+#                 subcommands, `? ff copy <Tab>` offers files, etc.)
+#   ??            colorful table of every command with its description aligned
+#   ?? <cmd> …    same launcher as `?`, with the verbose list view
+#
+# Implemented as shell functions because a file literally named "?"/"??"
+# collides with pathname expansion and can't be invoked without escaping.
+
+: "${DOTFILES_BIN:=$HOME/.bin}"
+
+# Top-level executables in the bin dir, one per line, sorted.
+__q_names() {
+  local f
+  for f in "$DOTFILES_BIN"/*; do
+    [[ -f $f && -x $f ]] && printf '%s\n' "${f##*/}"
+  done | sort
+}
+
+# Second line of a script, stripped of leading comment markers, as description.
+__q_desc() {
+  local line
+  line=$(sed -n '2p' "$1" 2>/dev/null)
+  line=${line#\#}
+  line=${line#/}
+  printf '%s' "${line# }"
+}
+
+# Backing functions (bash won't accept `?`/`??` as function names, so they are
+# exposed as aliases below — which also dodges pathname expansion, since alias
+# expansion happens before globbing).
+
+# ? : compact colorful list (no args) or launcher (with args).
+__q_run() {
+  if (($# == 0)); then
+    printf '\033[36m'
+    __q_names | column
+    printf '\033[0m'
+    return
+  fi
+  command "$@"
+}
+
+# ?? : descriptive colorful table (no args) or launcher (with args).
+__qq_run() {
+  if (($# > 0)); then
+    command "$@"
+    return
+  fi
+  local name desc
+  while IFS= read -r name; do
+    desc=$(__q_desc "$DOTFILES_BIN/$name")
+    printf '\033[1;36m%-28s\033[0m \033[2m%s\033[0m\n' "$name" "$desc"
+  done < <(__q_names)
+}
+
+alias '?'='__q_run'
+alias '??'='__qq_run'
+
+# Completion: command names at word 1, then delegate to the target's own
+# completion so each Tab reveals the selected script's completion.
+__q_complete() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "$(__q_names)" -- "$cur"))
+    return
+  fi
+  local cmd=${COMP_WORDS[1]} spec func w0
+  spec=$(complete -p "$cmd" 2>/dev/null) || {
+    COMPREPLY=($(compgen -o default -- "$cur"))
+    return
+  }
+  if [[ $spec =~ -F[[:space:]]+([^[:space:]]+) ]]; then
+    func=${BASH_REMATCH[1]}
+    # Re-present the line as if the target command were typed directly.
+    w0=${COMP_WORDS[0]}
+    local -a _words=("${COMP_WORDS[@]}")
+    local _cword=$COMP_CWORD _line=$COMP_LINE _point=$COMP_POINT
+    COMP_WORDS=("${COMP_WORDS[@]:1}")
+    ((COMP_CWORD--))
+    COMP_LINE=${COMP_LINE#"$w0 "}
+    ((COMP_POINT -= ${#w0} + 1))
+    "$func" "$cmd" "$cur" "${COMP_WORDS[COMP_CWORD - 1]:-}"
+    COMP_WORDS=("${_words[@]}")
+    COMP_CWORD=$_cword
+    COMP_LINE=$_line
+    COMP_POINT=$_point
+  else
+    COMPREPLY=($(compgen -o default -- "$cur"))
+  fi
+}
+complete -F __q_complete -o default '?' '??'

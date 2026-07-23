@@ -1,0 +1,82 @@
+# Tab-completion for the dotfiles bin/ scripts. Sourced by shell/bash/profile
+# for interactive shells. Dispatcher tools complete their subcommands on the
+# first word; standalone helpers complete common options and fall back to
+# filenames (via `complete -o default`).
+
+# ── Dispatcher subcommand completions ────────────────────────────────────────
+
+_dot_net() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "info listeners ttfb check-host check-port port-pid" -- "$cur"))
+  fi # word 2+ falls back to filenames via -o default (e.g. check-host <file>)
+}
+complete -o default -F _dot_net net
+
+_dot_ff() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "name ext dir copy move" -- "$cur"))
+  fi # copy/move destinations fall back to filenames via -o default
+}
+complete -o default -F _dot_ff ff
+
+_dot_path() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "resolve expand env copy" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == copy && $cur == -* ]]; then
+    COMPREPLY=($(compgen -W "-r --relative -H --home -b --back -v --verbose -h --help" -- "$cur"))
+  fi
+}
+complete -o default -F _dot_path path
+
+_dot_finder() {
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "path desktop-hide desktop-show" -- "${COMP_WORDS[1]}"))
+  fi
+}
+complete -F _dot_finder finder
+
+_dot_proc() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "list kill" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == kill && $cur == -* ]]; then
+    COMPREPLY=($(compgen -W "--port" -- "$cur"))
+  elif [[ ${COMP_WORDS[1]} == list && $cur == -* ]]; then
+    COMPREPLY=($(compgen -W "-f --flag -p --param -v --verbose -h --help" -- "$cur"))
+  fi
+}
+complete -F _dot_proc proc
+
+_dot_mac() {
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "dns-flush hostname openwith-reset" -- "${COMP_WORDS[1]}"))
+  fi
+}
+complete -F _dot_mac mac
+
+_dot_font() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if ((COMP_CWORD == 1)); then
+    COMPREPLY=($(compgen -W "backup restore adobe-export" -- "$cur"))
+  elif [[ $cur == -* ]]; then
+    case ${COMP_WORDS[1]} in
+    backup) COMPREPLY=($(compgen -W "-o --export-file -v --verbose -h --help" -- "$cur")) ;;
+    adobe-export) COMPREPLY=($(compgen -W "--ttf --woff2 -h --help" -- "$cur")) ;;
+    esac
+  fi # restore <source> falls back to filenames via -o default
+}
+complete -o default -F _dot_font font
+
+# ── Standalone helpers: complete common options, else filenames ──────────────
+
+_dot_std() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  [[ $cur == -* ]] && COMPREPLY=($(compgen -W "-h --help -v --verbose" -- "$cur"))
+}
+complete -o default -F _dot_std \
+  bin-list docker-wipe file-chmodx file-info file-perms http-headers \
+  icon-fa-fetch img-exif-copy media-convert nanoid s3-upload shell-alias-add \
+  shell-completions-compile shell-history-grep term-ansi text-spell time-epoch trash

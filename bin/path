@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+#/ Path utilities dispatcher.
+#/
+#/ Usage: path <subcommand> [args]
+#/
+#/ Subcommands:
+#/    resolve <path>              Resolve a path to an absolute path
+#/    expand <path>               Expand a leading ~ to the home directory
+#/    env                         Print each $PATH entry on its own line
+#/    copy <path> [-r|-H] [-b]    Copy a resolved path to the clipboard
+#/
+#/ Available options:
+#/    -h, --help      Print this help and exit
+#/    -v, --verbose   Enable verbose output
+#/
+#/ Copy options:
+#/    -r, --relative   Output path relative to current directory
+#/    -H, --home       Replace home directory with $HOME in output
+#/    -b, --back       Return to previous directory after copying
+#/                     (handled by the shell wrapper; accepted here)
+
+set -Eeuo pipefail
+trap script.cleanup SIGINT SIGTERM ERR EXIT
+
+source "$(dirname "$0")/../lib/bash/initrc"
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+verbose=0
+relative=0
+use_home=0
+back=0
+declare -a args=()
+
+# path resolve <path>
+sub_resolve() {
+  args=()
+  verbose=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    args+=("$1")
+    shift
+  done
+
+  if ((${#args[@]} != 1)); then
+    log.error "A single path argument is required"
+    script.usage 1
+  fi
+
+  deps.require python3
+
+  local input resolved
+  input="${args[0]}"
+
+  resolved=$(python3 - "$input" <<'PY'
+import os
+import sys
+
+print(os.path.abspath(os.path.expanduser(sys.argv[1])))
+PY
+  )
+
+  ((verbose)) && log.info "Resolved path: $resolved"
+  printf '%s\n' "$resolved"
+}
+
+# path expand <path>
+sub_expand() {
+  args=()
+  verbose=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    args+=("$1")
+    shift
+  done
+
+  if ((${#args[@]} != 1)); then
+    log.error "A single path argument is required"
+    script.usage 1
+  fi
+
+  deps.require python3
+
+  local input expanded
+  input="${args[0]}"
+
+  expanded=$(python3 - "$input" <<'PY'
+import os
+import sys
+
+print(os.path.expanduser(sys.argv[1]))
+PY
+  )
+
+  ((verbose)) && log.info "Expanded path: $expanded"
+  printf '%s\n' "$expanded"
+}
+
+# path env
+sub_env() {
+  verbose=0
+  local remaining
+  remaining=$(script.parse_common "$@")
+
+  if [[ -n $remaining ]]; then
+    log.error "This script does not accept positional arguments"
+    script.usage 1
+  fi
+
+  ((verbose)) && log.info "Printing PATH entries"
+  tr ':' '\n' <<<"${PATH:-}"
+}
+
+# path copy <path> [-r|-H] [-b]
+sub_copy() {
+  args=()
+  verbose=0
+  relative=0
+  use_home=0
+  back=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      script.usage
+      ;;
+    -v | --verbose)
+      verbose=1
+      ;;
+    -r | --relative)
+      relative=1
+      ;;
+    -H | --home)
+      use_home=1
+      ;;
+    -b | --back)
+      back=1
+      ;;
+    --)
+      shift
+      break
+      ;;
+    --*)
+      log.error "Unknown option: $1"
+      script.usage 1
+      ;;
+    *)
+      break
+      ;;
+    esac
+    shift
+  done
+
+  while [[ $# -gt 0 ]]; do
+    args+=("$1")
+    shift
+  done
+
+  if ((relative && use_home)); then
+    log.error "--relative and --home are mutually exclusive"
+    script.usage 1
+  fi
+
+  if ((${#args[@]} != 1)); then
+    log.error "A single path argument is required"
+    script.usage 1
+  fi
+
+  local input resolved
+  input="${args[0]}"
+  input=$(path.expand_user "$input")
+  resolved=$(path.resolve "$input")
+
+  if [[ ! -e $resolved ]]; then
+    log.error "Path does not exist: ${args[0]}"
+    exit 1
+  fi
+
+  if ((relative)); then
+    resolved=$(path.relative_to "$resolved")
+  elif ((use_home)); then
+    resolved="${resolved/#$HOME/\$HOME}"
+  fi
+
+  printf '%s' "$resolved" | clip.copy
+  log.info "Copied: $resolved"
+
+  # The --back flag's directory change is handled by the shell wrapper
+  # outside this script; here it is accepted but otherwise ignored.
+}
+
+main() {
+  if (($# == 0)); then
+    script.usage
+  fi
+
+  local subcommand="$1"
+  shift
+
+  case "$subcommand" in
+  -h | --help)
+    script.usage
+    ;;
+  resolve)
+    sub_resolve "$@"
+    ;;
+  expand)
+    sub_expand "$@"
+    ;;
+  env)
+    sub_env "$@"
+    ;;
+  copy)
+    sub_copy "$@"
+    ;;
+  *)
+    log.error "Unknown subcommand: $subcommand"
+    script.usage 1
+    ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+
+# Cross-platform dependency detection and OS gating helpers.
+#
+# Scripts use these to degrade gracefully instead of dying with a cryptic
+# "command not found":
+#
+#   deps.require ffmpeg          # hard dep: explain + offer to install, else exit
+#   deps.need mediainfo || ...   # soft dep: returns nonzero if unavailable
+#   os.require_macos "AppleScript"  # gate a macOS-only tool with a reason
+#
+# A missing dependency is explained, and on an interactive terminal the user is
+# offered a one-key install via the detected package manager.
+
+# Detect the system package manager. Echoes its name (brew/apt-get/dnf/yum/
+# pacman/zypper/apk) or "" when none is found.
+os.pkg_manager() {
+  if when.darwin; then
+    sys.path.contains brew && echo brew
+    return 0
+  fi
+  local pm
+  for pm in apt-get dnf yum pacman zypper apk brew; do
+    if sys.path.contains "$pm"; then
+      echo "$pm"
+      return 0
+    fi
+  done
+}
+
+# Echo the shell command that installs <pkg> under package manager <pm>.
+os.pkg_install_cmd() {
+  local pm=$1 pkg=$2
+  case "$pm" in
+  brew) echo "brew install $pkg" ;;
+  apt-get) echo "sudo apt-get install -y $pkg" ;;
+  dnf) echo "sudo dnf install -y $pkg" ;;
+  yum) echo "sudo yum install -y $pkg" ;;
+  pacman) echo "sudo pacman -S --noconfirm $pkg" ;;
+  zypper) echo "sudo zypper install -y $pkg" ;;
+  apk) echo "sudo apk add $pkg" ;;
+  esac
+}
+
+# deps.need <cmd> [pkg]
+# Returns 0 if <cmd> is on PATH. Otherwise explains it is missing and, on an
+# interactive terminal with a known package manager, offers to install [pkg]
+# (defaulting to <cmd>). Returns nonzero if the command is still unavailable.
+deps.need() {
+  local cmd=$1 pkg=${2:-$1}
+  sys.path.contains "$cmd" && return 0
+
+  local pm install_cmd=""
+  pm=$(os.pkg_manager)
+  [[ -n $pm ]] && install_cmd=$(os.pkg_install_cmd "$pm" "$pkg")
+
+  log.error "'$cmd' is required but not installed."
+  if [[ -z $install_cmd ]]; then
+    log.warn "No supported package manager detected — install '$pkg' manually."
+    return 1
+  fi
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    log.warn "Install it with: $install_cmd"
+    return 1
+  fi
+
+  local reply
+  printf 'Install it now with "%s"? [y/N] ' "$install_cmd" >&2
+  read -r reply
+  case "$reply" in
+  [yY] | [yY][eE][sS])
+    eval "$install_cmd" || {
+      log.error "Install command failed."
+      return 1
+    }
+    sys.path.contains "$cmd" && return 0
+    log.error "'$cmd' still not found after install."
+    return 1
+    ;;
+  *)
+    log.warn "Skipped. Install it later with: $install_cmd"
+    return 1
+    ;;
+  esac
+}
+
+# deps.require <cmd> [pkg] [<cmd> [pkg]]...
+# Hard requirement: for each cmd/pkg pair, run deps.need; exit 1 if any is
+# unmet. Call with one pair at a time when the pkg name differs from the cmd.
+deps.require() {
+  while (($#)); do
+    local cmd=$1 pkg=$1
+    # If the next arg is a package hint (not another known-style token), pair it.
+    if (($# >= 2)) && [[ $2 != -* ]]; then
+      pkg=$2
+      shift 2
+    else
+      shift
+    fi
+    deps.need "$cmd" "$pkg" || exit 1
+  done
+}
+
+# os.require_macos [reason] — on non-macOS, print why and exit 0 (disabled, not
+# an error). Use at the top of tools that cannot work off macOS.
+os.require_macos() {
+  when.darwin && return 0
+  local tool=${0##*/}
+  log.warn "${tool} is macOS-only${1:+ ($1)}; skipping on $(sys.platform)."
+  exit 0
+}
+
+# os.require_linux [reason] — mirror of os.require_macos for Linux-only tools.
+os.require_linux() {
+  when.linux && return 0
+  local tool=${0##*/}
+  log.warn "${tool} is Linux-only${1:+ ($1)}; skipping on $(sys.platform)."
+  exit 0
+}
