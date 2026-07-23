@@ -2,17 +2,21 @@
 #/ Best-quality file format conversions powered by ffmpeg (and friends).
 #/
 #/ Usage: $(basename "$0") [-h] [-v] <input> <output> [-- extra_ffmpeg_args...]
+#/        $(basename "$0") [-h] [-v] <input>... <ext|.ext|*.ext> [-- extra_ffmpeg_args...]
 #/
 #/ Available options:
 #/    -h, --help      Print this help and exit
 #/    -v, --verbose   Enable verbose output
 #/
 #/ Supported conversions:
-#/    Audio:  mp3, aac, m4a, wav, flac, ogg, opus, wma, alac
-#/    Video:  mp4, mov, mkv, webm, avi, m4v, mpg, mpeg, ts, m2ts
-#/    Image:  jpg, jpeg, png, webp, gif, bmp, tif, tiff, heic, avif, svg (ai->svg via inkscape, pdf->image via poppler/imagemagick)
-#/    Fonts:  ttf, otf, woff, woff2, svg (requires fontforge)
-#/    Docs:   pdf, txt, md, html, csv (requires pandoc/libreoffice/jq)
+#/    Audio:     mp3, aac, m4a, wav, flac, ogg, opus, wma, alac
+#/    Video:     mp4, mov, mkv, webm, avi, m4v, mpg, mpeg, ts, m2ts
+#/    Image:     jpg, jpeg, png, webp, gif, bmp, tif, tiff, heic, avif, svg (ai->svg via inkscape, pdf->image via poppler/imagemagick, svg->raster via librsvg/inkscape/imagemagick)
+#/    Fonts:     ttf, otf, woff, woff2, svg (requires fontforge)
+#/    Docs:      pdf, txt, md, html, csv (requires pandoc/libreoffice/jq)
+#/    Subtitles: srt, vtt, ass, ssa, sub (via ffmpeg)
+#/    eBooks:    epub, mobi, azw3, fb2, lit, pdb, lrf (requires calibre's ebook-convert; pandoc for md/html->epub)
+#/    OCR:       image/pdf -> txt (tesseract/pdftotext); pdf -> searchable pdf (ocrmypdf)
 #/
 #/ Examples:
 #/    $(basename "$0") input.mp4 output.mov
@@ -21,6 +25,13 @@
 #/    $(basename "$0") video.mp4 video.gif
 #/    $(basename "$0") image.png image.webp -- -compression_level 6
 #/    $(basename "$0") scan.pdf page-1.png
+#/    $(basename "$0") scan.pdf 'page-%02d.png'   # multi-page rasterize
+#/    $(basename "$0") subs.srt subs.vtt
+#/    $(basename "$0") book.md book.epub
+#/    $(basename "$0") scanned.pdf searchable.pdf # OCR via ocrmypdf
+#/    $(basename "$0") receipt.jpg receipt.txt    # OCR via tesseract
+#/    $(basename "$0") *.svg *.png                # batch: every .svg -> sibling .png
+#/    $(basename "$0") *.heic jpg                 # batch: every .heic -> sibling .jpg
 
 set -Eeuo pipefail
 trap script.cleanup SIGINT SIGTERM ERR EXIT
@@ -29,6 +40,7 @@ source "$(dirname "$0")/../lib/bash/initrc"
 
 verbose=0
 declare -a EXTRA_FFMPEG_ARGS=()
+declare -a POSITIONALS=()
 IN=""
 OUT=""
 
@@ -47,20 +59,13 @@ parse_args() {
       script.usage 1
       ;;
     *)
-      if [[ -z $IN ]]; then
-        IN="$1"
-      elif [[ -z $OUT ]]; then
-        OUT="$1"
-      else
-        log.error "Unexpected argument: $1"
-        script.usage 1
-      fi
+      POSITIONALS+=("$1")
       ;;
     esac
     shift
   done
 
-  [[ -n $IN && -n $OUT ]] || {
+  (( ${#POSITIONALS[@]} >= 2 )) || {
     log.error "Both <input> and <output> are required"
     script.usage 1
   }
@@ -109,6 +114,40 @@ is_font_ext() {
   ttf | otf | woff | woff2 | svg) return 0 ;;
   *) return 1 ;;
   esac
+}
+
+is_subtitle_ext() {
+  case "$1" in
+  srt | vtt | ass | ssa | sub) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_ebook_ext() {
+  case "$1" in
+  epub | mobi | azw3 | fb2 | lit | pdb | lrf | kfx) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+is_known_ext() {
+  is_image_ext "$1" || is_audio_ext "$1" || is_video_ext "$1" \
+    || is_doc_ext "$1" || is_font_ext "$1" || is_subtitle_ext "$1" \
+    || is_ebook_ext "$1"
+}
+
+ext_token_value() {
+  local tok="$1" ext
+  case "$tok" in
+  \*.*) ext="${tok#\*.}" ;;
+  .*)   ext="${tok#.}" ;;
+  *.*)  return 1 ;;
+  *)    ext="$tok" ;;
+  esac
+  [[ "$ext" =~ ^[a-zA-Z0-9]+$ ]] || return 1
+  ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+  is_known_ext "$ext" || return 1
+  printf '%s' "$ext"
 }
 
 ensure_out_dir() {
@@ -174,8 +213,59 @@ convert_to_video() {
   run_ffmpeg -i "$IN" -c:v "$vcodec" -c:a "$acodec" "${args[@]}" "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
 }
 
+convert_pdf_multipage() {
+  local fmt
+  case "$OUT_EXT" in
+  png) fmt=png ;;
+  jpg | jpeg) fmt=jpeg ;;
+  tif | tiff) fmt=tiff ;;
+  *)
+    log.error "Multi-page PDF rasterize supports png/jpg/tiff (got .$OUT_EXT)"
+    exit 1
+    ;;
+  esac
+
+  local tmpdir tmpbase
+  tmpdir="$(fs.mktmp dir ttt_pdf_multi)" || {
+    log.error "Failed to create temporary directory for multi-page PDF"
+    exit 1
+  }
+  tmpbase="$(path.join "$tmpdir" "page")"
+
+  ensure_out_dir
+  if command -v pdftocairo >/dev/null 2>&1; then
+    ((verbose)) && log.info "Rasterizing all PDF pages via pdftocairo"
+    pdftocairo "-${fmt}" -r 300 "$IN" "$tmpbase" >/dev/null 2>&1
+  elif command -v pdftoppm >/dev/null 2>&1; then
+    ((verbose)) && log.info "Rasterizing all PDF pages via pdftoppm"
+    pdftoppm "-${fmt}" -r 300 "$IN" "$tmpbase" >/dev/null 2>&1
+  else
+    rm -rf -- "$tmpdir"
+    log.error "Multi-page PDF rasterize requires poppler (pdftocairo/pdftoppm)"
+    exit 1
+  fi
+
+  local i=1 dest p
+  while IFS= read -r p; do
+    printf -v dest "$OUT" "$i"
+    mv -f "$p" "$dest"
+    i=$((i + 1))
+  done < <(find "$tmpdir" -type f -name 'page-*' | sort -V)
+
+  rm -rf -- "$tmpdir"
+  if [[ $i -eq 1 ]]; then
+    log.error "No pages produced from $IN"
+    exit 1
+  fi
+  ((verbose)) && log.info "Wrote $((i - 1)) pages"
+}
+
 convert_to_image() {
   if [[ "$IN_EXT" == "pdf" || "$IN_MIME" == "application/pdf" ]]; then
+    if [[ "$OUT" == *%* ]]; then
+      convert_pdf_multipage
+      return 0
+    fi
     local tmpdir tmpbase tmp_png
     tmpdir="$(fs.mktmp dir ttt_pdf)" || {
       log.error "Failed to create temporary directory for PDF conversion"
@@ -242,6 +332,62 @@ convert_to_image() {
     return 0
   fi
 
+  if [[ "$IN_EXT" == "svg" || "$IN_MIME" == "image/svg+xml" ]] && [[ "$OUT_EXT" != "svg" ]]; then
+    local tmpdir tmp_png
+    tmpdir="$(fs.mktmp dir ttt_svg)" || {
+      log.error "Failed to create temporary directory for SVG conversion"
+      exit 1
+    }
+    tmp_png="$(path.join "$tmpdir" "rasterized.png")"
+
+    if command -v rsvg-convert >/dev/null 2>&1; then
+      ((verbose)) && log.info "Rasterizing SVG via rsvg-convert"
+      rsvg-convert -d 300 -p 300 -f png -o "$tmp_png" "$IN" >/dev/null 2>&1
+    elif command -v inkscape >/dev/null 2>&1; then
+      ((verbose)) && log.info "Rasterizing SVG via inkscape"
+      inkscape "$IN" --export-type=png --export-filename="$tmp_png" --export-dpi=300 >/dev/null 2>&1
+    elif command -v magick >/dev/null 2>&1; then
+      ((verbose)) && log.info "Rasterizing SVG via ImageMagick"
+      magick -density 300 -background none "$IN" "$tmp_png" >/dev/null 2>&1
+    else
+      rm -rf -- "$tmpdir"
+      log.error "SVG->raster requires librsvg (rsvg-convert), inkscape, or ImageMagick (magick)"
+      exit 1
+    fi
+
+    guards.require_file "$tmp_png"
+
+    case "$OUT_EXT" in
+    png)
+      ensure_out_dir
+      mv -f "$tmp_png" "$OUT"
+      ;;
+    webp)
+      run_ffmpeg -i "$tmp_png" -lossless 1 -compression_level 0 "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
+      ;;
+    jpg | jpeg)
+      run_ffmpeg -i "$tmp_png" -q:v 1 "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
+      ;;
+    gif)
+      run_ffmpeg -loop 1 -i "$tmp_png" -frames:v 1 "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
+      ;;
+    tif | tiff)
+      run_ffmpeg -i "$tmp_png" -compression_level 0 "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
+      ;;
+    bmp | avif | heic)
+      run_ffmpeg -i "$tmp_png" -q:v 1 "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
+      ;;
+    *)
+      rm -rf -- "$tmpdir"
+      log.error "Image output not supported: .$OUT_EXT"
+      exit 1
+      ;;
+    esac
+
+    rm -rf -- "$tmpdir"
+    return 0
+  fi
+
   case "$OUT_EXT" in
   png)
     run_ffmpeg -i "$IN" -compression_level 0 "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
@@ -292,15 +438,24 @@ convert_docs() {
   ensure_out_dir
   case "$OUT_EXT" in
   pdf)
+    if [[ "$IN_EXT" == "pdf" || "$IN_MIME" == "application/pdf" ]]; then
+      guards.require_exec ocrmypdf
+      ((verbose)) && log.info "Running OCR via ocrmypdf"
+      ocrmypdf "$IN" "$OUT" >/dev/null 2>&1
+      return 0
+    fi
     if [[ "$IN_EXT" =~ ^(md|html|htm|txt|rtf)$ ]]; then
       guards.require_exec pandoc
       ((verbose)) && log.info "Converting via pandoc"
-      pandoc "$IN" -o "$OUT"
+      pandoc "$IN" --pdf-engine=xelatex -o "$OUT"
       return 0
     elif [[ "$IN_EXT" == "svg" ]]; then
       guards.require_exec inkscape
       ((verbose)) && log.info "Converting via inkscape"
       inkscape "$IN" --export-type=pdf --export-filename="$OUT" >/dev/null 2>&1
+      return 0
+    elif is_ebook_ext "$IN_EXT"; then
+      convert_ebook
       return 0
     else
       if command -v soffice >/dev/null 2>&1; then
@@ -341,6 +496,29 @@ convert_docs() {
     exit 1
     ;;
   md | html | txt)
+    if [[ "$OUT_EXT" == "txt" ]]; then
+      if [[ "$IN_EXT" == "pdf" || "$IN_MIME" == "application/pdf" ]]; then
+        if command -v pdftotext >/dev/null 2>&1; then
+          ((verbose)) && log.info "Extracting text via pdftotext"
+          pdftotext -layout "$IN" "$OUT"
+          return 0
+        fi
+        guards.require_exec ocrmypdf
+        ((verbose)) && log.info "Extracting text via ocrmypdf --sidecar"
+        ocrmypdf --sidecar "$OUT" "$IN" /dev/null >/dev/null 2>&1
+        return 0
+      fi
+      if is_image_ext "$IN_EXT" || [[ "$IN_MIME" == image/* ]]; then
+        guards.require_exec tesseract
+        ((verbose)) && log.info "OCR via tesseract"
+        tesseract "$IN" "${OUT%.txt}" >/dev/null 2>&1
+        return 0
+      fi
+    fi
+    if is_ebook_ext "$IN_EXT"; then
+      convert_ebook
+      return 0
+    fi
     guards.require_exec pandoc
     ((verbose)) && log.info "Converting via pandoc"
     pandoc "$IN" -o "$OUT"
@@ -352,6 +530,26 @@ convert_docs() {
   esac
 }
 
+convert_subtitles() {
+  guards.require_exec ffmpeg
+  ensure_out_dir
+  ((verbose)) && log.info "Converting subtitles via ffmpeg"
+  ffmpeg -hide_banner -loglevel error -y -i "$IN" "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
+}
+
+convert_ebook() {
+  ensure_out_dir
+  if [[ "$OUT_EXT" == "epub" && "$IN_EXT" =~ ^(md|markdown|html|htm|txt|rst|docx|odt|tex)$ ]]; then
+    guards.require_exec pandoc
+    ((verbose)) && log.info "Converting via pandoc"
+    pandoc "$IN" -o "$OUT"
+    return 0
+  fi
+  guards.require_exec ebook-convert
+  ((verbose)) && log.info "Converting via ebook-convert (Calibre)"
+  ebook-convert "$IN" "$OUT" >/dev/null 2>&1
+}
+
 convert_fonts() {
   ensure_out_dir
   guards.require_exec fontforge
@@ -359,11 +557,12 @@ convert_fonts() {
   fontforge -lang=ff -c 'Open($1); Generate($2);' "$IN" "$OUT" 2>/dev/null
 }
 
-main() {
-  parse_args "$@"
+convert_one() {
+  IN="$1"
+  OUT="$2"
 
   guards.require_file "$IN"
-  [[ "$IN" != "$OUT" ]] || { log.error "Input and output are the same path"; exit 1; }
+  [[ "$IN" != "$OUT" ]] || { log.error "Input and output are the same path: $IN"; exit 1; }
 
   IN_EXT="$(ext_of "$IN")"
   OUT_EXT="$(ext_of "$OUT")"
@@ -400,6 +599,10 @@ main() {
     convert_to_audio
   elif is_video_ext "$OUT_EXT"; then
     convert_to_video
+  elif is_subtitle_ext "$OUT_EXT" && is_subtitle_ext "$IN_EXT"; then
+    convert_subtitles
+  elif is_ebook_ext "$OUT_EXT"; then
+    convert_ebook
   elif is_font_ext "$OUT_EXT"; then
     if is_font_ext "$IN_EXT"; then
       convert_fonts
@@ -416,7 +619,48 @@ main() {
     run_ffmpeg -i "$IN" "${EXTRA_FFMPEG_ARGS[@]+"${EXTRA_FFMPEG_ARGS[@]}"}" "$OUT"
   fi
 
-  ((verbose)) && log.success "Created $OUT"
+  log.success "Created $OUT"
+}
+
+derive_batch_out() {
+  local src="$1" ext="$2" parent stem
+  parent="$(path.parent "$src")"
+  stem="$(path.stem "$src")"
+  if [[ "$parent" == "." || -z "$parent" ]]; then
+    printf '%s.%s' "$stem" "$ext"
+  else
+    path.join "$parent" "${stem}.${ext}"
+  fi
+}
+
+main() {
+  parse_args "$@"
+
+  local last_idx=$(( ${#POSITIONALS[@]} - 1 ))
+  local last="${POSITIONALS[$last_idx]}"
+  local target_ext=""
+  target_ext="$(ext_token_value "$last" 2>/dev/null || true)"
+
+  if [[ -n "$target_ext" ]]; then
+    local -a inputs=("${POSITIONALS[@]:0:$last_idx}")
+    (( ${#inputs[@]} >= 1 )) || {
+      log.error "No input files provided"
+      script.usage 1
+    }
+    ((verbose)) && log.info "Batch mode: ${#inputs[@]} input(s) -> .$target_ext"
+    local src dst
+    for src in "${inputs[@]}"; do
+      dst="$(derive_batch_out "$src" "$target_ext")"
+      convert_one "$src" "$dst"
+    done
+    return 0
+  fi
+
+  (( ${#POSITIONALS[@]} == 2 )) || {
+    log.error "Expected <input> <output>, or <input>... <ext>; got ${#POSITIONALS[@]} arguments"
+    script.usage 1
+  }
+  convert_one "${POSITIONALS[0]}" "${POSITIONALS[1]}"
 }
 
 main "$@"

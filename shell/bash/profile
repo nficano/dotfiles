@@ -14,8 +14,10 @@ case $- in
 *) return ;;
 esac
 
-# Profile load timing
-if command -v date >/dev/null 2>&1 && date +%s.%N >/dev/null 2>&1; then
+# Profile load timing (bash >= 5 has EPOCHREALTIME; older bash forks date)
+if [[ -n ${EPOCHREALTIME:-} ]]; then
+  _PROFILE_START_TIME=$EPOCHREALTIME
+elif command -v date >/dev/null 2>&1 && date +%s.%N >/dev/null 2>&1; then
   _PROFILE_START_TIME=$(date +%s.%N)
 else
   _PROFILE_START_TIME=$SECONDS
@@ -50,7 +52,6 @@ os.setenv "POETRY_VIRTUALENVS_PATH" "$HOME/.virtualenvs"
 os.setenv "PYENV_ROOT" "$HOME/.pyenv"
 os.setenv "PYTHONDONTWRITEBYTECODE" true
 os.setenv "WORKON_HOME" "$HOME/.virtualenvs"
-os.setenv "COPYX_CONFIG" "$HOME/.config/copyx/config.yml"
 # Homebrew Shell Environment (macOS only)
 when.darwin os.setenv "BREW_PREFIX" "$(brew.prefix)"
 when.darwin os.setenv "HOMEBREW_CASKROOM" "$BREW_PREFIX/Caskroom"
@@ -70,9 +71,15 @@ os.setenv "NODE_REPL_HISTORY_SIZE" 32768            # allow 32³ entries
 os.setenv "NODE_REPL_MODE" "sloppy"                 # use non-strict mode code
 os.setenv "NVM_DIR" "$HOME/.nvm"
 
-# Shell Session Command History
-os.setenv "HISTFILE" "$HOME/.bash_history"
-os.setenv "HISTCONTROL" "ignoredups:erasedups:ignoreboth"
+# Shell Session Command History (shared via Dropbox)
+_HIST_DROPBOX="$HOME/Dropbox/system/bash_history"
+if [[ -d "$(dirname "$_HIST_DROPBOX")" ]]; then
+  os.setenv "HISTFILE" "$_HIST_DROPBOX"
+else
+  os.setenv "HISTFILE" "$HOME/.bash_history"
+fi
+unset _HIST_DROPBOX
+os.setenv "HISTCONTROL" "ignoreboth"
 os.setenv "HISTFILESIZE" -1
 os.setenv "HISTSIZE" -1
 shell.setopt "histappend" # Append command history instead of clobbering
@@ -137,22 +144,16 @@ sys.path.prepend_many \
   "$HOME/.pyenv/bin"
 
 shell.defer --wrap docker shell.import "$HOME/.docker/init-bash.sh"
-# macOS Homebrew completions
-when.darwin shell.defer --wrap gcloud shell.import "$HOMEBREW_CASKROOM/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc"
-when.darwin shell.defer --wrap gcloud shell.import "$BREW_PREFIX/share/google-cloud-sdk/completion.bash.inc"
-when.darwin shell.defer --wrap git shell.import "$BREW_PREFIX/opt/git-extras/share/git-extras/git-extras-completion.sh"
-when.darwin shell.defer --wrap caddy shell.import "$BREW_PREFIX/etc/bash_completion.d/caddy"
-when.darwin shell.defer --wrap yt-dlp shell.import "$BREW_PREFIX/etc/bash_completion.d/yt-dlp"
 when.darwin shell.defer --wrap nvm shell.import "$BREW_PREFIX/opt/nvm/nvm.sh"
 # Defer virtualenvwrapper until workon/mkvirtualenv is used
 when.darwin shell.defer --wrap workon shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
 when.darwin shell.defer --wrap mkvirtualenv shell.import "$BREW_PREFIX/bin/virtualenvwrapper_lazy.sh"
-when.darwin shell.import "$BREW_PREFIX/opt/bash-completion/etc/bash_completion"
+# Completion framework loads eagerly (fast); the ~236 scripts in
+# bash_completion.d (gcloud, caddy, yt-dlp, git, op, ...) come from the
+# compiled lazy-loading map and each load on first <Tab>. Regenerate with
+# bash-completions-compile (automatic when the directory changes).
+when.darwin shell.completions_init "$BREW_PREFIX/opt/bash-completion/etc/bash_completion" "$BREW_PREFIX/etc/bash_completion.d"
 when.darwin shell.import "$HOME/.iterm2_shell_integration.bash"
-# Defer loading individual completion scripts directory until first tab completion
-# Main bash_completion is still loaded above for core completion support
-# This directory is loaded lazily via shell.import which checks file existence
-when.darwin shell.import "$BREW_PREFIX/etc/bash_completion.d" || true
 # Debian/Ubuntu bash completions
 when.debian shell.import "/usr/share/bash-completion/bash_completion" || true
 when.debian shell.import "/etc/bash_completion.d" || true
@@ -167,14 +168,18 @@ if sys.path.contains "cursor"; then
   os.setenv "EDITOR" "cursor"
 fi
 
+# Tool init scripts are static per tool version, so source them from cache
+# keyed on the tool's binary mtime instead of re-running the generators
+# (~330ms of pyenv alone). Rehash runs in the background, not per shell.
 #when.cmd aws 'shell.eval "complete -C aws_completer aws"'
-when.cmd direnv 'shell.eval "direnv hook bash"'
-when.cmd pyenv 'shell.eval "pyenv init --path"'
-when.cmd pyenv 'shell.eval "pyenv init -"'
-when.cmd pyenv 'shell.eval "pyenv virtualenv-init -"'
-when.cmd rbenv 'shell.eval "rbenv init -"'
+when.cmd direnv 'shell.eval_dep_cached direnv_bash "$(command -v direnv)" direnv hook bash'
+when.cmd pyenv 'shell.eval_dep_cached pyenv_path_bash "$(command -v pyenv)" pyenv init --path --no-rehash bash'
+when.cmd pyenv 'shell.eval_dep_cached pyenv_init_bash "$(command -v pyenv)" pyenv init - --no-rehash bash'
+when.cmd pyenv 'shell.eval_dep_cached pyenv_venv_bash "$(command -v pyenv)" pyenv virtualenv-init - bash'
+when.cmd pyenv '(command pyenv rehash >/dev/null 2>&1 &)'
+when.cmd rbenv 'shell.eval_dep_cached rbenv_init_bash "$(command -v rbenv)" rbenv init - --no-rehash bash'
 #when.cmd zoxide 'shell.eval "zoxide init bash"'
-when.cmd dircolors 'shell.eval "dircolors -b $HOME/.dircolors"'
+when.cmd dircolors 'shell.eval_dep_cached dircolors "$HOME/.dircolors" dircolors -b "$HOME/.dircolors"'
 sys.path.contains "conda" && shell.eval "conda shell.bash hook"
 
 complete -cf sudo # enable sudo tab-complete
@@ -199,6 +204,7 @@ alias ga="git add"
 alias gd="git diff"
 alias gs="git status"
 alias gl="git log --oneline --graph --decorate --all"
+alias s="cd $HOME/scratch"
 
 when.darwin alias ls='ls -GF --group-directories-first --human-readable'
 when.darwin alias ll='ls -alG --group-directories-first --human-readable'
@@ -214,7 +220,19 @@ when.cmd gls alias ls="gls --color=auto -gXF --group-directories-first --human-r
 when.cmd gls alias ll='gls --color=auto -algX --human-readable --group-directories-first'
 when.cmd rlwrap alias node="env NODE_NO_READLINE=1 rlwrap node"
 when.cmd bat alias cat="bat --style=\"plain\" --paging never"
-when.cmd op 'source <(op completion bash)'
+# op completions come from the compiled lazy map (bash-completions-compile)
+
+# Wrapper for cppath --back (scripts cannot cd the parent shell)
+cppath() {
+  local do_back=0 arg
+  for arg in "$@"; do
+    [[ $arg == "-b" || $arg == "--back" ]] && do_back=1
+  done
+  command cppath "$@" || return
+  if ((do_back)) && [[ -n ${OLDPWD:-} ]]; then
+    builtin cd - >/dev/null
+  fi
+}
 
 when.my_machine sys.path.append "$HOME/.bin/personal"
 when.my_machine sys.path.append "$HOME/.bin/lab"
@@ -229,19 +247,57 @@ shell.defer --wrap scp ssh_agent.init "$HOME/.ssh-agent.env"
 # Untracked Private Overrides
 shell.import "$HOME/.profile.local"
 
+# Propagate secrets to the macOS GUI (launchd) environment so that
+# GUI apps (Cursor, Antigravity) and their subprocesses inherit them.
+# Empty/unset vars are actively cleared from launchd so disabling a var in
+# ~/.profile.local actually takes effect for new GUI launches.
+# The eight launchctl round-trips cost ~35ms, so skip them when neither the
+# values nor the boot session changed (launchd env resets on reboot).
+if sys.path.contains launchctl; then
+  _lc_vars=(ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_CUSTOM_HEADERS OPENAI_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN LITELLM_CODEX_KEY)
+  _lc_state="$(cache.dir)/launchd-env.sig"
+  _lc_sig=""
+  for _var in "${_lc_vars[@]}"; do
+    _lc_sig+="${_var}=${!_var-}"$'\n'
+  done
+  _lc_sig="$(sysctl -n kern.boottime 2>/dev/null) $(printf '%s' "$_lc_sig" | md5 -q 2>/dev/null || printf '%s' "$_lc_sig" | md5sum)"
+  if [[ ! -f $_lc_state || "$(<"$_lc_state")" != "$_lc_sig" ]]; then
+    for _var in "${_lc_vars[@]}"; do
+      if [[ -n "${!_var}" ]]; then
+        launchctl setenv "$_var" "${!_var}"
+      else
+        launchctl unsetenv "$_var"
+      fi
+    done
+    printf '%s' "$_lc_sig" >"$_lc_state" && chmod 600 "$_lc_state"
+  fi
+  unset _var _lc_vars _lc_state _lc_sig
+fi
+
 shell.setup_tab_safe_history # prevent history loss when working with tabs
 
 # Display profile load time
 if [[ -n ${_PROFILE_START_TIME:-} ]]; then
-  if command -v date >/dev/null 2>&1 && date +%s.%N >/dev/null 2>&1; then
-    end_time=$(date +%s.%N)
-    elapsed=$(awk "BEGIN {printf \"%.3f\", $end_time - $_PROFILE_START_TIME}")
+  if [[ -n ${EPOCHREALTIME:-} && $_PROFILE_START_TIME == *.* ]]; then
+    # Pure-bash microsecond math; avoids two date and two awk forks.
+    _end_time=$EPOCHREALTIME
+    _elapsed_us=$(((${_end_time%.*} - ${_PROFILE_START_TIME%.*}) * 1000000 + 10#${_end_time#*.} - 10#${_PROFILE_START_TIME#*.}))
+    if ((_elapsed_us > 1000)); then
+      printf "\033[2mready (%d.%03ds)\033[0m\n" $((_elapsed_us / 1000000)) $((_elapsed_us % 1000000 / 1000))
+    fi
+    unset _PROFILE_START_TIME _end_time _elapsed_us
   else
-    elapsed=$(awk "BEGIN {printf \"%.3f\", $SECONDS - $_PROFILE_START_TIME}")
+    if command -v date >/dev/null 2>&1 && date +%s.%N >/dev/null 2>&1; then
+      end_time=$(date +%s.%N)
+      elapsed=$(awk "BEGIN {printf \"%.3f\", $end_time - $_PROFILE_START_TIME}")
+    else
+      elapsed=$(awk "BEGIN {printf \"%.3f\", $SECONDS - $_PROFILE_START_TIME}")
+    fi
+    # Only show if load time is significant (> 1ms)
+    if awk "BEGIN {exit !($elapsed > 0.001)}" 2>/dev/null; then
+      printf "\033[2mready (%.3fs)\033[0m\n" "$elapsed"
+    fi
+    unset _PROFILE_START_TIME end_time elapsed
   fi
-  # Only show if load time is significant (> 1ms)
-  if awk "BEGIN {exit !($elapsed > 0.001)}" 2>/dev/null; then
-    printf "\033[2mready (%.3fs)\033[0m\n" "$elapsed"
-  fi
-  unset _PROFILE_START_TIME end_time elapsed
 fi
+. "$HOME/.cargo/env"

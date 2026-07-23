@@ -38,14 +38,24 @@ if [ -z "$alias_name" ] || [ -z "$alias_command" ]; then
   exit 1
 fi
 
-# Path to bash_profile
+# Path to bash_profile (resolve symlinks so we edit the real file in-place
+# rather than replacing the symlink with a regular copy)
 bash_profile="$HOME/.bash_profile"
 
 # Check if bash_profile exists
-if [ ! -f "$bash_profile" ]; then
+if [ ! -e "$bash_profile" ]; then
   echo -e "${RED}Error:${NC} $bash_profile does not exist"
   exit 1
 fi
+
+# Follow symlinks to the underlying file
+while [ -L "$bash_profile" ]; do
+  link_target="$(readlink "$bash_profile")"
+  case "$link_target" in
+  /*) bash_profile="$link_target" ;;
+  *) bash_profile="$(cd -P -- "$(dirname -- "$bash_profile")" && pwd)/$link_target" ;;
+  esac
+done
 
 # Find the last alias in the file and add the new alias after it
 if grep -q "^alias " "$bash_profile"; then

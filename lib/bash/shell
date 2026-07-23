@@ -71,6 +71,37 @@ shell.eval() {
   eval "$($1)"
 }
 
+# shell.completions_init FRAMEWORK_SCRIPT COMPAT_DIR
+# Load the bash-completion framework with its eager compat-directory scan
+# disabled, then source the compiled lazy-loading map produced by
+# bash-completions-compile (per-command files load on first <Tab>).
+# Falls back to a full eager load when no compiled map exists or on bash 3.x,
+# and recompiles in the background whenever COMPAT_DIR changes.
+shell.completions_init() {
+  local framework="$1" compat_dir="$2"
+  [[ -r $framework ]] || return 0
+
+  local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+  local compiled="$cache_dir/completions.bash"
+  # Deliberately nonexistent: the framework skips its eager directory scan
+  # when the dir fails its -d test, without even forking an ls.
+  local empty="$cache_dir/noscan.d"
+
+  if ((BASH_VERSINFO[0] >= 4)) && [[ -s $compiled ]]; then
+    BASH_COMPLETION_COMPAT_DIR="$empty" BASH_COMPLETION_DIR="$empty" \
+      source "$framework"
+    source "$compiled"
+    if [[ $compat_dir -nt $compiled ]] && sys.path.contains bash-completions-compile; then
+      (bash-completions-compile >/dev/null 2>&1 &)
+    fi
+  else
+    source "$framework"
+    if ((BASH_VERSINFO[0] >= 4)) && sys.path.contains bash-completions-compile; then
+      (bash-completions-compile >/dev/null 2>&1 &)
+    fi
+  fi
+}
+
 shell.setup_prompt() {
   export -n PS1 2>/dev/null || true
   PS1="\h \[\e[1;32m\]\$(if command -v shell.iterm2_style_path >/dev/null 2>&1; then shell.iterm2_style_path; else dirs +0; fi)\[\e[0m\] [\A] > "
@@ -97,17 +128,16 @@ shell.setup_tab_safe_history() {
   fi
 }
 
+# Abbreviate $PWD iTerm2-style (~/c/dotfiles) using only parameter
+# expansion; this runs inside PS1 on every prompt, so no subshells.
 shell.iterm2_style_path() {
-  IFS="/"
-  read -ra relpath <<<"$(dirs +0)"
-  buffer=""
-  dirname=$((${#relpath[*]} - 1))
-
-  local folder_name
-  for folder_name in "${relpath[@]}"; do
-    if [[ $folder_name != "${relpath[$dirname]}" ]]; then
-      buffer+="$(text.substr "$folder_name" 0 1)/"
-    fi
+  local p=$PWD
+  [[ $p == "$HOME" || $p == "$HOME"/* ]] && p="~${p#"$HOME"}"
+  local buffer="" rest=$p seg
+  while [[ $rest == */* ]]; do
+    seg=${rest%%/*}
+    rest=${rest#*/}
+    buffer+="${seg:0:1}/"
   done
-  echo -n "$buffer${folder_name}"
+  echo -n "$buffer$rest"
 }

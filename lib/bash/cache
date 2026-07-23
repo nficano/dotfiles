@@ -3,7 +3,7 @@
 # Simple caching primitives akin to Python's functools.lru_cache patterns.
 cache.dir() {
   local base="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
-  mkdir -p "$base"
+  [[ -d $base ]] || mkdir -p "$base"
   echo "$base"
 }
 
@@ -43,4 +43,22 @@ shell.eval_cached() {
   data="$($cmd)"
   printf "%s" "$data" | cache.set "$key"
   eval "$data"
+}
+
+# shell.eval_dep_cached KEY DEP_PATH CMD [ARGS...]
+# Source CMD's output from cache, re-running it only when DEP_PATH (usually
+# the tool's binary) is newer than the cached copy. Turns startup evals like
+# `eval "$(pyenv init -)"` into a single file read.
+shell.eval_dep_cached() {
+  local key="$1" dep="$2"
+  shift 2
+  local f
+  f="$(cache.dir)/eval-${key}.sh"
+  if [[ ! -s $f || $dep -nt $f ]]; then
+    if ! "$@" >"$f" 2>/dev/null; then
+      rm -f "$f"
+      return 1
+    fi
+  fi
+  source "$f"
 }

@@ -1,0 +1,64 @@
+# Portable, dependency-free bashrc.
+#
+# Unlike shell/bash/profile (which bootstraps the full lib/bash stdlib and is
+# macOS/Homebrew-heavy), this file stands entirely on its own: no sourcing of
+# the dotfiles tree, no external tools assumed. Drop it on any server as
+# ~/.bashrc and you get sane history, a readable prompt, and common aliases.
+
+# Bail on non-interactive shells (scp, rsync, cron, ...).
+case $- in
+*i*) ;;
+*) return ;;
+esac
+
+# --- History -------------------------------------------------------------
+HISTCONTROL=ignoreboth   # drop dupes and lines starting with a space
+HISTSIZE=100000
+HISTFILESIZE=200000
+shopt -s histappend 2>/dev/null   # append instead of clobbering
+shopt -s cmdhist 2>/dev/null      # keep multi-line commands as one entry
+
+# --- Shell options -------------------------------------------------------
+shopt -s checkwinsize 2>/dev/null # keep $LINES/$COLUMNS current
+shopt -s cdspell 2>/dev/null      # autocorrect minor cd typos
+shopt -s nocaseglob 2>/dev/null   # case-insensitive globbing
+
+# --- PATH ----------------------------------------------------------------
+for _d in "$HOME/.local/bin" "$HOME/.bin"; do
+  [[ -d $_d && ":$PATH:" != *":$_d:"* ]] && PATH="$_d:$PATH"
+done
+unset _d
+export PATH
+
+# --- Editor / pager ------------------------------------------------------
+export EDITOR="${EDITOR:-vi}"
+export VISUAL="${VISUAL:-$EDITOR}"
+export PAGER="${PAGER:-less}"
+export LESS="-RiF"
+
+# --- Aliases -------------------------------------------------------------
+if ls --color=auto >/dev/null 2>&1; then
+  alias ls='ls --color=auto -F'   # GNU coreutils (Linux)
+else
+  alias ls='ls -FG'               # BSD ls (macOS)
+fi
+alias ll='ls -alh'
+alias la='ls -A'
+alias grep='grep --color=auto'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ga='git add'
+alias gd='git diff'
+alias gs='git status'
+alias gl='git log --oneline --graph --decorate'
+
+# --- Prompt --------------------------------------------------------------
+# host  cwd  [HH:MM] >   with cwd tilde-abbreviated and colored when supported.
+if [[ -t 1 ]] && tput setaf 1 >/dev/null 2>&1; then
+  PS1='\h \[\e[1;32m\]\w\[\e[0m\] [\A] > '
+else
+  PS1='\h \w [\A] > '
+fi
+
+# --- Local overrides -----------------------------------------------------
+[[ -f "$HOME/.bashrc.local" ]] && . "$HOME/.bashrc.local"

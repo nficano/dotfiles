@@ -9,6 +9,27 @@ os.setenv() {
   export "${1}"="${2}"
 }
 
+os.secret() {
+  local name="$1" ref="$2"
+  local cache_dir="$HOME/.cache/op-secrets"
+  local cache_file="$cache_dir/$name"
+
+  if [[ -f "$cache_file" ]]; then
+    export "${name}"="$(<"$cache_file")"
+    return 0
+  fi
+
+  local val
+  val="$(op read "$ref" --no-newline 2>/dev/null)" || return 0
+  mkdir -p "$cache_dir" && chmod 700 "$cache_dir"
+  printf '%s' "$val" > "$cache_file" && chmod 600 "$cache_file"
+  export "${name}"="${val}"
+}
+
+secrets.flush() {
+  rm -rf "$HOME/.cache/op-secrets"
+}
+
 os.getenv() {
   env | grep "^$1=" | cut -d'=' -f2
 }
@@ -31,12 +52,14 @@ sys.machine() {
   echo "$_SYS_MACHINE"
 }
 
+# $OSTYPE avoids the uname fork; $(sys.platform) runs in a subshell, so its
+# memoization can never help callers.
 os.platform.is_darwin() {
-  [[ $(sys.platform) == darwin ]]
+  [[ ${OSTYPE:-$(sys.platform)} == darwin* ]]
 }
 
 os.platform.is_linux() {
-  [[ $(sys.platform) == linux ]]
+  [[ ${OSTYPE:-$(sys.platform)} == linux* ]]
 }
 
 os.platform.is_debian() {
@@ -133,9 +156,21 @@ os.machine_id.matches_current() {
   stored=${stored//$'\n'/}
   [[ -n $stored ]] || { _MACHINE_ID_MATCHES=0; return 1; }
 
-  if ! hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
-    _MACHINE_ID_MATCHES=0
-    return 1
+  # The hardware UUID never changes on a given machine, so cache the ioreg
+  # lookup (~18ms) across shells. Remove the cache file if this home
+  # directory ever migrates to different hardware.
+  local hw_uuid_cache="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/hw-uuid"
+  if [[ -s $hw_uuid_cache ]]; then
+    hw_uuid=$(<"$hw_uuid_cache")
+  else
+    if ! hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' | head -n 1); then
+      _MACHINE_ID_MATCHES=0
+      return 1
+    fi
+    hw_uuid=${hw_uuid//$'\n'/}
+    if [[ -n $hw_uuid ]]; then
+      mkdir -p "${hw_uuid_cache%/*}" && printf '%s' "$hw_uuid" >"$hw_uuid_cache"
+    fi
   fi
   hw_uuid=${hw_uuid//$'\n'/}
   [[ -n $hw_uuid ]] || { _MACHINE_ID_MATCHES=0; return 1; }
