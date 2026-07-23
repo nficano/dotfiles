@@ -33,28 +33,56 @@ __q_desc() {
 # exposed as aliases below — which also dodges pathname expansion, since alias
 # expansion happens before globbing).
 
-# ? : compact colorful list (no args) or launcher (with args).
-__q_run() {
-  if (($# == 0)); then
-    printf '\033[36m'
-    __q_names | column
-    printf '\033[0m'
-    return
-  fi
-  command "$@"
-}
+# True when color should be emitted (interactive stdout, NO_COLOR unset).
+__q_color() { [[ -t 1 && -z ${NO_COLOR:-} ]]; }
 
-# ?? : descriptive colorful table (no args) or launcher (with args).
-__qq_run() {
-  if (($# > 0)); then
+# ? : compact colorful column list (no args) or launcher (with args).
+__q_run() {
+  if (($#)); then
     command "$@"
     return
   fi
-  local name desc
-  while IFS= read -r name; do
+  local -a names
+  mapfile -t names < <(__q_names)
+  ((${#names[@]})) || {
+    printf 'no commands found in %s\n' "$DOTFILES_BIN"
+    return
+  }
+  local n width=0 cols i=0
+  for n in "${names[@]}"; do ((${#n} > width)) && width=${#n}; done
+  ((width += 2))
+  cols=$((${COLUMNS:-80} / width))
+  ((cols < 1)) && cols=1
+  for n in "${names[@]}"; do
+    if __q_color; then
+      printf '\033[36m%-*s\033[0m' "$width" "$n"
+    else
+      printf '%-*s' "$width" "$n"
+    fi
+    ((++i % cols == 0)) && printf '\n'
+  done
+  ((i % cols)) && printf '\n'
+}
+
+# ?? : bin-list-style colorful name + description table (no args) or launcher.
+__qq_run() {
+  if (($#)); then
+    command "$@"
+    return
+  fi
+  local -a names
+  mapfile -t names < <(__q_names)
+  local name desc width=0
+  for name in "${names[@]}"; do ((${#name} > width)) && width=${#name}; done
+  ((width += 2))
+  for name in "${names[@]}"; do
     desc=$(__q_desc "$DOTFILES_BIN/$name")
-    printf '\033[1;36m%-28s\033[0m \033[2m%s\033[0m\n' "$name" "$desc"
-  done < <(__q_names)
+    if __q_color; then
+      printf '\033[1;34m%-*s\033[0m\033[2m%s\033[0m\n' "$width" "$name" "$desc"
+    else
+      printf '%-*s%s\n' "$width" "$name" "$desc"
+    fi
+  done
 }
 
 alias '?'='__q_run'
