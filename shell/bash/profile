@@ -304,13 +304,13 @@ shell.defer --wrap scp ssh_agent.init "$HOME/.ssh-agent.env"
 shell.import "$HOME/.profile.local"
 
 # Propagate secrets to the macOS GUI (launchd) environment so that
-# GUI apps (Cursor, Antigravity) and their subprocesses inherit them.
+# GUI apps (Cursor, Antigravity, Automator) and their subprocesses inherit them.
 # Empty/unset vars are actively cleared from launchd so disabling a var in
 # ~/.profile.local actually takes effect for new GUI launches.
 # The eight launchctl round-trips cost ~35ms, so skip them when neither the
 # values nor the boot session changed (launchd env resets on reboot).
 if sys.path.contains launchctl; then
-  _lc_vars=(ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_CUSTOM_HEADERS OPENAI_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN LITELLM_CODEX_KEY)
+  _lc_vars=(ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_CUSTOM_HEADERS OPENAI_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN LITELLM_CODEX_KEY S3_UPLOAD_LINK_BUCKET S3_UPLOAD_LINK_URL_BASE S3_UPLOAD_LINK_EXPIRES_IN)
   _lc_state="$(cache.dir)/launchd-env.sig"
   _lc_sig=""
   for _var in "${_lc_vars[@]}"; do

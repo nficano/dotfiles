@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-#/ Upload a file to S3 and copy the shareable URL to the clipboard.
+#/ Upload a file or clipboard contents to S3 and copy the shareable URL to the clipboard.
 #/
-#/ Usage: $(basename "$0") [-h] [-v] <file>
+#/ Usage: $(basename "$0") [-h] [-v] [-e SECONDS] [-t] <file>
+#/        $(basename "$0") [-h] [-v] [-e SECONDS] -c [-n NAME]
 #/
 #/ Available options:
-#/    -h, --help          Print this help and exit
-#/    -v, --verbose       Enable verbose output
-#/    -t, --ttl SECONDS   Expiry TTL in seconds (default: 259200 = 3 days)
+#/    -h, --help            Print this help and exit
+#/    -v, --verbose         Enable verbose output
+#/    -e, --ttl SECONDS     HTTP expiry TTL in seconds (default: 86400 = 24 hours)
+#/    -t, --trash           Move the local file to Trash after upload and clipboard copy
+#/    -c, --clipboard       Upload text from the clipboard instead of a file
+#/    -n, --name NAME       Clipboard filename used for its extension (default: clipboard.txt)
 #/
 #/ Environment variables:
 #/    S3_UPLOAD_LINK_BUCKET        Required S3 bucket name (accepts optional s3:// prefix)
@@ -18,19 +22,36 @@
 #/    S3_UPLOAD_LINK_CONTENT_TYPE  Optional Content-Type override
 #/    S3_UPLOAD_LINK_ID_LENGTH     Optional length for generated NanoID filenames (default: 12)
 #/    S3_UPLOAD_LINK_DOMAIN_MAP    Optional comma-separated bucket=domain pairs for custom share URLs
-#/    S3_UPLOAD_LINK_EXPIRES_IN    Optional TTL in seconds; sets the S3 object's expiry time
+#/    S3_UPLOAD_LINK_EXPIRES_IN    Optional HTTP expiry TTL in seconds (default: 86400)
+#/    S3_UPLOAD_LINK_NO_LIFECYCLE  Set to 1 to omit the s3-upload-ttl=24h object tag
 #/
 #/ Examples:
 #/    $(basename "$0") ~/Downloads/screenshot.png
+#/    $(basename "$0") --trash ~/Documents/Screenshots/screenshot.png
+#/    $(basename "$0") --clipboard
+#/    $(basename "$0") --clipboard --name snippet.json
 
 set -Eeuo pipefail
-trap script.cleanup SIGINT SIGTERM ERR EXIT
 
 source "$(dirname "$0")/../lib/bash/initrc"
 
 verbose=0
 file_path=""
 ttl=""
+clipboard_mode=0
+clipboard_filename="clipboard.txt"
+clipboard_name_set=0
+clipboard_temp=""
+trash_after_upload=0
+
+cleanup() {
+  if ((${BASH_SUBSHELL:-0} == 0)) && [[ -n $clipboard_temp && -f $clipboard_temp ]]; then
+    rm -f -- "$clipboard_temp"
+  fi
+  script.cleanup
+}
+
+trap cleanup SIGINT SIGTERM ERR EXIT
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -41,9 +62,28 @@ parse_args() {
     -v | --verbose)
       verbose=1
       ;;
-    -t | --ttl)
+    -e | --ttl)
       shift
+      [[ $# -gt 0 ]] || {
+        log.error "Missing value for --ttl"
+        script.usage 1
+      }
       ttl="$1"
+      ;;
+    -t | --trash)
+      trash_after_upload=1
+      ;;
+    -c | --clipboard)
+      clipboard_mode=1
+      ;;
+    -n | --name)
+      shift
+      [[ $# -gt 0 ]] || {
+        log.error "Missing value for --name"
+        script.usage 1
+      }
+      clipboard_filename="$1"
+      clipboard_name_set=1
       ;;
     --)
       shift
@@ -59,6 +99,28 @@ parse_args() {
     esac
     shift
   done
+
+  if ((clipboard_mode && trash_after_upload)); then
+    log.error "--clipboard and --trash cannot be used together"
+    script.usage 1
+  fi
+
+  if ((clipboard_mode)); then
+    if (($# > 0)); then
+      log.error "A file path cannot be used with --clipboard"
+      script.usage 1
+    fi
+    if [[ -z $clipboard_filename || $clipboard_filename == */* ]]; then
+      log.error "Clipboard name must be a filename, not a path"
+      script.usage 1
+    fi
+    return
+  fi
+
+  if ((clipboard_name_set)); then
+    log.error "--name may only be used with --clipboard"
+    script.usage 1
+  fi
 
   if (($# == 0)); then
     log.error "A file path is required"
@@ -214,15 +276,43 @@ build_object_key() {
 }
 
 main() {
-  local resolved bucket prefix filename sanitized id_len object_id object_key expires_iso s3_uri share_url acl
+  local resolved bucket prefix filename sanitized id_len object_id object_key expires_iso s3_uri share_url acl content_type lifecycle_pref copy_pref trash_cmd
   local -a aws_cmd
 
   deps.require aws awscli
 
-  resolved=$(path.resolve "$file_path")
-  if ! fs.isfile "$resolved"; then
-    log.error "File not found: $file_path"
-    exit 1
+  copy_pref="${S3_UPLOAD_LINK_NO_CLIP:-0}"
+  if ((trash_after_upload)); then
+    os.require_macos
+    if [[ $copy_pref == 1 || $copy_pref == true || $copy_pref == True ]]; then
+      log.error "--trash requires clipboard copying to be enabled"
+      exit 1
+    fi
+    trash_cmd="${S3_UPLOAD_TRASH_CMD:-/usr/bin/trash}"
+  fi
+
+  if ((clipboard_mode)); then
+    if ! clipboard_temp=$(fs.mktmp file s3-upload-clipboard); then
+      log.error "Failed to create a temporary file for clipboard contents"
+      exit 1
+    fi
+    if ! clip.paste >"$clipboard_temp"; then
+      log.error "Failed to read text from the clipboard"
+      exit 1
+    fi
+    if [[ ! -s $clipboard_temp ]]; then
+      log.error "Clipboard does not contain any text"
+      exit 1
+    fi
+    resolved="$clipboard_temp"
+    filename="$clipboard_filename"
+  else
+    resolved=$(path.resolve "$file_path")
+    if ! fs.isfile "$resolved"; then
+      log.error "File not found: $file_path"
+      exit 1
+    fi
+    filename=$(basename -- "$resolved")
   fi
 
   bucket="${S3_UPLOAD_LINK_BUCKET:-}"
@@ -255,7 +345,6 @@ main() {
     exit 1
   fi
 
-  filename=$(basename -- "$resolved")
   sanitized=$(sanitize_filename "$filename")
 
   require_command nanoid
@@ -284,7 +373,7 @@ main() {
 
   object_key=$(build_object_key "$object_id" "$prefix" "$filename" "$sanitized")
 
-  local effective_ttl="${ttl:-${S3_UPLOAD_LINK_EXPIRES_IN:-259200}}"
+  local effective_ttl="${ttl:-${S3_UPLOAD_LINK_EXPIRES_IN:-86400}}"
   script.validate_positive_int "$effective_ttl" "TTL"
   if ! expires_iso=$(compute_expiry_timestamp "$effective_ttl"); then
     exit 1
@@ -300,29 +389,55 @@ main() {
   if [[ -n ${S3_UPLOAD_LINK_CACHE_CONTROL:-} ]]; then
     aws_cmd+=(--cache-control "${S3_UPLOAD_LINK_CACHE_CONTROL}")
   fi
-  if [[ -n ${S3_UPLOAD_LINK_CONTENT_TYPE:-} ]]; then
-    aws_cmd+=(--content-type "${S3_UPLOAD_LINK_CONTENT_TYPE}")
+  content_type="${S3_UPLOAD_LINK_CONTENT_TYPE:-}"
+  if ((clipboard_mode)) && [[ -z $content_type ]]; then
+    content_type="text/plain; charset=utf-8"
+  fi
+  if [[ -n $content_type ]]; then
+    aws_cmd+=(--content-type "$content_type")
   fi
   if [[ -n ${expires_iso:-} ]]; then
     aws_cmd+=(--expires "$expires_iso")
   fi
 
-  ((verbose)) && log.info "Uploading $(basename -- "$resolved") to ${s3_uri}"
+  ((verbose)) && log.info "Uploading ${filename} to ${s3_uri}"
 
   if ! "${aws_cmd[@]}"; then
     log.error "Failed to upload file to S3"
     exit 1
   fi
 
+  lifecycle_pref="${S3_UPLOAD_LINK_NO_LIFECYCLE:-0}"
+  if [[ $lifecycle_pref != 1 && $lifecycle_pref != true && $lifecycle_pref != True ]]; then
+    if ! aws s3api put-object-tagging \
+      --bucket "$bucket" \
+      --key "$object_key" \
+      --tagging 'TagSet=[{Key=s3-upload-ttl,Value=24h}]'; then
+      log.error "Uploaded the file, but failed to apply its 24-hour lifecycle tag"
+      exit 1
+    fi
+  fi
+
   share_url=$(build_share_url "$bucket" "$object_key")
 
-  local copy_pref="${S3_UPLOAD_LINK_NO_CLIP:-0}"
   if [[ $copy_pref != 1 && $copy_pref != true && $copy_pref != True ]]; then
     if ! clip.copy <<<"$share_url"; then
+      if ((trash_after_upload)); then
+        log.error "Failed to copy URL to clipboard; keeping local file: $resolved"
+        exit 1
+      fi
       log.warn "Failed to copy URL to clipboard; continuing"
     elif ((verbose)); then
       log.info "Copied URL to clipboard"
     fi
+  fi
+
+  if ((trash_after_upload)); then
+    if ! "$trash_cmd" "$resolved"; then
+      log.error "Uploaded file but could not move it to Trash: $resolved"
+      exit 1
+    fi
+    ((verbose)) && log.info "Moved local file to Trash: $resolved"
   fi
 
   printf '%s\n' "$share_url"

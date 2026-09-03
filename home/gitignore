@@ -32,6 +32,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 .eslintcache
+*.tsbuildinfo
 
 # ── Build output ──────────────────────────────────────────────────────────────
 dist/
@@ -45,3 +46,11 @@ coverage/
 # ── AI agent state ────────────────────────────────────────────────────────────
 .claude/
 .playwright-mcp/
+
+# direnv per-repo env (may contain profile paths / local secrets)
+.envrc
+.envrc.local
+
+# ── Local reference checkouts / design-tool logs ──────────────────────────────
+.repos/
+.hallmark/

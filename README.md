@@ -49,7 +49,7 @@ Scripts follow a **`domain-action`** naming convention (domain noun first, so `n
 - **`icon-fa-fetch`** - Downloads Font Awesome SVG icons using an npm token
 - **`term-ansi`** - Inspect and compose ANSI SGR escape sequences
 - **`text-spell`** - Spell-check/correct utility that uses ChatGPT
-- **`s3-upload`** - Upload a file to S3 and copy the shareable URL to the clipboard
+- **`s3-upload`** - Upload a file or clipboard text to S3 and copy the shareable URL to the clipboard
 - **`docker-wipe`** - Removes all Docker containers, images, volumes, networks, and build cache after confirmation
 - **`time-epoch`** - Prints the current Unix epoch timestamp
 - **`nanoid`** - Generate short, URL-safe unique IDs
@@ -79,13 +79,22 @@ text-spell leasure
 
 ### s3-upload
 
-Uploads a file to S3 and copies the shareable URL to your clipboard.
+Uploads a file or text from your clipboard to S3, then copies the shareable URL to your clipboard.
 
 **Usage**
 
 ```bash
 s3-upload ubuntu-24.04.3-desktop-amd64.iso
 # https://s3.us-east-1.amazonaws.com/mybucket/9oe3HVzO.iso
+
+s3-upload --clipboard
+# Uploads the clipboard as clipboard.txt
+
+s3-upload --clipboard --name snippet.json
+# Uploads the clipboard with a .json extension
+
+s3-upload --trash ~/Documents/Screenshots/Screenshot.png
+# Copies the URL, then moves the local file to Trash
 ```
 
 #### Environment Variables
@@ -98,9 +107,16 @@ s3-upload ubuntu-24.04.3-desktop-amd64.iso
 | `S3_UPLOAD_LINK_BUCKET_REGION` | ✗        | Region used for default URL generation.            | —             |
 | `S3_UPLOAD_LINK_ACL`           | ✗        | ACL for `aws s3 cp`.                               | `public-read` |
 | `S3_UPLOAD_LINK_CACHE_CONTROL` | ✗        | `Cache-Control` header for uploaded object.        | —             |
-| `S3_UPLOAD_LINK_CONTENT_TYPE`  | ✗        | Explicit `Content-Type` override.                  | —             |
+| `S3_UPLOAD_LINK_CONTENT_TYPE`  | ✗        | Explicit `Content-Type` override.                  | `text/plain; charset=utf-8` for clipboard text |
 | `S3_UPLOAD_LINK_ID_LENGTH`     | ✗        | Length of generated NanoID filename.               | `12`          |
-| `S3_UPLOAD_LINK_EXPIRES_IN`    | ✗        | Expiration time in seconds for uploaded object.    | —             |
+| `S3_UPLOAD_LINK_EXPIRES_IN`    | ✗        | HTTP expiration time in seconds.                   | `86400`       |
+| `S3_UPLOAD_LINK_NO_LIFECYCLE`  | ✗        | Skip the `s3-upload-ttl=24h` lifecycle tag.         | `0`           |
+
+Uploads are tagged with `s3-upload-ttl=24h`. The matching S3 bucket lifecycle rule deletes tagged objects after one day; HTTP `Expires` metadata alone does not delete an object.
+
+#### Screenshot Folder Action
+
+The `Upload screenshots to S3` Automator Folder Action watches `~/Documents`, filters for macOS screenshots, uploads each one, explicitly sets the system clipboard to its S3 URL, and only then moves the local image to Trash. Other files in Documents are ignored.
 
 ## Script Conventions
 
