@@ -95,7 +95,7 @@ cmd_info() {
     local IFS=.
     read -r a b c d <<<"$ip"
 
-    ((val = a << 24 | b << 16 | c << 8 | d))
+    val=$((a << 24 | b << 16 | c << 8 | d))
     printf "%u\n" "$val"
   }
 
@@ -346,7 +346,7 @@ cmd_info() {
           ipv4=${ipv4%/*}
           # Convert CIDR to dotted
           local m
-          ((m = (0xffffffff << (32 - mask_cidr)) & 0xffffffff))
+          m=$(( (0xffffffff << (32 - mask_cidr)) & 0xffffffff ))
           mask_dotted=$(printf "%d.%d.%d.%d" $(((m >> 24) & 255)) $(((m >> 16) & 255)) $(((m >> 8) & 255)) $((m & 255)))
           netv4=$(network_from_ip_mask "$ipv4" "$mask_dotted")
         fi

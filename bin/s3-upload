@@ -265,7 +265,7 @@ main() {
 
   local attempt=0
   while true; do
-    if object_id=$(nanoid); then
+    if object_id=$(nanoid -l "$id_len"); then
       if [[ -n $object_id ]]; then
         break
       fi
@@ -274,7 +274,7 @@ main() {
       log.warn "nanoid command failed (attempt=$((attempt + 1)))"
     fi
 
-    ((attempt++))
+    attempt=$((attempt + 1))
     if ((attempt >= 10)); then
       log.error "Failed to generate NanoID filename after ${attempt} attempts"
       exit 1

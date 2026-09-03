@@ -84,7 +84,7 @@ ui.timeline.render() {
   local idx=0
   local cumulative=0
   for entry in "${render_segments[@]}"; do
-    ((idx++))
+    idx=$((idx + 1))
     IFS='|' read -r label duration color <<<"$entry"
     local start_chars=$((cumulative * width / total_us))
     local span

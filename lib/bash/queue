@@ -89,7 +89,7 @@ queue._run_parallel() {
     pids+=("$!")
     outs+=("$out_file")
     jobs+=("$item")
-    ((idx++))
+    idx=$((idx + 1))
 
     while ((${#pids[@]} >= concurrency)); do
       if ! queue._wait_cycle pids outs jobs "$callback_fn"; then

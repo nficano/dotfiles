@@ -237,7 +237,7 @@ while :; do
   done
 
   if ((CYCLES > 0)); then
-    ((cycle++))
+    cycle=$((cycle + 1))
     if ((cycle >= CYCLES)); then
       break
     fi

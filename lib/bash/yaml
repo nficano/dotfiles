@@ -89,7 +89,7 @@ yaml.glob_patterns_regex() {
       '*')
         if [[ $next == "*" ]]; then
           fragment+=".*"
-          ((i++))
+          i=$((i + 1))
         else
           fragment+="[^/]*"
         fi
@@ -99,14 +99,14 @@ yaml.glob_patterns_regex() {
         ;;
       '[')
         fragment+='['
-        ((i++))
+        i=$((i + 1))
         while ((i < len)); do
           char="${pattern:i:1}"
           fragment+="$char"
           if [[ $char == "]" ]]; then
             break
           fi
-          ((i++))
+          i=$((i + 1))
         done
         ;;
       '.' | '+' | '(' | ')' | '{' | '}' | '|' | '$' | '^' | '\\')
@@ -116,7 +116,7 @@ yaml.glob_patterns_regex() {
         fragment+="$char"
         ;;
       esac
-      ((i++))
+      i=$((i + 1))
     done
     if [[ -n $fragment ]]; then
       fragments+=("$fragment")

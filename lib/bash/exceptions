@@ -293,7 +293,7 @@ exception.guard() {
   fi
   case "$1" in
   begin)
-    ((exception__depth++))
+    exception__depth=$((exception__depth + 1))
     if ((exception__depth == 1)); then
       exception__oldopts="$-"
       set -E -o pipefail
@@ -307,7 +307,7 @@ exception.guard() {
     if ((exception__depth == 0)); then
       exception.raise RuntimeError "exception.guard end without begin"
     fi
-    ((exception__depth--))
+    exception__depth=$((exception__depth - 1))
     if ((exception__depth == 0)); then
       trap - ERR
       [[ $exception__oldopts == *e* ]] || set +e

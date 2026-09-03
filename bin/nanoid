@@ -125,7 +125,7 @@ make_id() {
   while ((${#out[@]} < sz)); do
     while IFS= read -r val; do
       [[ -z $val ]] && continue
-      ((idx = val & msk))
+      idx=$((val & msk))
       if ((idx < ab_len)); then
         out+=("${abc:idx:1}")
         if ((${#out[@]} >= sz)); then
